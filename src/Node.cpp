@@ -7,6 +7,12 @@
 
 #include "Net.h"
 
+#include <cstring>
+
+#ifdef ARDUINO
+#include "Arduino.h"
+#endif
+
 // sends out a system query message for all nodes to advertise
 void ps_node_system_query(ps_node_t* node)
 {
@@ -173,7 +179,11 @@ void ps_node_init(ps_node_t* node, const char* name, const char* ip)
 		return;
 	}
 
+#ifdef ARDUINO
+	unsigned int outlen = sizeof(sockaddr_in);
+#else
 	int outlen = sizeof(sockaddr_in);
+#endif
 	sockaddr_in outaddr;
 	getsockname(node->socket, (sockaddr*)&outaddr, &outlen);
 	node->port = ntohs(outaddr.sin_port);
@@ -189,9 +199,13 @@ void ps_node_init(ps_node_t* node, const char* name, const char* ip)
 		closesocket(node->socket);
 		return;
 	}
-#else
-	int flags = fcntl(socket, F_GETFL);
-	fcntl(socket, F_SETFL, flags | O_NONBLOCK);
+#endif
+#ifdef ARDUINO
+    fcntl(node->socket, F_SETFL, O_NONBLOCK);
+#endif
+#ifdef LINUX
+	int flags = fcntl(node->socket, F_GETFL);
+	fcntl(node->socket, F_SETFL, flags | O_NONBLOCK);
 #endif
 
 	//setup multicast socket
@@ -205,7 +219,11 @@ void ps_node_init(ps_node_t* node, const char* name, const char* ip)
 		return;
 	}
 
+#ifdef ARDUINO
+	int opt = 1;
+#else
 	int opt = TRUE;
+#endif
 	if (setsockopt(node->mc_socket, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt)) < 0)
 	{
 		perror("setsockopt");
@@ -238,9 +256,13 @@ void ps_node_init(ps_node_t* node, const char* name, const char* ip)
 		closesocket(node->mc_socket);
 		return;
 	}
-#else
-	int flags = fcntl(socket, F_GETFL);
-	fcntl(socket, F_SETFL, flags | O_NONBLOCK);
+#endif
+#ifdef ARDUINO
+    fcntl(node->mc_socket, F_SETFL, O_NONBLOCK);
+#endif
+#ifdef LINUX
+	int flags2 = fcntl(socket, F_GETFL);
+	fcntl(node->mc_socket, F_SETFL, flags2 | O_NONBLOCK);
 #endif
 
 	struct ip_mreq mreq;
@@ -323,9 +345,15 @@ int ps_node_spin(ps_node_t* node)
 
 	//need to also send out our occasional advertisements
 	//also send out keepalives which are still todo
+#ifdef ARUDINO
 	if (_last_advertise + 25 * 1000 < GetTickCount64())
 	{
 		_last_advertise = GetTickCount64();
+#else
+	if (_last_advertise + 25 * 1000 < millis())
+	{
+		_last_advertise = millis();
+#endif
 
 		// send out an advertisement for each publisher we have
 		for (int i = 0; i < node->num_pubs; i++)
@@ -613,6 +641,10 @@ int ps_node_spin(ps_node_t* node)
 
 int serialize_string(char* data, const char* str)
 {
+#ifdef ARDUINO
+	strcpy(data, str);
+#else
 	strcpy_s(data, 128, str);
+#endif
 	return strlen(str) + 1;
 }

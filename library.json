@@ -1,0 +1,20 @@
+{
+  "name": "PubSub",
+  "keywords": "ROS publisher subscriber",
+  "description": "A ROS inspired publisher subscriber messaging system.",
+  "authors":
+  [
+    {
+      "name": "Matthew",
+      "email": "email@email.me"
+    },
+  ],
+  "repository":
+  {
+    "type": "git",
+    "url": "https://github.com/matt-attack/pubsub.git"
+  },
+  "version": "0.1.0",
+  "frameworks": "arduino",
+  "platforms": "espressif"
+}
