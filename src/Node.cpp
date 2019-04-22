@@ -40,6 +40,7 @@ void ps_node_system_query(ps_node_t* node)
 // sends out a multicast request looking for publishers on this topic
 void ps_node_subscribe_query(ps_sub_t* sub)
 {
+	printf("Advertising subscriber\n");
 	// send da udp packet!
 	sockaddr_in address;
 	address.sin_family = AF_INET;
@@ -66,6 +67,7 @@ void ps_node_subscribe_query(ps_sub_t* sub)
 // advertizes the publisher via multicast
 void ps_node_advertise(ps_pub_t* pub)
 {
+	printf("Advertising topic\n");
 	// send da udp packet!
 	sockaddr_in address;
 	address.sin_family = AF_INET;
@@ -166,7 +168,7 @@ void ps_node_init(ps_node_t* node, const char* name, const char* ip)
 	// bind to port
 	sockaddr_in address;
 	address.sin_family = AF_INET;
-	address.sin_addr.s_addr = INADDR_ANY;
+	address.sin_addr.s_addr = htonl(node->addr);//INADDR_ANY;
 	address.sin_port = 0;// htons(node->port);
 
 	if (bind(node->socket, (const sockaddr*)&address, sizeof(sockaddr_in)) < 0)
@@ -234,7 +236,7 @@ void ps_node_init(ps_node_t* node, const char* name, const char* ip)
 
 	//sockaddr_in address;
 	address.sin_family = AF_INET;
-	address.sin_addr.s_addr = INADDR_ANY;
+	address.sin_addr.s_addr = htonl(node->addr);//INADDR_ANY;
 	address.sin_port = htons(node->advertise_port);
 
 	if (bind(node->mc_socket, (const sockaddr*)&address, sizeof(sockaddr_in)) < 0)
@@ -350,10 +352,11 @@ int ps_node_spin(ps_node_t* node)
 	{
 		_last_advertise = GetTickCount64();
 #else
-	if (_last_advertise + 25 * 1000 < millis())
+	if (_last_advertise + 5 * 1000 < millis())
 	{
 		_last_advertise = millis();
 #endif
+        printf("Advertising\n");
 
 		// send out an advertisement for each publisher we have
 		for (int i = 0; i < node->num_pubs; i++)
