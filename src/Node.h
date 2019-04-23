@@ -21,7 +21,7 @@ struct ps_node_t
 	// my core socket port and address
 	unsigned short port;
 	unsigned int addr;
-	unsigned int mc_addr;// in network layout because we dont need it in host
+	unsigned int advertise_addr;// in network layout because we dont need it in host
 
 	int sub_index;
 
@@ -62,7 +62,8 @@ struct ps_advertise_req_t
 #pragma pack(pop)
 
 //not threadsafe, but thats obvious isnt it
-void ps_node_init(ps_node_t* node, const char* name, const char* ip);
+// set broadcast to true to use that for advertising instead of multicast (for esp32 mostly)
+void ps_node_init(ps_node_t* node, const char* name, const char* ip, bool broadcast = false);
 
 void ps_node_create_publisher(ps_node_t* node, const char* topic, const char* type, ps_pub_t* pub);
 

@@ -1,7 +1,7 @@
 // PubSubCMake.cpp : Defines the entry point for the application.
 //
 
-#include <pubsub/Node.h>
+#include "src/Node.h"
 
 #include <stdio.h>
 
@@ -45,7 +45,7 @@ std::map<std::string, Topic> _topics;
 int main(int num_args, char** args)
 {
 	ps_node_t node;
-	ps_node_init(&node, "Query", "192.168.0.104");
+	ps_node_init(&node, "Query", "192.168.0.104", false);
 
 	node.adv_cb = [](const char* topic, const char* type, const char* node, void* data)
 	{
@@ -59,7 +59,13 @@ int main(int num_args, char** args)
 		}
 		else
 		{
-			_topics[topic].publishers.push_back(node);
+			auto& t = _topics[topic];
+			for (int i = 0; i < t.publishers.size(); i++)
+			{
+				if (t.publishers[i] == node)
+					return;
+			}
+			t.publishers.push_back(node);
 		}
 		//printf("Get pub %s type %s node %s\n", topic, type, node);
 		return;
@@ -77,7 +83,13 @@ int main(int num_args, char** args)
 		}
 		else
 		{
-			_topics[topic].subscribers.push_back(node);
+			auto& t = _topics[topic];
+			for (int i = 0; i < t.subscribers.size(); i++)
+			{
+				if (t.subscribers[i] == node)
+					return;
+			}
+			t.subscribers.push_back(node);
 		}
 		//printf("Get sub %s type %s node %s\n", topic, type, node);
 		return;

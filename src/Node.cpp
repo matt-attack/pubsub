@@ -19,7 +19,7 @@ void ps_node_system_query(ps_node_t* node)
 	// send da udp packet!
 	sockaddr_in address;
 	address.sin_family = AF_INET;
-	address.sin_addr.s_addr = node->mc_addr;// todo put this port in a global
+	address.sin_addr.s_addr = node->advertise_addr;// todo put this port in a global
 	address.sin_port = htons(node->advertise_port);
 
 	char data[1000];
@@ -44,7 +44,7 @@ void ps_node_subscribe_query(ps_sub_t* sub)
 	// send da udp packet!
 	sockaddr_in address;
 	address.sin_family = AF_INET;
-	address.sin_addr.s_addr = sub->node->mc_addr;// todo put this port in a global
+	address.sin_addr.s_addr = sub->node->advertise_addr;// todo put this port in a global
 	address.sin_port = htons(sub->node->advertise_port);
 
 	char data[1000];
@@ -71,7 +71,7 @@ void ps_node_advertise(ps_pub_t* pub)
 	// send da udp packet!
 	sockaddr_in address;
 	address.sin_family = AF_INET;
-	address.sin_addr.s_addr = pub->node->mc_addr;
+	address.sin_addr.s_addr = pub->node->advertise_addr;
 	address.sin_port = htons(pub->node->advertise_port);
 
 	char data[1000];
@@ -132,7 +132,7 @@ void networking_init()
 #endif
 }
 
-void ps_node_init(ps_node_t* node, const char* name, const char* ip)
+void ps_node_init(ps_node_t* node, const char* name, const char* ip, bool broadcast)
 {
 	networking_init();
 
@@ -146,7 +146,16 @@ void ps_node_init(ps_node_t* node, const char* name, const char* ip)
 	node->sub_cb = 0;
 
 	node->advertise_port = 11311;// todo redo this stuff
-	node->mc_addr = inet_addr("239.255.255.249");
+
+	unsigned int mc_addr = inet_addr("239.255.255.249");
+	if (broadcast)
+	{
+		node->advertise_addr = inet_addr("192.168.0.255");// todo autodetect me
+	}
+	else
+	{
+		node->advertise_addr = inet_addr("239.255.255.249");
+	}
 
 	node->sub_index = 100;
 
@@ -168,7 +177,7 @@ void ps_node_init(ps_node_t* node, const char* name, const char* ip)
 	// bind to port
 	sockaddr_in address;
 	address.sin_family = AF_INET;
-	address.sin_addr.s_addr = htonl(node->addr);//INADDR_ANY;
+	address.sin_addr.s_addr = INADDR_ANY;// htonl(node->addr);//INADDR_ANY;
 	address.sin_port = 0;// htons(node->port);
 
 	if (bind(node->socket, (const sockaddr*)&address, sizeof(sockaddr_in)) < 0)
@@ -221,25 +230,31 @@ void ps_node_init(ps_node_t* node, const char* name, const char* ip)
 		return;
 	}
 
-#ifdef ARDUINO
 	int opt = 1;
-#else
-	int opt = TRUE;
-#endif
 	if (setsockopt(node->mc_socket, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt)) < 0)
 	{
 		perror("setsockopt");
 		exit(EXIT_FAILURE);
 	}
 
+	if (broadcast)
+	{
+		int opt = 1;
+		if (setsockopt(node->mc_socket, SOL_SOCKET, SO_BROADCAST, (char *)&opt, sizeof(opt)) < 0)
+		{
+			perror("setsockopt");
+			exit(EXIT_FAILURE);
+		}
+	}
+
 	// bind to port
 
-	//sockaddr_in address;
-	address.sin_family = AF_INET;
-	address.sin_addr.s_addr = htonl(node->addr);//INADDR_ANY;
-	address.sin_port = htons(node->advertise_port);
+	sockaddr_in mc_address;
+	mc_address.sin_family = AF_INET;
+	mc_address.sin_addr.s_addr = htonl(node->addr);//INADDR_ANY;
+	mc_address.sin_port = htons(node->advertise_port);
 
-	if (bind(node->mc_socket, (const sockaddr*)&address, sizeof(sockaddr_in)) < 0)
+	if (bind(node->mc_socket, (const sockaddr*)&mc_address, sizeof(sockaddr_in)) < 0)
 	{
 #ifdef _WIN32
 		int err = WSAGetLastError();
@@ -268,10 +283,10 @@ void ps_node_init(ps_node_t* node, const char* name, const char* ip)
 #endif
 
 	struct ip_mreq mreq;
-	mreq.imr_multiaddr.s_addr = node->mc_addr;
-	mreq.imr_interface.s_addr = htonl(INADDR_ANY);
-	if (setsockopt(node->mc_socket, IPPROTO_IP, IP_ADD_MEMBERSHIP, 
-		           (char*)&mreq, sizeof(mreq)) < 0) 
+	mreq.imr_multiaddr.s_addr = mc_addr;
+	mreq.imr_interface.s_addr = htonl(node->addr);// htonl(INADDR_ANY);
+	if (setsockopt(node->mc_socket, IPPROTO_IP, IP_ADD_MEMBERSHIP,
+		(char*)&mreq, sizeof(mreq)) < 0)
 	{
 		perror("setsockopt");
 		return;
@@ -347,7 +362,7 @@ int ps_node_spin(ps_node_t* node)
 
 	//need to also send out our occasional advertisements
 	//also send out keepalives which are still todo
-#ifdef ARUDINO
+#ifndef ARUDINO
 	if (_last_advertise + 25 * 1000 < GetTickCount64())
 	{
 		_last_advertise = GetTickCount64();
@@ -500,7 +515,8 @@ int ps_node_spin(ps_node_t* node)
 			if (node->sub_cb)
 			{
 				char* type = (char*)&data[strlen(topic) + 8];
-				node->sub_cb(topic, type, "test", 0);
+				char* node_name = type + 1 + strlen(type);
+				node->sub_cb(topic, type, node_name, 0);
 			}
 
 			//check if we have a sub matching that topic
@@ -551,7 +567,8 @@ int ps_node_spin(ps_node_t* node)
 			if (node->adv_cb)
 			{
 				char* type = (char*)&data[strlen(topic) + sizeof(ps_advertise_req_t) + 1];
-				node->adv_cb(topic, type, "test", 0);
+				char* node_name = type + 1 + strlen(type);
+				node->adv_cb(topic, type, node_name, 0);
 			}
 
 			printf("Got advertise notice\n");

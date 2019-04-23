@@ -4,9 +4,9 @@
 #include <cstdlib>
 #include <stdio.h>
 
-#include "Node.h"
-#include "Subscriber.h"
-#include "Publisher.h"
+#include "../src/Node.h"
+#include "../src/Publisher.h"
+#include "../src/Subscriber.h"
 
 // simple pub sub library implementation in plain C, with lightweight version for embedded
 // serialization is handled in a different api, this is just the protocol handling blobs
@@ -28,7 +28,7 @@ void* ps_get_msg_start(void* data)
 int main()
 {
 	ps_node_t node;
-	ps_node_init(&node, "pub", "192.168.0.104");
+	ps_node_init(&node, "pub", "192.168.0.104", true);
 
 	ps_pub_t string_pub;
 	ps_node_create_publisher(&node, "/data", "std_msgs/String", &string_pub);

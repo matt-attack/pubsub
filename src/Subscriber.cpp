@@ -38,7 +38,7 @@ void ps_sub_destroy(ps_sub_t* sub)
 	// send da udp packet!
 	sockaddr_in address;
 	address.sin_family = AF_INET;
-	address.sin_addr.s_addr = sub->node->mc_addr;
+	address.sin_addr.s_addr = sub->node->advertise_addr;
 	address.sin_port = htons(sub->node->advertise_port);
 
 	char data[1000];
