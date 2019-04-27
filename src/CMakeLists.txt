@@ -7,7 +7,9 @@ cmake_minimum_required (VERSION 3.8)
 add_library (pubsub 
   "Node.cpp"
   "Publisher.cpp"
-  "Subscriber.cpp")
+  "Subscriber.cpp"
+  "Serialization.cpp"
+  )
 
 
 # TODO: Add tests and install targets if needed.

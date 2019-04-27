@@ -1,14 +1,21 @@
 #pragma once
 
+#include "Serialization.h"
+
 struct ps_endpoint_t;
 struct ps_node_t;
 struct ps_allocator_t;
+struct ps_message_definition_t;
 struct ps_sub_t
 {
 	ps_node_t* node;
 
 	const char* topic;
 	const char* type;
+	//todo add hash
+
+	bool want_message_definition;
+	ps_message_definition_t received_message_def;
 
 	int sub_id;
 

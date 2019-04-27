@@ -61,8 +61,18 @@ struct ps_advertise_req_t
 };
 #pragma pack(pop)
 
+#pragma pack(push)
+#pragma pack(1)
+struct ps_subscribe_accept_t
+{
+	char pid;// packet type identifier
+	unsigned int sid; //stream id
+	//message definition goes here...
+};
+#pragma pack(pop)
+
 //not threadsafe, but thats obvious isnt it
-// set broadcast to true to use that for advertising instead of multicast (for esp32 mostly)
+// set broadcast to true to use that for advertising instead of multicast
 void ps_node_init(ps_node_t* node, const char* name, const char* ip, bool broadcast = false);
 
 void ps_node_create_publisher(ps_node_t* node, const char* topic, const char* type, ps_pub_t* pub);
@@ -70,6 +80,7 @@ void ps_node_create_publisher(ps_node_t* node, const char* topic, const char* ty
 void ps_node_create_subscriber(ps_node_t* node, const char* topic, const char* type,
 	ps_sub_t* sub,
 	unsigned int queue_size = 1,
+	bool want_message_def = false,
 	ps_allocator_t* allocator = 0);
 
 int ps_node_spin(ps_node_t* node);

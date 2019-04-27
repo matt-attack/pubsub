@@ -2,6 +2,8 @@
 //
 
 #include "src/Node.h"
+#include "src/Subscriber.h"
+#include "src/Serialization.h"
 
 #include <stdio.h>
 
@@ -129,7 +131,54 @@ int main(int num_args, char** args)
 
 			std::string topic = args[3];
 
-			if (subverb == "info")
+			if (subverb == "echo")
+			{
+				// wait for details about the topic
+				wait(&node);
+
+				auto info = _topics.find(topic);
+				if (info == _topics.end())
+				{
+					std::cout << "Topic " << topic << " not found!\n";
+					return 0;
+				}
+
+				// create a subscriber
+				ps_sub_t sub;
+				ps_node_create_subscriber(&node, info->first.c_str(), info->second.type.c_str(), &sub, 1, true);
+
+				// subscribe to the topic and publish anything we get
+				while (true)
+				{
+					ps_node_spin(&node);
+
+					void* data = ps_sub_deque(&sub);
+					if (data)
+					{
+						if (sub.received_message_def.fields == 0)
+						{
+							printf("ERROR: %i got message but no message definition yet...\n");
+						}
+						else
+						{
+							ps_deserialize_print(data, &sub.received_message_def);
+						}
+						// todo deserialize
+						//printf("Got message!\n");
+						//todo, replace this with the received definition also need to send it somehow....
+						/*ps_field_t field;
+						field.type = FT_String;
+						field.name = "data";
+						ps_message_definition_t def;
+						def.fields = &field;
+						def.num_fields = 1;
+						def.hash = 0;//todo do something with this
+						ps_deserialize_print(data, &def);*/
+						printf("-------------\n");
+					}
+				}
+			}
+			else if (subverb == "info")
 			{
 				wait(&node);
 

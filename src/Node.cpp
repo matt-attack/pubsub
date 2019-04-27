@@ -1,6 +1,7 @@
 #include "Node.h"
 #include "Publisher.h"
 #include "Subscriber.h"
+#include "Serialization.h"
 
 #include <cstdlib>
 #include <stdio.h>
@@ -309,6 +310,7 @@ ps_allocator_t ps_default_allocator = { ps_malloc_alloc, ps_malloc_free, 0 };
 void ps_node_create_subscriber(ps_node_t* node, const char* topic, const char* type,
 	ps_sub_t* sub,
 	unsigned int queue_size,
+	bool want_message_def,
 	ps_allocator_t* allocator)
 {
 	node->num_subs++;
@@ -332,6 +334,11 @@ void ps_node_create_subscriber(ps_node_t* node, const char* topic, const char* t
 	sub->sub_id = node->sub_index++;
 	sub->allocator = allocator;
 
+	sub->want_message_definition = want_message_def;
+	sub->received_message_def.fields = 0;
+	sub->received_message_def.hash = 0;
+	sub->received_message_def.num_fields = 0;
+
 	// allocate queue data
 	sub->queue_len = 0;
 	sub->queue_size = queue_size;
@@ -345,6 +352,30 @@ void ps_node_create_subscriber(ps_node_t* node, const char* topic, const char* t
 	// send out the subscription query while we are at it
 	ps_node_subscribe_query(sub);
 }
+
+void ps_pub_publish_accept(ps_pub_t* pub, ps_client_t* client, ps_message_definition_t* msg)
+{
+	printf("Sending subscribe accept\n");
+	// send da udp packet!
+	sockaddr_in address;
+	address.sin_family = AF_INET;
+	address.sin_addr.s_addr = htonl(client->endpoint.address);
+	address.sin_port = htons(client->endpoint.port);
+
+
+	char data[1500];
+	ps_subscribe_accept_t* p = (ps_subscribe_accept_t*)data;
+	p->pid = 4;
+	p->sid = client->stream_id;
+
+	//todo only send this to clients who request it
+	int off = sizeof(ps_subscribe_accept_t);
+	off += ps_serialize_message_definition(&data[off], msg);
+
+	//also add other info...
+	int sent_bytes = sendto(pub->node->socket, (const char*)data, off, 0, (sockaddr*)&address, sizeof(sockaddr_in));
+}
+
 
 //returns nonzero if we got a message
 static unsigned long long _last_advertise = 0;
@@ -363,6 +394,7 @@ int ps_node_spin(ps_node_t* node)
 	//need to also send out our occasional advertisements
 	//also send out keepalives which are still todo
 #ifndef ARUDINO
+	unsigned long long now = GetTickCount64();
 	if (_last_advertise + 25 * 1000 < GetTickCount64())
 	{
 		_last_advertise = GetTickCount64();
@@ -422,7 +454,7 @@ int ps_node_spin(ps_node_t* node)
 			}
 			if (sub == 0)
 			{
-				printf("Could not find sub matching packet id %i\n", hdr->id);
+				printf("Could not find sub matching stream id %i\n", hdr->id);
 				continue;
 			}
 
@@ -438,6 +470,38 @@ int ps_node_spin(ps_node_t* node)
 			sub->queue[index] = out_data;
 
 			packet_count++;
+		}
+		else if (data[0] == 3)
+		{
+			// todo keep alives
+		}
+		else if (data[0] == 4)
+		{
+			ps_subscribe_accept_t* p = (ps_subscribe_accept_t*)data;
+			printf("Got subscribe accept for stream %i\n", p->sid);
+
+			// find the sub
+			ps_sub_t* sub = 0;
+			for (int i = 0; i < node->num_subs; i++)
+			{
+				if (node->subs[i]->sub_id == p->sid)
+				{
+					sub = node->subs[i];
+					break;
+				}
+			}
+			if (sub == 0)
+			{
+				printf("Could not find sub matching stream id %i\n", p->sid);
+				continue;
+			}
+
+			if (sub->want_message_definition)
+			{
+				ps_deserialize_message_definition(&data[sizeof(ps_subscribe_accept_t)], &sub->received_message_def);
+			}
+			//can also mark that we have a publisher and save the data type if we care about it
+			//process subscribe accept and save/decode the message format if we care
 		}
 		else if (data[0] == 1)
 		{
@@ -480,6 +544,19 @@ int ps_node_spin(ps_node_t* node)
 
 			printf("Got subscribe request, adding client if we haven't already\n");
 			ps_pub_add_client(pub, &client);
+
+			//send out the data format to the client
+
+			ps_field_t field;
+			field.type = FT_String;
+			field.name = "data";
+			field.content_length = field.length = 0;
+			ps_message_definition_t def;
+			def.fields = &field;
+			def.num_fields = 1;
+			def.hash = 0;//todo do something with this
+
+			ps_pub_publish_accept(pub, &client, &def);
 
 			//if it is a latched topic, need to publish our last value
 		}
@@ -656,6 +733,21 @@ int ps_node_spin(ps_node_t* node)
 		}
 	}
 
+	// perform time out checks on publishers
+	/*for (int i = 0; i < node->num_pubs; i++)
+	{
+		for (int c = 0; c < node->pubs[i]->num_clients; c++)
+		{
+			ps_client_t* client = &node->pubs[i]->clients[c];
+			if (client->last_keepalive < now - 10 * 1000)
+			{
+				printf("Client has timed out, unsubscribing...");
+				toodo fill in last keepalives and actually remove
+
+					also need to add a way to get the message definitions
+			}
+		}
+	}*/
 	return packet_count;
 }
 
