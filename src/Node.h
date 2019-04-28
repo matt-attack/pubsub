@@ -2,6 +2,7 @@
 
 struct ps_sub_t;
 struct ps_pub_t;
+struct ps_message_definition_t;
 
 typedef void(*ps_adv_cb_t)(const char* topic, const char* type, const char* node, void* data);
 typedef void(*ps_sub_cb_t)(const char* topic, const char* type, const char* node, void* data);
@@ -75,7 +76,7 @@ struct ps_subscribe_accept_t
 // set broadcast to true to use that for advertising instead of multicast
 void ps_node_init(ps_node_t* node, const char* name, const char* ip, bool broadcast = false);
 
-void ps_node_create_publisher(ps_node_t* node, const char* topic, const char* type, ps_pub_t* pub);
+void ps_node_create_publisher(ps_node_t* node, const char* topic, const ps_message_definition_t* type, ps_pub_t* pub);
 
 void ps_node_create_subscriber(ps_node_t* node, const char* topic, const char* type,
 	ps_sub_t* sub,

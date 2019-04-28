@@ -1,6 +1,7 @@
 #pragma once
 
 struct ps_node_t;
+struct ps_message_definition_t;
 
 struct ps_endpoint_t
 {
@@ -21,8 +22,8 @@ struct ps_client_t
 struct ps_pub_t
 {
 	const char* topic;
-	const char* type;
-	int hash;// type hash
+
+	const ps_message_definition_t* message_definition;
 
 	ps_node_t* node;
 	unsigned int num_clients;
@@ -44,3 +45,5 @@ void ps_pub_remove_client(ps_pub_t* pub, const ps_client_t* client);
 void ps_pub_publish(ps_pub_t* pub, ps_msg_t* msg);
 
 int ps_pub_get_subscriber_count(const ps_pub_t* pub);
+
+void ps_pub_destroy(ps_pub_t* pub);

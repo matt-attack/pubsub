@@ -28,10 +28,20 @@ void* ps_get_msg_start(void* data)
 int main()
 {
 	ps_node_t node;
-	ps_node_init(&node, "pub", "192.168.0.104", true);
+	ps_node_init(&node, "pub", "192.168.0.104", false);
+
+	ps_field_t field;
+	field.type = FT_String;
+	field.name = "data";
+	field.content_length = field.length = 0;
+	ps_message_definition_t def;
+	def.name = "std_msgs/String";
+	def.fields = &field;
+	def.num_fields = 1;
+	def.hash = 0;//todo do something with this
 
 	ps_pub_t string_pub;
-	ps_node_create_publisher(&node, "/data", "std_msgs/String", &string_pub);
+	ps_node_create_publisher(&node, "/data", &def, &string_pub);
 
 	ps_sub_t string_sub;
 	ps_node_create_subscriber(&node, "/data", "std_msgs/String", &string_sub);
@@ -51,7 +61,7 @@ int main()
 
 	while (true)
 	{
-		//cneed to make sure to reserve n bytes for the header
+		//need to make sure to reserve n bytes for the header
 		memcpy(ps_get_msg_start(msg.data), "hello", 6);
 		ps_pub_publish(&string_pub, &msg);
 
@@ -67,7 +77,7 @@ int main()
 	}
 
 	ps_sub_destroy(&string_sub);
-	//ps_pub_destroy(&string_pub);
+	ps_pub_destroy(&string_pub);
 	//ps_node_destroy(&node);
 
     return 0;

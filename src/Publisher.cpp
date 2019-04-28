@@ -97,3 +97,33 @@ int ps_pub_get_subscriber_count(const ps_pub_t* pub)
 {
 	return pub->num_clients;
 }
+
+void ps_pub_destroy(ps_pub_t* pub)
+{
+	free(pub->clients);
+
+	//remove it from my list of subs
+	pub->node->num_pubs--;
+	ps_pub_t** old_pubs = pub->node->pubs;
+	pub->node->pubs = (ps_pub_t**)malloc(sizeof(ps_pub_t*)*pub->node->num_pubs);
+	int ind = 0;
+	for (int i = 0; i < pub->node->num_pubs; i++)
+	{
+		if (old_pubs[ind] == pub)
+		{
+			//skip me
+		}
+		else
+		{
+			pub->node->pubs[i] = old_pubs[ind];
+		}
+		ind++;
+	}
+	free(old_pubs);
+
+	pub->clients = 0;
+	pub->num_clients = 0;
+	pub->node = 0;
+	pub->message_definition = 0;
+	pub->topic = 0;
+}

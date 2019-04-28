@@ -30,6 +30,7 @@ struct ps_message_definition_t
 {
 	unsigned int hash;
 	unsigned int num_fields;
+	char* name;
 	ps_field_t* fields;
 };
 

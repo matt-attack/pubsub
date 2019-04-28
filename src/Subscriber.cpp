@@ -41,7 +41,7 @@ void ps_sub_destroy(ps_sub_t* sub)
 	address.sin_addr.s_addr = sub->node->advertise_addr;
 	address.sin_port = htons(sub->node->advertise_port);
 
-	char data[1000];
+	char data[1200];
 	data[0] = 3;
 	int* addr = (int*)&data[1];
 	*addr = sub->node->addr;
@@ -89,6 +89,6 @@ void* ps_sub_deque(ps_sub_t* sub)
 		//printf("Warning: dequeued when there was nothing in queue\n");
 		return 0;
 	}
-	sub->queue_len--;
-	return sub->queue[0];
+	;
+	return sub->queue[--sub->queue_len];
 }

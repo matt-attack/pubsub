@@ -84,7 +84,7 @@ void ps_node_advertise(ps_pub_t* pub)
 
 	int off = sizeof(ps_advertise_req_t);
 	off += serialize_string(&data[off], pub->topic);
-	off += serialize_string(&data[off], pub->type);
+	off += serialize_string(&data[off], pub->message_definition->name);
 	off += serialize_string(&data[off], pub->node->name);
 
 	//also add other info...
@@ -92,7 +92,7 @@ void ps_node_advertise(ps_pub_t* pub)
 }
 
 
-void ps_node_create_publisher(ps_node_t* node, const char* topic, const char* type, ps_pub_t* pub)
+void ps_node_create_publisher(ps_node_t* node, const char* topic, const ps_message_definition_t* type, ps_pub_t* pub)
 {
 	node->num_pubs++;
 	ps_pub_t** old_pubs = node->pubs;
@@ -107,7 +107,7 @@ void ps_node_create_publisher(ps_node_t* node, const char* topic, const char* ty
 	// initialize the pub
 	pub->clients = 0;
 	pub->num_clients = 0;
-	pub->type = type;
+	pub->message_definition = type;
 	pub->topic = topic;
 	pub->node = node;
 }
@@ -353,7 +353,7 @@ void ps_node_create_subscriber(ps_node_t* node, const char* topic, const char* t
 	ps_node_subscribe_query(sub);
 }
 
-void ps_pub_publish_accept(ps_pub_t* pub, ps_client_t* client, ps_message_definition_t* msg)
+void ps_pub_publish_accept(ps_pub_t* pub, ps_client_t* client, const ps_message_definition_t* msg)
 {
 	printf("Sending subscribe accept\n");
 	// send da udp packet!
@@ -403,7 +403,7 @@ int ps_node_spin(ps_node_t* node)
 	{
 		_last_advertise = millis();
 #endif
-        printf("Advertising\n");
+        //printf("Advertising\n");
 
 		// send out an advertisement for each publisher we have
 		for (int i = 0; i < node->num_pubs; i++)
@@ -464,10 +464,16 @@ int ps_node_spin(ps_node_t* node)
 			memcpy(out_data, data + sizeof(ps_msg_header), data_size);
 
 			//add it to the fifo packet queue which always shows the n most recent packets
-			// todo fifo
-			sub->queue_len = 1;
-			int index = 0;
-			sub->queue[index] = out_data;
+			//most recent is always first
+			//so lets push to the front (highest open index or highest if full)
+			if (sub->queue_size == sub->queue_len)
+			{
+				sub->queue[sub->queue_size - 1] = out_data;
+			}
+			else
+			{
+				sub->queue[sub->queue_len++] = out_data;
+			}
 
 			packet_count++;
 		}
@@ -500,8 +506,6 @@ int ps_node_spin(ps_node_t* node)
 			{
 				ps_deserialize_message_definition(&data[sizeof(ps_subscribe_accept_t)], &sub->received_message_def);
 			}
-			//can also mark that we have a publisher and save the data type if we care about it
-			//process subscribe accept and save/decode the message format if we care
 		}
 		else if (data[0] == 1)
 		{
@@ -528,7 +532,7 @@ int ps_node_spin(ps_node_t* node)
 
 			// now check that the type matches...
 			char* type = (char*)&data[strlen(topic) + sizeof(ps_sub_req_header_t) + 1];
-			if (strcmp(type, pub->type) != 0)
+			if (strcmp(type, pub->message_definition->name) != 0)
 			{
 				printf("The types didnt match! Ignoring\n");
 				continue;
@@ -546,19 +550,9 @@ int ps_node_spin(ps_node_t* node)
 			ps_pub_add_client(pub, &client);
 
 			//send out the data format to the client
+			ps_pub_publish_accept(pub, &client, pub->message_definition);
 
-			ps_field_t field;
-			field.type = FT_String;
-			field.name = "data";
-			field.content_length = field.length = 0;
-			ps_message_definition_t def;
-			def.fields = &field;
-			def.num_fields = 1;
-			def.hash = 0;//todo do something with this
-
-			ps_pub_publish_accept(pub, &client, &def);
-
-			//if it is a latched topic, need to publish our last value
+			//todo if it is a latched topic, need to publish our last value
 		}
 	}
 
@@ -614,7 +608,7 @@ int ps_node_spin(ps_node_t* node)
 
 			// now check that the type matches...
 			char* type = (char*)&data[strlen(topic) + 8];
-			if (strcmp(type, pub->type) != 0)
+			if (strcmp(type, pub->message_definition->name) != 0)
 			{
 				printf("The types didnt match! Ignoring\n");
 				continue;
