@@ -29,8 +29,8 @@ struct ps_field_t
 struct ps_message_definition_t
 {
 	unsigned int hash;
-	unsigned int num_fields;
 	char* name;
+	unsigned int num_fields;
 	ps_field_t* fields;
 };
 

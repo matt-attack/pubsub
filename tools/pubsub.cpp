@@ -157,7 +157,7 @@ int main(int num_args, char** args)
 					{
 						if (sub.received_message_def.fields == 0)
 						{
-							printf("ERROR: %i got message but no message definition yet...\n");
+							printf("ERROR: got message but no message definition yet...\n");
 						}
 						else
 						{

@@ -20,10 +20,10 @@ void ps_node_system_query(ps_node_t* node)
 	// send da udp packet!
 	sockaddr_in address;
 	address.sin_family = AF_INET;
-	address.sin_addr.s_addr = node->advertise_addr;// todo put this port in a global
+	address.sin_addr.s_addr = node->advertise_addr;
 	address.sin_port = htons(node->advertise_port);
 
-	char data[1000];
+	char data[1400];
 	data[0] = 4;
 	int* addr = (int*)&data[1];
 	*addr = node->addr;//todo replace me with my ip
@@ -41,14 +41,14 @@ void ps_node_system_query(ps_node_t* node)
 // sends out a multicast request looking for publishers on this topic
 void ps_node_subscribe_query(ps_sub_t* sub)
 {
-	printf("Advertising subscriber\n");
+	//printf("Advertising subscriber\n");
 	// send da udp packet!
 	sockaddr_in address;
 	address.sin_family = AF_INET;
 	address.sin_addr.s_addr = sub->node->advertise_addr;// todo put this port in a global
 	address.sin_port = htons(sub->node->advertise_port);
 
-	char data[1000];
+	char data[1400];
 	data[0] = 1;
 	int* addr = (int*)&data[1];
 	*addr = sub->node->addr;//todo replace me with my ip
@@ -68,16 +68,15 @@ void ps_node_subscribe_query(ps_sub_t* sub)
 // advertizes the publisher via multicast
 void ps_node_advertise(ps_pub_t* pub)
 {
-	printf("Advertising topic\n");
+	//printf("Advertising topic\n");
 	// send da udp packet!
 	sockaddr_in address;
 	address.sin_family = AF_INET;
 	address.sin_addr.s_addr = pub->node->advertise_addr;
 	address.sin_port = htons(pub->node->advertise_port);
 
-	char data[1000];
+	char data[1400];
 	ps_advertise_req_t* p = (ps_advertise_req_t*)data;
-	data[0] = 2;
 	p->id = 2;
 	p->addr = pub->node->addr;
 	p->port = pub->node->port;
@@ -146,40 +145,38 @@ void ps_node_init(ps_node_t* node, const char* name, const char* ip, bool broadc
 	node->adv_cb = 0;
 	node->sub_cb = 0;
 
-	node->advertise_port = 11311;// todo redo this stuff
+	node->advertise_port = 11311;// todo make this configurable
 
-	unsigned int mc_addr = inet_addr("239.255.255.249");
+	unsigned int mc_addr = inet_addr("239.255.255.249");// todo make this configurable
 	if (broadcast)
 	{
-		node->advertise_addr = inet_addr("192.168.0.255");// todo autodetect me
+		//convert to a broadcast address (just the subnet wide one)
+		node->advertise_addr = inet_addr(ip);
+		node->advertise_addr |= 0xFF000000;
 	}
 	else
 	{
-		node->advertise_addr = inet_addr("239.255.255.249");
+		node->advertise_addr = mc_addr;
 	}
 
-	node->sub_index = 100;
+	node->sub_index = 100;// maybe should randomize this?
 
 	// setup the core socket
-	node->socket = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	node->socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
-	int port = 7555;
-	//try and allocate a udp port
-	node->port = port;
 	node->addr = ntohl(inet_addr(ip));
 	if (node->socket == 0)
 	{
-		int po = port;
-		printf("Failed To Create Socket on %i!\n", po);
+		printf("Failed To Create Socket!\n");
 		node->socket = 0;
 		return;
 	}
 
-	// bind to port
+	// bind to an ephemeral port
 	sockaddr_in address;
 	address.sin_family = AF_INET;
-	address.sin_addr.s_addr = INADDR_ANY;// htonl(node->addr);//INADDR_ANY;
-	address.sin_port = 0;// htons(node->port);
+	address.sin_addr.s_addr = INADDR_ANY;// htonl(node->addr);
+	address.sin_port = 0;//ephemeral port!
 
 	if (bind(node->socket, (const sockaddr*)&address, sizeof(sockaddr_in)) < 0)
 	{
@@ -221,12 +218,11 @@ void ps_node_init(ps_node_t* node, const char* name, const char* ip, bool broadc
 #endif
 
 	//setup multicast socket
-	node->mc_socket = ::socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	node->mc_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
 	if (node->mc_socket == 0)
 	{
-		int po = port;
-		printf("Failed To Create mc Socket on %i!\n", po);
+		printf("Failed To Create mc Socket!\n");
 		node->mc_socket = 0;
 		return;
 	}
@@ -249,7 +245,6 @@ void ps_node_init(ps_node_t* node, const char* name, const char* ip, bool broadc
 	}
 
 	// bind to port
-
 	sockaddr_in mc_address;
 	mc_address.sin_family = AF_INET;
 	mc_address.sin_addr.s_addr = htonl(node->addr);//INADDR_ANY;
@@ -267,7 +262,6 @@ void ps_node_init(ps_node_t* node, const char* name, const char* ip, bool broadc
 
 	// set non-blocking i
 #ifdef _WIN32
-	//DWORD nonBlocking = 1;
 	if (ioctlsocket(node->mc_socket, FIONBIO, &nonBlocking) != 0)
 	{
 		printf("Failed to Set Socket as Non-Blocking!\n");
@@ -285,7 +279,7 @@ void ps_node_init(ps_node_t* node, const char* name, const char* ip, bool broadc
 
 	struct ip_mreq mreq;
 	mreq.imr_multiaddr.s_addr = mc_addr;
-	mreq.imr_interface.s_addr = htonl(node->addr);// htonl(INADDR_ANY);
+	mreq.imr_interface.s_addr = htonl(node->addr);// sets the interface to subscribe to multicast on
 	if (setsockopt(node->mc_socket, IPPROTO_IP, IP_ADD_MEMBERSHIP,
 		(char*)&mreq, sizeof(mreq)) < 0)
 	{
@@ -440,7 +434,7 @@ int ps_node_spin(ps_node_t* node)
 		{
 			ps_msg_header* hdr = (ps_msg_header*)data;
 
-			printf("Got message packet seq %i\n", hdr->seq);
+			//printf("Got message packet seq %i\n", hdr->seq);
 
 			// find the sub
 			ps_sub_t* sub = 0;
@@ -602,7 +596,7 @@ int ps_node_spin(ps_node_t* node)
 			}
 			if (pub == 0)
 			{
-				printf("Got subscribe query, but it was for a topic we don't have\n");
+				//printf("Got subscribe query, but it was for a topic we don't have\n");
 				continue;
 			}
 
@@ -619,12 +613,12 @@ int ps_node_spin(ps_node_t* node)
 			{
 				if (pub->clients[i].endpoint.port == *port && pub->clients[i].endpoint.address == *addr)
 				{
-					printf("Got subscribe query from a current client, not advertising\n");
-					continue;
+					//printf("Got subscribe query from a current client, not advertising\n");
+					break;
 				}
 				else if (i == pub->num_clients - 1)
 				{
-					printf("Got subscribe query, advertising\n");
+					printf("Got new subscribe query, advertising\n");
 					ps_node_advertise(pub);
 				}
 			}
@@ -642,7 +636,7 @@ int ps_node_spin(ps_node_t* node)
 				node->adv_cb(topic, type, node_name, 0);
 			}
 
-			printf("Got advertise notice\n");
+			//printf("Got advertise notice\n");
 			// is it something im subscribing to? if so send an actual subscribe request to that specific port
 			//check if we have a sub matching that topic
 			ps_sub_t* sub = 0;
@@ -656,7 +650,7 @@ int ps_node_spin(ps_node_t* node)
 			}
 			if (sub == 0)
 			{
-				printf("Got advertise notice, but it was for a topic we don't have\n");
+				//printf("Got advertise notice, but it was for a topic we don't have\n");
 				continue;
 			}
 
@@ -670,6 +664,8 @@ int ps_node_spin(ps_node_t* node)
 
 			// check if we are already getting data from this person, if so lets not send another request to their advertise
 			// todo, need to do keepalives and unsubs
+
+			printf("Got advertise notice for a topic we need\n");
 
 			ps_endpoint_t ep;
 			ep.address = p->addr;
