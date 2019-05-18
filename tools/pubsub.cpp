@@ -25,7 +25,7 @@ void wait(ps_node_t* node)
 {
 	printf("Waiting for responses...\n\n");
 	int start = GetTickCount();
-	while (start + 3000 > GetTickCount())
+	while (ps_okay() && start + 3000 > GetTickCount())
 	{
 		ps_node_spin(node);
 	}
@@ -69,7 +69,7 @@ int main(int num_args, char** args)
 			}
 			t.publishers.push_back(node);
 		}
-		//printf("Get pub %s type %s node %s\n", topic, type, node);
+		printf("Get pub %s type %s node %s\n", topic, type, node);
 		return;
 	};
 
@@ -93,7 +93,7 @@ int main(int num_args, char** args)
 			}
 			t.subscribers.push_back(node);
 		}
-		//printf("Get sub %s type %s node %s\n", topic, type, node);
+		printf("Get sub %s type %s node %s\n", topic, type, node);
 		return;
 	};
 
@@ -140,7 +140,7 @@ int main(int num_args, char** args)
 
 				// subscribe to the topic and publish anything we get
 				bool subscribed = false;
-				while (true)
+				while (ps_okay())
 				{
 					ps_node_spin(&node);
 
@@ -149,6 +149,7 @@ int main(int num_args, char** args)
 					if (!subscribed && info != _topics.end())
 					{
 						std::cout << "Topic " << topic << " found!\n";
+						std::cout << info->first.c_str() << " " <<  info->second.type.c_str();
 						subscribed = true;
 
 						ps_node_create_subscriber(&node, info->first.c_str(), info->second.type.c_str(), &sub, 1, true);
@@ -160,8 +161,9 @@ int main(int num_args, char** args)
 						continue;
 					}
 
-					void* data = ps_sub_deque(&sub);
-					if (data)
+					// get and deserialize the messages
+					void* data;
+					while ((data = ps_sub_deque(&sub)) && ps_okay())
 					{
 						if (sub.received_message_def.fields == 0)
 						{
@@ -171,17 +173,6 @@ int main(int num_args, char** args)
 						{
 							ps_deserialize_print(data, &sub.received_message_def);
 						}
-						// todo deserialize
-						//printf("Got message!\n");
-						//todo, replace this with the received definition also need to send it somehow....
-						/*ps_field_t field;
-						field.type = FT_String;
-						field.name = "data";
-						ps_message_definition_t def;
-						def.fields = &field;
-						def.num_fields = 1;
-						def.hash = 0;//todo do something with this
-						ps_deserialize_print(data, &def);*/
 						printf("-------------\n");
 					}
 				}
@@ -290,5 +281,9 @@ int main(int num_args, char** args)
 	{
 		print_help();
 	}
+
+	// this destroys a node and everything inside of it
+	ps_node_destroy(&node);
+
 	return 0;
 }

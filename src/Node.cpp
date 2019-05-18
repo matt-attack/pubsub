@@ -41,7 +41,7 @@ void ps_node_system_query(ps_node_t* node)
 // sends out a multicast request looking for publishers on this topic
 void ps_node_subscribe_query(ps_sub_t* sub)
 {
-	//printf("Advertising subscriber\n");
+	printf("Advertising subscriber %s\n", sub->topic);
 	// send da udp packet!
 	sockaddr_in address;
 	address.sin_family = AF_INET;
@@ -132,9 +132,45 @@ void networking_init()
 #endif
 }
 
+//setup OS calls
+
+#ifdef _WIN32
+static int ps_shutdown = 0;
+BOOL WINAPI CtrlHandler(DWORD fdwCtrlType)
+{
+	switch (fdwCtrlType)
+	{
+		// Handle the CTRL-C signal. 
+	case CTRL_C_EVENT:
+		printf("Ctrl-C event\n\n");
+		ps_shutdown = 1;
+		return TRUE;
+	default:
+		return FALSE;
+	}
+}
+
+int ps_okay()
+{
+	return ps_shutdown ? 0 : 1;
+}
+
+#else
+
+int ps_okay()
+{
+	return 1;
+}
+#endif
+
+
 void ps_node_init(ps_node_t* node, const char* name, const char* ip, bool broadcast)
 {
 	networking_init();
+
+#ifdef _WIN32
+	SetConsoleCtrlHandler(CtrlHandler, TRUE);
+#endif
 
 	node->name = name;
 	node->num_pubs = 0;
@@ -286,6 +322,22 @@ void ps_node_init(ps_node_t* node, const char* name, const char* ip, bool broadc
 		perror("setsockopt");
 		return;
 	}
+}
+
+void ps_node_destroy(ps_node_t* node)
+{
+	for (int i = 0; i < node->num_pubs; i++)
+	{
+		ps_pub_destroy(node->pubs[i]);
+	}
+
+	for (int i = 0; i < node->num_subs; i++)
+	{
+		ps_sub_destroy(node->subs[i]);
+	}
+
+	closesocket(node->socket);
+	closesocket(node->mc_socket);
 }
 
 void* ps_malloc_alloc(unsigned int size, void* _)
@@ -508,6 +560,8 @@ int ps_node_spin(ps_node_t* node)
 
 			char* topic = (char*)&data[sizeof(ps_sub_req_header_t)];
 
+			printf("Got subscribe request for %s\n", topic);
+
 			//check if we have a sub matching that topic
 			ps_pub_t* pub = 0;
 			for (int i = 0; i < node->num_pubs; i++)
@@ -608,6 +662,8 @@ int ps_node_spin(ps_node_t* node)
 				continue;
 			}
 
+			char* node_name = type + 1 + strlen(type);
+
 			//if we already have a sub for this, ignore
 			for (int i = 0; i < pub->num_clients; i++)
 			{
@@ -621,6 +677,12 @@ int ps_node_spin(ps_node_t* node)
 					printf("Got new subscribe query, advertising\n");
 					ps_node_advertise(pub);
 				}
+			}
+
+			if (pub->num_clients == 0)
+			{
+				printf("Got new subscribe query, advertising\n");
+				ps_node_advertise(pub);
 			}
 		}
 		else if (data[0] == 2)
@@ -674,7 +736,7 @@ int ps_node_spin(ps_node_t* node)
 		}
 		else if (data[0] == 3)
 		{
-			printf("Got unsubscribe request");
+			printf("Got unsubscribe request\n");
 
 			int* addr = (int*)&data[1];
 			unsigned short* port = (unsigned short*)&data[5];

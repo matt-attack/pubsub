@@ -147,20 +147,25 @@ int main()
 		ps_msg_t msg2 = joy_msgs_Joy_encode(0, &jmsg);
 		ps_pub_publish(&adv_pub, &msg2);
 
+		//ok, so lets add timeouts, make pubsub unsubscribe before it dies and figure out why the wires are getting crossed
 		Sleep(10);
 
 		ps_node_spin(&node);
 		//while (ps_node_spin(&node) == 0) {}
 		//todo now need to add decoding to the sub
-		char* data = (char*)ps_sub_deque(&string_sub);
-		printf("Got message: %s\n", data);
-		free(data);//todo use allocator free
+		while (char* data = (char*)ps_sub_deque(&string_sub))
+		{
+			printf("Got message: %s\n", data);
+			free(data);//todo use allocator free
+		}
+
+		printf("Num subs: %i %i\n", ps_pub_get_subscriber_count(&string_pub), ps_pub_get_subscriber_count(&adv_pub));
 		Sleep(1000);
 	}
 
 	ps_sub_destroy(&string_sub);
 	ps_pub_destroy(&string_pub);
-	//ps_node_destroy(&node);
+	ps_node_destroy(&node);
 
     return 0;
 }
