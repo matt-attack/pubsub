@@ -134,23 +134,31 @@ int main(int num_args, char** args)
 			if (subverb == "echo")
 			{
 				// wait for details about the topic
-				wait(&node);
-
-				auto info = _topics.find(topic);
-				if (info == _topics.end())
-				{
-					std::cout << "Topic " << topic << " not found!\n";
-					return 0;
-				}
-
+				//wait(&node);
 				// create a subscriber
 				ps_sub_t sub;
-				ps_node_create_subscriber(&node, info->first.c_str(), info->second.type.c_str(), &sub, 1, true);
 
 				// subscribe to the topic and publish anything we get
+				bool subscribed = false;
 				while (true)
 				{
 					ps_node_spin(&node);
+
+					// spin until we get the topic
+					auto info = _topics.find(topic);
+					if (!subscribed && info != _topics.end())
+					{
+						std::cout << "Topic " << topic << " found!\n";
+						subscribed = true;
+
+						ps_node_create_subscriber(&node, info->first.c_str(), info->second.type.c_str(), &sub, 1, true);
+					}
+
+					if (!subscribed)
+					{
+						//printf("Waiting for topic...\n");
+						continue;
+					}
 
 					void* data = ps_sub_deque(&sub);
 					if (data)

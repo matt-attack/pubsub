@@ -92,27 +92,74 @@ const char* ps_deserialize_internal(const char* data, const ps_field_t* fields, 
 		}
 		else
 		{
-			// non dynamic types 
-			switch (field->type)
+			//print fields
+			if (field->length == 1)
 			{
-			case FT_Int16:
-				printf("%s: %i\n", field->name, (int)*(signed short*)data);
-				data += 2;
-				break;
-			case FT_Int32:
-				printf("%s: %i\n", field->name, (int)*(int*)data);
-				data += 2;
-				break;
-			case FT_Float32:
-				printf("%s: %f\n", field->name, *(float*)data);
-				data += 4;
-				break;
-			case FT_Float64:
-				printf("%s: %lf\n", field->name, *(double*)data);
-				data += 8;
-				break;
-			default:
-				printf("ERROR: unhandled field type when parsing....\n");
+				// non dynamic types 
+				switch (field->type)
+				{
+				case FT_Int16:
+					printf("%s: %i\n", field->name, (int)*(signed short*)data);
+					data += 2;
+					break;
+				case FT_Int32:
+					printf("%s: %i\n", field->name, (int)*(int*)data);
+					data += 2;
+					break;
+				case FT_Float32:
+					printf("%s: %f\n", field->name, *(float*)data);
+					data += 4;
+					break;
+				case FT_Float64:
+					printf("%s: %lf\n", field->name, *(double*)data);
+					data += 8;
+					break;
+				default:
+					printf("ERROR: unhandled field type when parsing....\n");
+				}
+			}
+			else if (field->length > 1)//print static arrrays
+			{
+				printf("%s: [", field->name);
+
+				for (int i = 0; i < field->length; i++)
+				{
+					// non dynamic types 
+					switch (field->type)
+					{
+					case FT_Int16:
+						printf("%i", (int)*(signed short*)data);
+						data += 2;
+						break;
+					case FT_Int32:
+						printf("%i", (int)*(int*)data);
+						data += 2;
+						break;
+					case FT_Float32:
+						printf("%f", *(float*)data);
+						data += 4;
+						break;
+					case FT_Float64:
+						printf("%lf", *(double*)data);
+						data += 8;
+						break;
+					default:
+						printf("ERROR: unhandled field type when parsing....\n");
+					}
+
+					if (i == field->length - 1)
+					{
+						printf("]\n");
+					}
+					else
+					{
+						printf(", ");
+					}
+				}
+			}
+			else
+			{
+				printf("ERROR: Dynamic arrays currently unhandled...");
 			}
 		}
 	}

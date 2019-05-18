@@ -25,7 +25,7 @@ void* ps_get_msg_start(void* data)
 #include <Windows.h>
 
 // generation test
-ps_field_t std_msgs_String_fields[] = { { FT_String, "value", 0, 0 } };
+ps_field_t std_msgs_String_fields[] = { { FT_String, "value", 1, 0 } };
 ps_message_definition_t std_msgs_String_def = { 123456789/*hash*/, "std_msgs/String", 1, std_msgs_String_fields};
 struct std_msgs_String
 {
@@ -47,20 +47,28 @@ ps_msg_t std_msgs_String_encode(const std_msgs_String* msg)
 	return omsg;
 }
 
+ps_field_t joy_msgs_Joy_fields[] = { { FT_Float32, "axes", 4, 0 }, { FT_Int32, "buttons", 1, 0 } };
+ps_message_definition_t joy_msgs_Joy_def = { 12345678910/*hash*/, "joy_msgs/Joy", 2, joy_msgs_Joy_fields };
+
 struct joy_msgs_Joy
 {
 	float axes[4];
 	int buttons;//bitmap of buttons
 };
 
-void joy_msgs_Joy_decode(const void* data, joy_msgs_Joy* msg)
+void joy_msgs_Joy_decode(const void* data, joy_msgs_Joy* out)
 {
-
+	*out = *(joy_msgs_Joy*)data;
 }
 
-void* joy_msgs_Joy_encode(void* allocator, const joy_msgs_Joy* msg)
+ps_msg_t joy_msgs_Joy_encode(void* allocator, const joy_msgs_Joy* msg)
 {
-	return 0;
+	int len = sizeof(joy_msgs_Joy);
+	ps_msg_t omsg;
+	ps_msg_alloc(len, &omsg);
+	memcpy(ps_get_msg_start(omsg.data), msg, len);
+
+	return omsg;
 }
 
 struct std_msgs_Int32
@@ -86,7 +94,7 @@ struct std_msgs_Float32
 int main()
 {
 	ps_node_t node;
-	ps_node_init(&node, "pub", "192.168.0.102", true);
+	ps_node_init(&node, "pub", "192.168.0.104", true);
 
 	/*ps_field_t field;
 	field.type = FT_String;
@@ -100,6 +108,9 @@ int main()
 
 	ps_pub_t string_pub;
 	ps_node_create_publisher(&node, "/data", &std_msgs_String_def, &string_pub);
+
+	ps_pub_t adv_pub;
+	ps_node_create_publisher(&node, "/joy", &joy_msgs_Joy_def, &adv_pub);
 
 	ps_sub_t string_sub;
 	ps_node_create_subscriber(&node, "/data", "std_msgs/String", &string_sub);
@@ -126,11 +137,21 @@ int main()
 		ps_msg_t msg = std_msgs_String_encode(&rmsg);
 		ps_pub_publish(&string_pub, &msg);
 
+		joy_msgs_Joy jmsg;
+		jmsg.axes[0] = 0.0;
+		jmsg.axes[1] = 0.25;
+		jmsg.axes[2] = 0.5;
+		jmsg.axes[3] = 0.75;
+		jmsg.buttons = 1234;
+
+		ps_msg_t msg2 = joy_msgs_Joy_encode(0, &jmsg);
+		ps_pub_publish(&adv_pub, &msg2);
+
 		Sleep(10);
 
 		ps_node_spin(&node);
 		//while (ps_node_spin(&node) == 0) {}
-		todo now need to add decoding to the sub
+		//todo now need to add decoding to the sub
 		char* data = (char*)ps_sub_deque(&string_sub);
 		printf("Got message: %s\n", data);
 		free(data);//todo use allocator free
