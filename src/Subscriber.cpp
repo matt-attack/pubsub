@@ -12,15 +12,14 @@ void ps_send_subscribe(ps_sub_t* sub, ps_endpoint_t* ep)
 	// send da udp packet!
 	sockaddr_in address;
 	address.sin_family = AF_INET;
-	address.sin_addr.s_addr = htonl(ep->address);// todo put this port in a global
+	address.sin_addr.s_addr = htonl(ep->address);
 	address.sin_port = htons(ep->port);
 
 	char data[1200];
 	ps_sub_req_header_t* p = (ps_sub_req_header_t*)data;
 	p->id = 1;
 	p->addr = sub->node->addr;
-	p->port = sub->node->port;// todo need to assign port uniquely per node also replace me with my port
-							//also add other indo...
+	p->port = sub->node->port;
 	p->sub_id = sub->sub_id;
 
 	int off = sizeof(ps_sub_req_header_t);

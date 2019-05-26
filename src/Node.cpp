@@ -26,10 +26,9 @@ void ps_node_system_query(ps_node_t* node)
 	char data[1400];
 	data[0] = 4;
 	int* addr = (int*)&data[1];
-	*addr = node->addr;//todo replace me with my ip
+	*addr = node->addr;
 	unsigned short* port = (unsigned short*)&data[5];
-	*port = node->port;// todo need to assign port uniquely per node also replace me with my port
-							//also add other indo...
+	*port = node->port;
 
 	int off = 7;
 	off += serialize_string(&data[off], node->name);
@@ -41,20 +40,19 @@ void ps_node_system_query(ps_node_t* node)
 // sends out a multicast request looking for publishers on this topic
 void ps_node_subscribe_query(ps_sub_t* sub)
 {
-	printf("Advertising subscriber %s\n", sub->topic);
+	//printf("Advertising subscriber %s\n", sub->topic);
 	// send da udp packet!
 	sockaddr_in address;
 	address.sin_family = AF_INET;
-	address.sin_addr.s_addr = sub->node->advertise_addr;// todo put this port in a global
+	address.sin_addr.s_addr = sub->node->advertise_addr;
 	address.sin_port = htons(sub->node->advertise_port);
 
 	char data[1400];
 	data[0] = 1;
 	int* addr = (int*)&data[1];
-	*addr = sub->node->addr;//todo replace me with my ip
+	*addr = sub->node->addr;
 	unsigned short* port = (unsigned short*)&data[5];
-	*port = sub->node->port;// todo need to assign port uniquely per node also replace me with my port
-							//also add other indo...
+	*port = sub->node->port;
 
 	int off = 7;
 	off += serialize_string(&data[off], sub->topic);
@@ -352,7 +350,6 @@ void ps_malloc_free(void* data)
 
 ps_allocator_t ps_default_allocator = { ps_malloc_alloc, ps_malloc_free, 0 };
 
-
 void ps_node_create_subscriber(ps_node_t* node, const char* topic, const char* type,
 	ps_sub_t* sub,
 	unsigned int queue_size,
@@ -525,7 +522,21 @@ int ps_node_spin(ps_node_t* node)
 		}
 		else if (data[0] == 3)
 		{
-			// todo keep alives
+			// keep alives, actually maybe lets not use this at all?
+			unsigned long stream_id = *(unsigned long*)data[1];
+			//find the client and update the keep alive
+
+			for (int i = 0; i < node->num_pubs; i++)
+			{
+				for (unsigned int c = 0; c < node->pubs[i]->num_clients; i++)
+				{
+					if (node->pubs[i]->clients[c].stream_id == stream_id && node->pubs[i]->clients[c].endpoint.port == port)
+					{
+						node->pubs[i]->clients[c].last_keepalive = GetTickCount64();
+						break;
+					}
+				}
+			}
 		}
 		else if (data[0] == 4)
 		{
@@ -555,7 +566,7 @@ int ps_node_spin(ps_node_t* node)
 		}
 		else if (data[0] == 1)
 		{
-			//subscribe request
+			//received subscribe request
 			ps_sub_req_header_t* p = (ps_sub_req_header_t*)data;
 
 			char* topic = (char*)&data[sizeof(ps_sub_req_header_t)];
@@ -590,7 +601,7 @@ int ps_node_spin(ps_node_t* node)
 			ps_client_t client;
 			client.endpoint.address = p->addr;
 			client.endpoint.port = p->port;
-			client.last_keepalive = 0;
+			client.last_keepalive = GetTickCount64();// use the current time stamp
 			client.sequence_number = 0;
 			client.stream_id = p->sub_id;
 
@@ -601,6 +612,15 @@ int ps_node_spin(ps_node_t* node)
 			ps_pub_publish_accept(pub, &client, pub->message_definition);
 
 			//todo if it is a latched topic, need to publish our last value
+		}
+		else if (data[0] == 5)
+		{
+			// data format request
+
+			//todo only send this to clients who request it
+			int off = sizeof(ps_subscribe_accept_t);
+			//off += ps_serialize_message_definition(&data[off], msg);
+
 		}
 	}
 
@@ -625,7 +645,7 @@ int ps_node_spin(ps_node_t* node)
 		//todo add enums for these
 		if (data[0] == 1)
 		{
-			//subscribe query
+			//subscribe query, from a node subscribing to a topic
 			int* addr = (int*)&data[1];
 			unsigned short* port = (unsigned short*)&data[5];
 
@@ -670,6 +690,7 @@ int ps_node_spin(ps_node_t* node)
 				if (pub->clients[i].endpoint.port == *port && pub->clients[i].endpoint.address == *addr)
 				{
 					//printf("Got subscribe query from a current client, not advertising\n");
+					pub->clients[i].last_keepalive = GetTickCount64();
 					break;
 				}
 				else if (i == pub->num_clients - 1)
@@ -786,20 +807,20 @@ int ps_node_spin(ps_node_t* node)
 	}
 
 	// perform time out checks on publishers
-	/*for (int i = 0; i < node->num_pubs; i++)
+	for (int i = 0; i < node->num_pubs; i++)
 	{
 		for (int c = 0; c < node->pubs[i]->num_clients; c++)
 		{
 			ps_client_t* client = &node->pubs[i]->clients[c];
-			if (client->last_keepalive < now - 10 * 1000)
+			if (client->last_keepalive < now - 30 * 1000)
 			{
 				printf("Client has timed out, unsubscribing...");
-				toodo fill in last keepalives and actually remove
-
-					also need to add a way to get the message definitions
+				// remove the client
+				ps_client_t cl = *client;
+				ps_pub_remove_client(node->pubs[i], &cl);
 			}
 		}
-	}*/
+	}
 	return packet_count;
 }
 

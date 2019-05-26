@@ -2,6 +2,7 @@
 //
 
 #include "src/Node.h"
+#include "src/Publisher.h"
 #include "src/Subscriber.h"
 #include "src/Serialization.h"
 
@@ -47,7 +48,7 @@ std::map<std::string, Topic> _topics;
 int main(int num_args, char** args)
 {
 	ps_node_t node;
-	ps_node_init(&node, "Query", "192.168.0.104", false);
+	ps_node_init(&node, "Query", "192.168.0.103", false);
 
 	node.adv_cb = [](const char* topic, const char* type, const char* node, void* data)
 	{
@@ -69,7 +70,7 @@ int main(int num_args, char** args)
 			}
 			t.publishers.push_back(node);
 		}
-		printf("Get pub %s type %s node %s\n", topic, type, node);
+		//printf("Get pub %s type %s node %s\n", topic, type, node);
 		return;
 	};
 
@@ -93,7 +94,7 @@ int main(int num_args, char** args)
 			}
 			t.subscribers.push_back(node);
 		}
-		printf("Get sub %s type %s node %s\n", topic, type, node);
+		//printf("Get sub %s type %s node %s\n", topic, type, node);
 		return;
 	};
 
@@ -149,7 +150,7 @@ int main(int num_args, char** args)
 					if (!subscribed && info != _topics.end())
 					{
 						std::cout << "Topic " << topic << " found!\n";
-						std::cout << info->first.c_str() << " " <<  info->second.type.c_str();
+						//std::cout << info->first.c_str() << " " <<  info->second.type.c_str();
 						subscribed = true;
 
 						ps_node_create_subscriber(&node, info->first.c_str(), info->second.type.c_str(), &sub, 1, true);
@@ -197,6 +198,50 @@ int main(int num_args, char** args)
 				for (auto sub : info->second.subscribers)
 					std::cout << " " << sub << "\n";
 				return 0;
+			}
+
+			if (subverb == "pub")
+			{
+				std::string data = num_args > 4 ? "" : args[4];
+
+				//ok, lets get the topic type and publish at 1 Hz for the moment
+				ps_pub_t pub;
+				ps_msg_t msg;
+
+				// subscribe to the topic and publish anything we get
+				bool got_data = false;
+				while (ps_okay())
+				{
+					ps_node_spin(&node);
+
+					// spin until we get the topic
+					auto info = _topics.find(topic);
+					if (!got_data && info != _topics.end())
+					{
+						std::cout << "Topic " << topic << " found!\n";
+						std::cout << info->first.c_str() << " " << info->second.type.c_str();
+						got_data = true;
+
+						ps_message_definition_t *type;
+						ps_node_create_publisher(&node, info->first.c_str(), type, &pub);
+						//ps_node_create_subscriber(&node, info->first.c_str(), info->second.type.c_str(), &sub, 1, true);
+
+						//okay, now serialize the message
+						//std_msgs_String rmsg;
+						//rmsg.value = "Hello";
+						//msg = std_msgs_String_encode(&rmsg);
+					}
+
+					if (!got_data)
+					{
+						//printf("Waiting for topic...\n");
+						continue;
+					}
+
+					//publish
+					ps_pub_publish(&pub, &msg);
+					Sleep(1000);
+				}
 			}
 		}
 		else if (verb == "node")

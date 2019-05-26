@@ -15,7 +15,7 @@ struct ps_client_t
 {
 	ps_endpoint_t endpoint;
 	unsigned short sequence_number;// sequence of the networked packets, incremented with each one
-	unsigned int last_keepalive;//timestamp of the last keepalive message, used to know when to deactiveate this connection
+	unsigned long long last_keepalive;//timestamp of the last keepalive message, used to know when to deactiveate this connection
 	unsigned int stream_id;
 };
 

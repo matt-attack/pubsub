@@ -98,13 +98,17 @@ const char* ps_deserialize_internal(const char* data, const ps_field_t* fields, 
 				// non dynamic types 
 				switch (field->type)
 				{
+				case FT_Int8:
+					printf("%i", (int)*(signed char*)data);
+					data += 1;
+					break;
 				case FT_Int16:
 					printf("%s: %i\n", field->name, (int)*(signed short*)data);
 					data += 2;
 					break;
 				case FT_Int32:
 					printf("%s: %i\n", field->name, (int)*(int*)data);
-					data += 2;
+					data += 4;
 					break;
 				case FT_Float32:
 					printf("%s: %f\n", field->name, *(float*)data);
@@ -127,13 +131,17 @@ const char* ps_deserialize_internal(const char* data, const ps_field_t* fields, 
 					// non dynamic types 
 					switch (field->type)
 					{
+					case FT_Int8:
+						printf("%i", (int)*(signed char*)data);
+						data += 1;
+						break;
 					case FT_Int16:
 						printf("%i", (int)*(signed short*)data);
 						data += 2;
 						break;
 					case FT_Int32:
 						printf("%i", (int)*(int*)data);
-						data += 2;
+						data += 4;
 						break;
 					case FT_Float32:
 						printf("%f", *(float*)data);
