@@ -47,8 +47,8 @@ ps_msg_t std_msgs_String_encode(const std_msgs_String* msg)
 	return omsg;
 }
 
-ps_field_t joy_msgs_Joy_fields[] = { { FT_Float32, "axes", 4, 0 }, { FT_Int32, "buttons", 1, 0 } };
-ps_message_definition_t joy_msgs_Joy_def = { 12345678910/*hash*/, "joy_msgs/Joy", 2, joy_msgs_Joy_fields };
+/*ps_field_t joy_msgs_Joy_fields[] = { { FT_Float32, "axes", 4, 0 }, { FT_Int32, "buttons", 1, 0 } };
+ps_message_definition_t joy_msgs_Joy_def = { 12345678910, "joy_msgs/Joy", 2, joy_msgs_Joy_fields };
 
 struct joy_msgs_Joy
 {
@@ -68,6 +68,34 @@ ps_msg_t joy_msgs_Joy_encode(void* allocator, const joy_msgs_Joy* msg)
 	ps_msg_alloc(len, &omsg);
 	memcpy(ps_get_msg_start(omsg.data), msg, len);
 
+	return omsg;
+}*/
+
+#include <stdint.h>
+
+struct joy_msgs__Joy
+{
+	int32_t buttons;
+	float axes[4];
+};
+
+ps_field_t joy_msgs__Joy_fields[] = {
+	{ FT_Int32, "buttons", 1, 0 },
+{ FT_Float32, "axes", 4, 0 },
+};
+
+ps_message_definition_t joy_msgs__Joy_def = { 123456789, "joy_msgs/Joy", 2, joy_msgs__Joy_fields };
+void joy_msgs__Joy_decode(const void* data, joy_msgs__Joy* out)
+{
+	*out = *(joy_msgs__Joy*)data;
+}
+
+ps_msg_t joy_msgs__Joy_encode(void* allocator, const joy_msgs__Joy* msg)
+{
+	int len = sizeof(joy_msgs__Joy);
+	ps_msg_t omsg;
+	ps_msg_alloc(len, &omsg);
+	memcpy(ps_get_msg_start(omsg.data), msg, len);
 	return omsg;
 }
 
@@ -94,7 +122,7 @@ struct std_msgs_Float32
 int main()
 {
 	ps_node_t node;
-	ps_node_init(&node, "pub", "192.168.0.104", true);
+	ps_node_init(&node, "pub", "", true);
 
 	/*ps_field_t field;
 	field.type = FT_String;
@@ -110,10 +138,10 @@ int main()
 	ps_node_create_publisher(&node, "/data", &std_msgs_String_def, &string_pub);
 
 	ps_pub_t adv_pub;
-	ps_node_create_publisher(&node, "/joy", &joy_msgs_Joy_def, &adv_pub);
+	ps_node_create_publisher(&node, "/joy", &joy_msgs__Joy_def, &adv_pub);
 
 	ps_sub_t string_sub;
-	ps_node_create_subscriber(&node, "/data", "std_msgs/String", &string_sub);
+	ps_node_create_subscriber(&node, "/data", 0/*&std_msgs_String_def*/, &string_sub);
 
 	// wait until we get the subscription request
 	while (ps_pub_get_subscriber_count(&string_pub) == 0) 
@@ -137,14 +165,14 @@ int main()
 		ps_msg_t msg = std_msgs_String_encode(&rmsg);
 		ps_pub_publish(&string_pub, &msg);
 
-		joy_msgs_Joy jmsg;
+		joy_msgs__Joy jmsg;
 		jmsg.axes[0] = 0.0;
 		jmsg.axes[1] = 0.25;
 		jmsg.axes[2] = 0.5;
 		jmsg.axes[3] = 0.75;
 		jmsg.buttons = 1234;
 
-		ps_msg_t msg2 = joy_msgs_Joy_encode(0, &jmsg);
+		ps_msg_t msg2 = joy_msgs__Joy_encode(0, &jmsg);
 		ps_pub_publish(&adv_pub, &msg2);
 
 		//ok, so lets add timeouts, make pubsub unsubscribe before it dies and figure out why the wires are getting crossed

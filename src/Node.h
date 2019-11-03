@@ -9,9 +9,9 @@ typedef void(*ps_sub_cb_t)(const char* topic, const char* type, const char* node
 struct ps_node_t
 {
 	const char* name;
-	int num_pubs;
+	unsigned int num_pubs;
 	ps_pub_t** pubs;
-	int num_subs;
+	unsigned int num_subs;
 	ps_sub_t** subs;
 
 	//lets just have one big socket for everything I guess for the moment
@@ -74,11 +74,11 @@ struct ps_subscribe_accept_t
 
 //not threadsafe, but thats obvious isnt it
 // set broadcast to true to use that for advertising instead of multicast
-void ps_node_init(ps_node_t* node, const char* name, const char* ip, bool broadcast = false);
+void ps_node_init(ps_node_t* node, const char* name, const char* ip = "", bool broadcast = false);
 
 void ps_node_create_publisher(ps_node_t* node, const char* topic, const ps_message_definition_t* type, ps_pub_t* pub);
 
-void ps_node_create_subscriber(ps_node_t* node, const char* topic, const char* type,
+void ps_node_create_subscriber(ps_node_t* node, const char* topic, const ps_message_definition_t* type,
 	ps_sub_t* sub,
 	unsigned int queue_size = 1,
 	bool want_message_def = false,

@@ -8,7 +8,7 @@
 void ps_pub_add_client(ps_pub_t* pub, const ps_client_t* client)
 {
 	// first make sure we dont add any duplicate clients
-	for (int i = 0; i < pub->num_clients; i++)
+	for (unsigned int i = 0; i < pub->num_clients; i++)
 	{
 		if (pub->clients[i].endpoint.address == client->endpoint.address
 			&& pub->clients[i].endpoint.port == client->endpoint.port)
@@ -21,7 +21,7 @@ void ps_pub_add_client(ps_pub_t* pub, const ps_client_t* client)
 
 	ps_client_t* old_clients = pub->clients;
 	pub->clients = (ps_client_t*)malloc(sizeof(ps_client_t)*pub->num_clients);
-	for (int i = 0; i < pub->num_clients - 1; i++)
+	for (unsigned int i = 0; i < pub->num_clients - 1; i++)
 	{
 		pub->clients[i] = old_clients[i];
 	}
@@ -32,7 +32,7 @@ void ps_pub_remove_client(ps_pub_t* pub, const ps_client_t* client)
 {
 	// first make sure we dont add any duplicate clients
 	bool found = false;
-	for (int i = 0; i < pub->num_clients; i++)
+	for (unsigned int i = 0; i < pub->num_clients; i++)
 	{
 		if (pub->clients[i].endpoint.address == client->endpoint.address
 			&& pub->clients[i].endpoint.port == client->endpoint.port)
@@ -53,24 +53,23 @@ void ps_pub_remove_client(ps_pub_t* pub, const ps_client_t* client)
 	ps_client_t* old_clients = pub->clients;
 	pub->clients = (ps_client_t*)malloc(sizeof(ps_client_t)*pub->num_clients);
 	int pos = 0;
-	for (int i = 0; i < pub->num_clients; i++)
+	for (unsigned int i = 0; i < pub->num_clients+1; i++)
 	{
-		if (pub->clients[i].endpoint.address == client->endpoint.address
-			&& pub->clients[i].endpoint.port == client->endpoint.port)
+		if (old_clients[i].endpoint.address == client->endpoint.address
+			&& old_clients[i].endpoint.port == client->endpoint.port)
 		{
 
 		}
 		else
 		{
-			pub->clients[i] = old_clients[pos];
+			pub->clients[pos++] = old_clients[i];
 		}
-		pos++;
 	}
 }
 
 void ps_pub_publish(ps_pub_t* pub, ps_msg_t* msg)
 {
-	for (int i = 0; i < pub->num_clients; i++)
+	for (unsigned int i = 0; i < pub->num_clients; i++)
 	{
 		ps_client_t* client = &pub->clients[i];
 		// send da udp packet!
@@ -107,17 +106,16 @@ void ps_pub_destroy(ps_pub_t* pub)
 	ps_pub_t** old_pubs = pub->node->pubs;
 	pub->node->pubs = (ps_pub_t**)malloc(sizeof(ps_pub_t*)*pub->node->num_pubs);
 	int ind = 0;
-	for (int i = 0; i < pub->node->num_pubs; i++)
+	for (unsigned int i = 0; i < pub->node->num_pubs+1; i++)
 	{
-		if (old_pubs[ind] == pub)
+		if (old_pubs[i] == pub)
 		{
 			//skip me
 		}
 		else
 		{
-			pub->node->pubs[i] = old_pubs[ind];
+			pub->node->pubs[ind++] = old_pubs[i];
 		}
-		ind++;
 	}
 	free(old_pubs);
 

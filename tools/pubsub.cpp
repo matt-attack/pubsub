@@ -48,7 +48,7 @@ std::map<std::string, Topic> _topics;
 int main(int num_args, char** args)
 {
 	ps_node_t node;
-	ps_node_init(&node, "Query", "192.168.0.103", false);
+	ps_node_init(&node, "Query");
 
 	node.adv_cb = [](const char* topic, const char* type, const char* node, void* data)
 	{
@@ -134,8 +134,6 @@ int main(int num_args, char** args)
 
 			if (subverb == "echo")
 			{
-				// wait for details about the topic
-				//wait(&node);
 				// create a subscriber
 				ps_sub_t sub;
 
@@ -153,7 +151,7 @@ int main(int num_args, char** args)
 						//std::cout << info->first.c_str() << " " <<  info->second.type.c_str();
 						subscribed = true;
 
-						ps_node_create_subscriber(&node, info->first.c_str(), info->second.type.c_str(), &sub, 1, true);
+						ps_node_create_subscriber(&node, info->first.c_str(), 0/*info->second.type.c_str()*/, &sub, 1, true);
 					}
 
 					if (!subscribed)
@@ -198,6 +196,10 @@ int main(int num_args, char** args)
 				for (auto sub : info->second.subscribers)
 					std::cout << " " << sub << "\n";
 				return 0;
+			}
+			else if (subverb == "show")
+			{
+				// print out the message definition string
 			}
 
 			if (subverb == "pub")

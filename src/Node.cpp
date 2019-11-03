@@ -56,7 +56,7 @@ void ps_node_subscribe_query(ps_sub_t* sub)
 
 	int off = 7;
 	off += serialize_string(&data[off], sub->topic);
-	off += serialize_string(&data[off], sub->type);
+	off += serialize_string(&data[off], sub->type ? sub->type->name : "");
 	off += serialize_string(&data[off], sub->node->name);
 
 	//add topic name, node, and 
@@ -94,7 +94,7 @@ void ps_node_create_publisher(ps_node_t* node, const char* topic, const ps_messa
 	node->num_pubs++;
 	ps_pub_t** old_pubs = node->pubs;
 	node->pubs = (ps_pub_t**)malloc(sizeof(ps_pub_t*)*node->num_pubs);
-	for (int i = 0; i < node->num_pubs - 1; i++)
+	for (unsigned int i = 0; i < node->num_pubs - 1; i++)
 	{
 		node->pubs[i] = old_pubs[i];
 	}
@@ -140,7 +140,7 @@ BOOL WINAPI CtrlHandler(DWORD fdwCtrlType)
 	{
 		// Handle the CTRL-C signal. 
 	case CTRL_C_EVENT:
-		printf("Ctrl-C event\n\n");
+		//printf("Ctrl-C event\n\n");
 		ps_shutdown = 1;
 		return TRUE;
 	default:
@@ -161,6 +161,32 @@ int ps_okay()
 }
 #endif
 
+char* GetPrimaryIp()
+{
+	//assert(buflen >= 16);
+
+	SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	//assert(sock != -1);
+
+	sockaddr_in serv;
+	memset(&serv, 0, sizeof(serv));
+	serv.sin_family = AF_INET;
+	serv.sin_addr.s_addr = inet_addr("1.1.1.1");
+	serv.sin_port = htons(53);
+
+	int err = connect(sock, (const sockaddr*)&serv, sizeof(serv));
+	//assert(err != -1);
+
+	sockaddr_in name;
+	int namelen = sizeof(name);
+	err = getsockname(sock, (sockaddr*)&name, &namelen);
+	//assert(err != -1);
+	char* ip = inet_ntoa(name.sin_addr);
+	//assert(p);
+
+	closesocket(sock);
+	return ip;
+}
 
 void ps_node_init(ps_node_t* node, const char* name, const char* ip, bool broadcast)
 {
@@ -180,6 +206,12 @@ void ps_node_init(ps_node_t* node, const char* name, const char* ip, bool broadc
 	node->sub_cb = 0;
 
 	node->advertise_port = 11311;// todo make this configurable
+
+	// find an ip (lets just assume the externally facing one)
+	if (strlen(ip) == 0)
+	{
+		ip = GetPrimaryIp();
+	}
 
 	unsigned int mc_addr = inet_addr("239.255.255.249");// todo make this configurable
 	if (broadcast)
@@ -324,18 +356,21 @@ void ps_node_init(ps_node_t* node, const char* name, const char* ip, bool broadc
 
 void ps_node_destroy(ps_node_t* node)
 {
-	for (int i = 0; i < node->num_pubs; i++)
+	for (unsigned int i = 0; i < node->num_pubs; i++)
 	{
 		ps_pub_destroy(node->pubs[i]);
 	}
 
-	for (int i = 0; i < node->num_subs; i++)
+	for (unsigned int i = 0; i < node->num_subs; i++)
 	{
 		ps_sub_destroy(node->subs[i]);
 	}
 
 	closesocket(node->socket);
 	closesocket(node->mc_socket);
+
+	node->socket = node->mc_socket = 0;
+	node->num_pubs = node->num_subs = 0;
 }
 
 void* ps_malloc_alloc(unsigned int size, void* _)
@@ -350,7 +385,7 @@ void ps_malloc_free(void* data)
 
 ps_allocator_t ps_default_allocator = { ps_malloc_alloc, ps_malloc_free, 0 };
 
-void ps_node_create_subscriber(ps_node_t* node, const char* topic, const char* type,
+void ps_node_create_subscriber(ps_node_t* node, const char* topic, const ps_message_definition_t* type,
 	ps_sub_t* sub,
 	unsigned int queue_size,
 	bool want_message_def,
@@ -359,7 +394,7 @@ void ps_node_create_subscriber(ps_node_t* node, const char* topic, const char* t
 	node->num_subs++;
 	ps_sub_t** old_subs = node->subs;
 	node->subs = (ps_sub_t**)malloc(sizeof(ps_sub_t*)*node->num_subs);
-	for (int i = 0; i < node->num_subs - 1; i++)
+	for (unsigned int i = 0; i < node->num_subs - 1; i++)
 	{
 		node->subs[i] = old_subs[i];
 	}
@@ -377,7 +412,7 @@ void ps_node_create_subscriber(ps_node_t* node, const char* topic, const char* t
 	sub->sub_id = node->sub_index++;
 	sub->allocator = allocator;
 
-	sub->want_message_definition = want_message_def;
+	sub->want_message_definition = type ? want_message_def : true;
 	sub->received_message_def.fields = 0;
 	sub->received_message_def.hash = 0;
 	sub->received_message_def.num_fields = 0;
@@ -387,7 +422,7 @@ void ps_node_create_subscriber(ps_node_t* node, const char* topic, const char* t
 	sub->queue_size = queue_size;
 	sub->queue = (void**)malloc(sizeof(void*)*queue_size);
 
-	for (int i = 0; i < queue_size; i++)
+	for (unsigned int i = 0; i < queue_size; i++)
 	{
 		sub->queue[i] = 0;
 	}
@@ -404,7 +439,6 @@ void ps_pub_publish_accept(ps_pub_t* pub, ps_client_t* client, const ps_message_
 	address.sin_family = AF_INET;
 	address.sin_addr.s_addr = htonl(client->endpoint.address);
 	address.sin_port = htons(client->endpoint.port);
-
 
 	char data[1500];
 	ps_subscribe_accept_t* p = (ps_subscribe_accept_t*)data;
@@ -449,13 +483,13 @@ int ps_node_spin(ps_node_t* node)
         //printf("Advertising\n");
 
 		// send out an advertisement for each publisher we have
-		for (int i = 0; i < node->num_pubs; i++)
+		for (unsigned int i = 0; i < node->num_pubs; i++)
 		{
 			ps_node_advertise(node->pubs[i]);
 		}
 
-		// also send out a keepalive for each subscription we have
-		for (int i = 0; i < node->num_subs; i++)
+		// also send out a keepalive/request for each subscription we have
+		for (unsigned int i = 0; i < node->num_subs; i++)
 		{
 			ps_node_subscribe_query(node->subs[i]);// for now lets use this as the keep alive too
 		}
@@ -487,7 +521,7 @@ int ps_node_spin(ps_node_t* node)
 
 			// find the sub
 			ps_sub_t* sub = 0;
-			for (int i = 0; i < node->num_subs; i++)
+			for (unsigned int i = 0; i < node->num_subs; i++)
 			{
 				if (node->subs[i]->sub_id == hdr->id)
 				{
@@ -526,7 +560,7 @@ int ps_node_spin(ps_node_t* node)
 			unsigned long stream_id = *(unsigned long*)data[1];
 			//find the client and update the keep alive
 
-			for (int i = 0; i < node->num_pubs; i++)
+			for (unsigned int i = 0; i < node->num_pubs; i++)
 			{
 				for (unsigned int c = 0; c < node->pubs[i]->num_clients; i++)
 				{
@@ -545,7 +579,7 @@ int ps_node_spin(ps_node_t* node)
 
 			// find the sub
 			ps_sub_t* sub = 0;
-			for (int i = 0; i < node->num_subs; i++)
+			for (unsigned int i = 0; i < node->num_subs; i++)
 			{
 				if (node->subs[i]->sub_id == p->sid)
 				{
@@ -575,7 +609,7 @@ int ps_node_spin(ps_node_t* node)
 
 			//check if we have a sub matching that topic
 			ps_pub_t* pub = 0;
-			for (int i = 0; i < node->num_pubs; i++)
+			for (unsigned int i = 0; i < node->num_pubs; i++)
 			{
 				if (strcmp(node->pubs[i]->topic, topic) == 0)
 				{
@@ -589,9 +623,9 @@ int ps_node_spin(ps_node_t* node)
 				continue;
 			}
 
-			// now check that the type matches...
+			// now check that the type matches or none is given...
 			char* type = (char*)&data[strlen(topic) + sizeof(ps_sub_req_header_t) + 1];
-			if (strcmp(type, pub->message_definition->name) != 0)
+			if (strlen(type) != 0 && strcmp(type, pub->message_definition->name) != 0)
 			{
 				printf("The types didnt match! Ignoring\n");
 				continue;
@@ -616,7 +650,7 @@ int ps_node_spin(ps_node_t* node)
 		else if (data[0] == 5)
 		{
 			// data format request
-
+			//todo need to do this for rostopic pub 
 			//todo only send this to clients who request it
 			int off = sizeof(ps_subscribe_accept_t);
 			//off += ps_serialize_message_definition(&data[off], msg);
@@ -660,7 +694,7 @@ int ps_node_spin(ps_node_t* node)
 
 			//check if we have a sub matching that topic
 			ps_pub_t* pub = 0;
-			for (int i = 0; i < node->num_pubs; i++)
+			for (unsigned int i = 0; i < node->num_pubs; i++)
 			{
 				if (strcmp(node->pubs[i]->topic, topic) == 0)
 				{
@@ -676,7 +710,7 @@ int ps_node_spin(ps_node_t* node)
 
 			// now check that the type matches...
 			char* type = (char*)&data[strlen(topic) + 8];
-			if (strcmp(type, pub->message_definition->name) != 0)
+			if (strlen(type) != 0 && strcmp(type, pub->message_definition->name) != 0)
 			{
 				printf("The types didnt match! Ignoring\n");
 				continue;
@@ -685,7 +719,7 @@ int ps_node_spin(ps_node_t* node)
 			char* node_name = type + 1 + strlen(type);
 
 			//if we already have a sub for this, ignore
-			for (int i = 0; i < pub->num_clients; i++)
+			for (unsigned int i = 0; i < pub->num_clients; i++)
 			{
 				if (pub->clients[i].endpoint.port == *port && pub->clients[i].endpoint.address == *addr)
 				{
@@ -723,7 +757,7 @@ int ps_node_spin(ps_node_t* node)
 			// is it something im subscribing to? if so send an actual subscribe request to that specific port
 			//check if we have a sub matching that topic
 			ps_sub_t* sub = 0;
-			for (int i = 0; i < node->num_subs; i++)
+			for (unsigned int i = 0; i < node->num_subs; i++)
 			{
 				if (strcmp(node->subs[i]->topic, topic) == 0)
 				{
@@ -737,16 +771,15 @@ int ps_node_spin(ps_node_t* node)
 				continue;
 			}
 
-			// now check that the type matches...
+			// now check that the type matches or we are dynamic...
 			char* type = (char*)&data[strlen(topic) + sizeof(ps_advertise_req_t) + 1];
-			if (strcmp(type, sub->type) != 0)
+			if (sub->type != 0 && strcmp(type, sub->type->name) != 0)
 			{
 				printf("The types didnt match! Ignoring\n");
 				continue;
 			}
 
 			// check if we are already getting data from this person, if so lets not send another request to their advertise
-			// todo, need to do keepalives and unsubs
 
 			printf("Got advertise notice for a topic we need\n");
 
@@ -766,7 +799,7 @@ int ps_node_spin(ps_node_t* node)
 
 			//check if we have a sub matching that topic
 			ps_pub_t* pub = 0;
-			for (int i = 0; i < node->num_pubs; i++)
+			for (unsigned int i = 0; i < node->num_pubs; i++)
 			{
 				if (strcmp(node->pubs[i]->topic, topic) == 0)
 				{
@@ -793,13 +826,13 @@ int ps_node_spin(ps_node_t* node)
 			// also todo maybe make this use unicast instead
 
 			// send out an advertisement for each publisher we have
-			for (int i = 0; i < node->num_pubs; i++)
+			for (unsigned int i = 0; i < node->num_pubs; i++)
 			{
 				ps_node_advertise(node->pubs[i]);
 			}
 
 			// also send out a keepalive for each subscription we have
-			for (int i = 0; i < node->num_subs; i++)
+			for (unsigned int i = 0; i < node->num_subs; i++)
 			{
 				ps_node_subscribe_query(node->subs[i]);// for now lets use this as the keep alive too
 			}
@@ -807,12 +840,12 @@ int ps_node_spin(ps_node_t* node)
 	}
 
 	// perform time out checks on publishers
-	for (int i = 0; i < node->num_pubs; i++)
+	for (unsigned int i = 0; i < node->num_pubs; i++)
 	{
-		for (int c = 0; c < node->pubs[i]->num_clients; c++)
+		for (unsigned int c = 0; c < node->pubs[i]->num_clients; c++)
 		{
 			ps_client_t* client = &node->pubs[i]->clients[c];
-			if (client->last_keepalive < now - 30 * 1000)
+			if (client->last_keepalive < now - 120 * 1000)
 			{
 				printf("Client has timed out, unsubscribing...");
 				// remove the client

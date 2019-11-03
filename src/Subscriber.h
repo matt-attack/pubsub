@@ -11,11 +11,12 @@ struct ps_sub_t
 	ps_node_t* node;
 
 	const char* topic;
-	const char* type;
-	//todo add hash
+	const ps_message_definition_t* type;
 
+	// for dynamic subscribers
 	bool want_message_definition;
 	ps_message_definition_t received_message_def;
+
 
 	int sub_id;
 

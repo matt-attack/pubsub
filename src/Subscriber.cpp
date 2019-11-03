@@ -24,7 +24,7 @@ void ps_send_subscribe(ps_sub_t* sub, ps_endpoint_t* ep)
 
 	int off = sizeof(ps_sub_req_header_t);
 	off += serialize_string(&data[off], sub->topic);
-	off += serialize_string(&data[off], sub->type);
+	off += serialize_string(&data[off], sub->type ? sub->type->name : "");
 
 	//add topic name, node, and 
 	int sent_bytes = sendto(sub->node->socket, (const char*)data, off, 0, (sockaddr*)&address, sizeof(sockaddr_in));
@@ -49,7 +49,7 @@ void ps_sub_destroy(ps_sub_t* sub)
 
 	int off = 7;
 	off += serialize_string(&data[off], sub->topic);
-	off += serialize_string(&data[off], sub->type);
+	off += serialize_string(&data[off], sub->type ? sub->type->name : "");
 
 	int sent_bytes = sendto(sub->node->socket, (const char*)data, off, 0, (sockaddr*)&address, sizeof(sockaddr_in));
 
@@ -58,17 +58,16 @@ void ps_sub_destroy(ps_sub_t* sub)
 	ps_sub_t** old_subs = sub->node->subs;
 	sub->node->subs = (ps_sub_t**)malloc(sizeof(ps_sub_t*)*sub->node->num_subs);
 	int ind = 0;
-	for (int i = 0; i < sub->node->num_subs; i++)
+	for (unsigned int i = 0; i < sub->node->num_subs+1; i++)
 	{
-		if (old_subs[ind] == sub)
+		if (old_subs[i] == sub)
 		{
 			//skip me
 		}
 		else
 		{
-			sub->node->subs[i] = old_subs[ind];
+			sub->node->subs[ind++] = old_subs[i];
 		}
-		ind++;
 	}
 	free(old_subs);
 
@@ -88,6 +87,6 @@ void* ps_sub_deque(ps_sub_t* sub)
 		//printf("Warning: dequeued when there was nothing in queue\n");
 		return 0;
 	}
-	;
+
 	return sub->queue[--sub->queue_len];
 }

@@ -32,7 +32,7 @@ int ps_serialize_message_definition(void* start, const ps_message_definition_t* 
 	hdr->num_fields = definition->num_fields;
 
 	char* cur = ((char*)start) + sizeof(def_header);
-	for (int i = 0; i < definition->num_fields; i++)
+	for (unsigned int i = 0; i < definition->num_fields; i++)
 	{
 		field* f = (field*)cur;
 		f->type = definition->fields[i].type;
@@ -59,7 +59,7 @@ void ps_deserialize_message_definition(const void * start, ps_message_definition
 	definition->fields = (ps_field_t*)malloc(sizeof(ps_field_t)*definition->num_fields);
 
 	char* cur = ((char*)start) + sizeof(def_header);
-	for (int i = 0; i < definition->num_fields; i++)
+	for (unsigned int i = 0; i < definition->num_fields; i++)
 	{
 		field* f = (field*)cur;
 		definition->fields[i].type = (ps_field_types)f->type;
@@ -126,7 +126,7 @@ const char* ps_deserialize_internal(const char* data, const ps_field_t* fields, 
 			{
 				printf("%s: [", field->name);
 
-				for (int i = 0; i < field->length; i++)
+				for (unsigned int i = 0; i < field->length; i++)
 				{
 					// non dynamic types 
 					switch (field->type)
