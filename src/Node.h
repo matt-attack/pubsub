@@ -29,6 +29,9 @@ struct ps_node_t
 	//optional callbacks
 	ps_adv_cb_t adv_cb;
 	ps_sub_cb_t sub_cb;
+
+	//implementation data
+	unsigned long long _last_advertise;
 };
 
 //todo move elsewhere probably
@@ -72,11 +75,24 @@ struct ps_subscribe_accept_t
 };
 #pragma pack(pop)
 
+// defines a transport implementation
+//so when you request a subscription, you would request a transport type 
+//then the pub can either do it, or fall back to default UDP transport
+
+typedef void(*ps_transport_fn_pub_t)(const char* topic, const char* type, const char* node, void* data);
+typedef void(*ps_transport_fn_spin_t)(const char* topic, const char* type, const char* node, void* data);
+struct ps_transport_t
+{
+	unsigned short uuid;// unique id for this transport type, listed in advertisements for it
+	ps_transport_fn_pub_t pub;
+	ps_transport_fn_spin_t spin;
+};
+
 //not threadsafe, but thats obvious isnt it
 // set broadcast to true to use that for advertising instead of multicast
 void ps_node_init(ps_node_t* node, const char* name, const char* ip = "", bool broadcast = false);
 
-void ps_node_create_publisher(ps_node_t* node, const char* topic, const ps_message_definition_t* type, ps_pub_t* pub);
+void ps_node_create_publisher(ps_node_t* node, const char* topic, const ps_message_definition_t* type, ps_pub_t* pub, bool latched = false);
 
 void ps_node_create_subscriber(ps_node_t* node, const char* topic, const ps_message_definition_t* type,
 	ps_sub_t* sub,
@@ -91,9 +107,31 @@ int serialize_string(char* data, const char* str);
 // sends out a system query message for all nodes to advertise
 void ps_node_system_query(ps_node_t* node);
 
+void ps_node_query_message_definition(ps_node_t* node, const char* message);
+
 
 void ps_node_set_advertise_cb(ps_node_t* node, ps_adv_cb_t cb, void* data);
 
 int ps_okay();
 
 void ps_node_destroy(ps_node_t* node);
+
+
+// implementation types
+
+enum
+{
+	PS_UDP_PROTOCOL_DATA = 2,
+	PS_UDP_PROTOCOL_KEEP_ALIVE = 3,
+	PS_UDP_PROTOCOL_SUBSCRIBE_ACCEPT = 4,
+	PS_UDP_PROTOCOL_SUBSCRIBE_REQUEST = 1,
+};
+
+enum
+{
+	PS_DISCOVERY_PROTOCOL_SUBSCRIBE_QUERY = 1,
+	PS_DISCOVERY_PROTOCOL_ADVERTISE = 2,
+	PS_DISCOVERY_PROTOCOL_UNSUBSCRIBE = 3,
+	PS_DISCOVERY_PROTOCOL_QUERY_ALL = 4,
+	PS_DISCOVERY_PROTOCOL_QUERY_MSG_DEFINITION = 5// used for getting message formats
+};

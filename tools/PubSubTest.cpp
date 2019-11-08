@@ -26,7 +26,6 @@ void* ps_get_msg_start(void* data)
 
 // generation test
 ps_field_t std_msgs_String_fields[] = { { FT_String, "value", 1, 0 } };
-ps_message_definition_t std_msgs_String_def = { 123456789/*hash*/, "std_msgs/String", 1, std_msgs_String_fields};
 struct std_msgs_String
 {
 	char* value;
@@ -38,14 +37,18 @@ void std_msgs_String_decode(const void* data, std_msgs_String* out)
 	out->value = (char*)data;
 }
 
-ps_msg_t std_msgs_String_encode(const std_msgs_String* msg)
+ps_msg_t std_msgs_String_encode(void* allocator, const void* imsg)
 {
+	std_msgs_String* msg = (std_msgs_String*)imsg;
 	int len = strlen(msg->value) + 1;
 	ps_msg_t omsg;
 	ps_msg_alloc(len, &omsg);
 	memcpy(ps_get_msg_start(omsg.data), msg->value, len);
 	return omsg;
 }
+
+
+ps_message_definition_t std_msgs_String_def = { 123456789/*hash*/, "std_msgs/String", 1, std_msgs_String_fields, std_msgs_String_encode };
 
 /*ps_field_t joy_msgs_Joy_fields[] = { { FT_Float32, "axes", 4, 0 }, { FT_Int32, "buttons", 1, 0 } };
 ps_message_definition_t joy_msgs_Joy_def = { 12345678910, "joy_msgs/Joy", 2, joy_msgs_Joy_fields };
@@ -84,13 +87,12 @@ ps_field_t joy_msgs__Joy_fields[] = {
 { FT_Float32, "axes", 4, 0 },
 };
 
-ps_message_definition_t joy_msgs__Joy_def = { 123456789, "joy_msgs/Joy", 2, joy_msgs__Joy_fields };
 void joy_msgs__Joy_decode(const void* data, joy_msgs__Joy* out)
 {
 	*out = *(joy_msgs__Joy*)data;
 }
 
-ps_msg_t joy_msgs__Joy_encode(void* allocator, const joy_msgs__Joy* msg)
+ps_msg_t joy_msgs__Joy_encode(void* allocator, const void* msg)
 {
 	int len = sizeof(joy_msgs__Joy);
 	ps_msg_t omsg;
@@ -98,6 +100,8 @@ ps_msg_t joy_msgs__Joy_encode(void* allocator, const joy_msgs__Joy* msg)
 	memcpy(ps_get_msg_start(omsg.data), msg, len);
 	return omsg;
 }
+
+ps_message_definition_t joy_msgs__Joy_def = { 123456789, "joy_msgs/Joy", 2, joy_msgs__Joy_fields, joy_msgs__Joy_encode };
 
 struct std_msgs_Int32
 {
@@ -135,7 +139,7 @@ int main()
 	def.hash = 0;//todo do something with this*/
 
 	ps_pub_t string_pub;
-	ps_node_create_publisher(&node, "/data", &std_msgs_String_def, &string_pub);
+	ps_node_create_publisher(&node, "/data", &std_msgs_String_def, &string_pub, true);
 
 	ps_pub_t adv_pub;
 	ps_node_create_publisher(&node, "/joy", &joy_msgs__Joy_def, &adv_pub);
@@ -151,6 +155,14 @@ int main()
 
 	printf("Ok, stopping waiting as we got our subscriber\n");
 
+	std_msgs_String rmsg;
+	rmsg.value = "Hello";
+	//where does the allocation happen? probably should be in teh encode function which should return the ps_msg_t
+	//ps_msg_t msg = std_msgs_String_encode(&rmsg);
+	//ps_pub_publish(&string_pub, &msg);
+	ps_pub_publish_ez(&string_pub, &rmsg);
+	//okay, put the encode function in the message definition
+
 	//ok, need to handle received messages now...
 
 	//ps_msg_t msg;
@@ -159,11 +171,11 @@ int main()
 	while (true)
 	{
 		//need to make sure to reserve n bytes for the header
-		std_msgs_String rmsg;
+		/*std_msgs_String rmsg;
 		rmsg.value = "Hello";
 		//where does the allocation happen? probably should be in teh encode function which should return the ps_msg_t
 		ps_msg_t msg = std_msgs_String_encode(&rmsg);
-		ps_pub_publish(&string_pub, &msg);
+		ps_pub_publish(&string_pub, &msg);*/
 
 		joy_msgs__Joy jmsg;
 		jmsg.axes[0] = 0.0;

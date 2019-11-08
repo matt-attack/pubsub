@@ -26,12 +26,21 @@ struct ps_field_t
 	unsigned short content_length;//number of fields inside this array
 };
 
+
+struct ps_msg_t
+{
+	void* data;
+	unsigned int len;
+};
+
+typedef ps_msg_t(*ps_fn_encode_t)(void* allocator, const void* msg);
 struct ps_message_definition_t
 {
 	unsigned int hash;
 	char* name;
 	unsigned int num_fields;
 	ps_field_t* fields;
+	ps_fn_encode_t encode;
 };
 
 int ps_serialize_message_definition(void* start, const ps_message_definition_t* definition);

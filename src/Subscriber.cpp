@@ -17,7 +17,7 @@ void ps_send_subscribe(ps_sub_t* sub, ps_endpoint_t* ep)
 
 	char data[1200];
 	ps_sub_req_header_t* p = (ps_sub_req_header_t*)data;
-	p->id = 1;
+	p->id = PS_UDP_PROTOCOL_SUBSCRIBE_REQUEST;
 	p->addr = sub->node->addr;
 	p->port = sub->node->port;
 	p->sub_id = sub->sub_id;
@@ -41,7 +41,7 @@ void ps_sub_destroy(ps_sub_t* sub)
 	address.sin_port = htons(sub->node->advertise_port);
 
 	char data[1200];
-	data[0] = 3;
+	data[0] = PS_DISCOVERY_PROTOCOL_UNSUBSCRIBE;
 	int* addr = (int*)&data[1];
 	*addr = sub->node->addr;
 	unsigned short* port = (unsigned short*)&data[5];

@@ -24,7 +24,7 @@ void ps_node_system_query(ps_node_t* node)
 	address.sin_port = htons(node->advertise_port);
 
 	char data[1400];
-	data[0] = 4;
+	data[0] = PS_DISCOVERY_PROTOCOL_QUERY_ALL;
 	int* addr = (int*)&data[1];
 	*addr = node->addr;
 	unsigned short* port = (unsigned short*)&data[5];
@@ -32,6 +32,29 @@ void ps_node_system_query(ps_node_t* node)
 
 	int off = 7;
 	off += serialize_string(&data[off], node->name);
+
+	int sent_bytes = sendto(node->socket, (const char*)data, off, 0, (sockaddr*)&address, sizeof(sockaddr_in));
+}
+
+void ps_node_query_message_definition(ps_node_t* node, const char* message)
+{
+	// send da udp packet!
+	sockaddr_in address;
+	address.sin_family = AF_INET;
+	address.sin_addr.s_addr = node->advertise_addr;
+	address.sin_port = htons(node->advertise_port);
+
+	char data[1400];
+	data[0] = PS_DISCOVERY_PROTOCOL_QUERY_MSG_DEFINITION;
+	int* addr = (int*)&data[1];
+	*addr = node->addr;
+	unsigned short* port = (unsigned short*)&data[5];
+	*port = node->port;
+
+	int off = 7;
+	off += serialize_string(&data[off], message);
+	//int off = 7;
+	//off += serialize_string(&data[off], node->name);
 
 	//add topic name, node, and 
 	int sent_bytes = sendto(node->socket, (const char*)data, off, 0, (sockaddr*)&address, sizeof(sockaddr_in));
@@ -48,7 +71,7 @@ void ps_node_subscribe_query(ps_sub_t* sub)
 	address.sin_port = htons(sub->node->advertise_port);
 
 	char data[1400];
-	data[0] = 1;
+	data[0] = PS_DISCOVERY_PROTOCOL_SUBSCRIBE_QUERY;
 	int* addr = (int*)&data[1];
 	*addr = sub->node->addr;
 	unsigned short* port = (unsigned short*)&data[5];
@@ -75,7 +98,7 @@ void ps_node_advertise(ps_pub_t* pub)
 
 	char data[1400];
 	ps_advertise_req_t* p = (ps_advertise_req_t*)data;
-	p->id = 2;
+	p->id = PS_DISCOVERY_PROTOCOL_ADVERTISE;
 	p->addr = pub->node->addr;
 	p->port = pub->node->port;
 
@@ -89,7 +112,7 @@ void ps_node_advertise(ps_pub_t* pub)
 }
 
 
-void ps_node_create_publisher(ps_node_t* node, const char* topic, const ps_message_definition_t* type, ps_pub_t* pub)
+void ps_node_create_publisher(ps_node_t* node, const char* topic, const ps_message_definition_t* type, ps_pub_t* pub, bool latched)
 {
 	node->num_pubs++;
 	ps_pub_t** old_pubs = node->pubs;
@@ -107,6 +130,9 @@ void ps_node_create_publisher(ps_node_t* node, const char* topic, const ps_messa
 	pub->message_definition = type;
 	pub->topic = topic;
 	pub->node = node;
+	pub->latched = latched;
+	pub->last_message.data = 0;
+	pub->last_message.len = 0;
 }
 
 
@@ -204,6 +230,8 @@ void ps_node_init(ps_node_t* node, const char* name, const char* ip, bool broadc
 
 	node->adv_cb = 0;
 	node->sub_cb = 0;
+
+	node->_last_advertise = 0;
 
 	node->advertise_port = 11311;// todo make this configurable
 
@@ -455,7 +483,6 @@ void ps_pub_publish_accept(ps_pub_t* pub, ps_client_t* client, const ps_message_
 
 
 //returns nonzero if we got a message
-static unsigned long long _last_advertise = 0;
 int ps_node_spin(ps_node_t* node)
 {
 	// look for any subs/requests and process them
@@ -472,13 +499,13 @@ int ps_node_spin(ps_node_t* node)
 	//also send out keepalives which are still todo
 #ifndef ARUDINO
 	unsigned long long now = GetTickCount64();
-	if (_last_advertise + 25 * 1000 < GetTickCount64())
+	if (node->_last_advertise + 25 * 1000 < GetTickCount64())
 	{
-		_last_advertise = GetTickCount64();
+		node->_last_advertise = GetTickCount64();
 #else
-	if (_last_advertise + 5 * 1000 < millis())
+	if (node->_last_advertise + 5 * 1000 < millis())
 	{
-		_last_advertise = millis();
+		node->_last_advertise = millis();
 #endif
         //printf("Advertising\n");
 
@@ -513,7 +540,7 @@ int ps_node_spin(ps_node_t* node)
 		// then keep doing this until we run out of packets or hit a max
 
 		//we got message data or a specific request
-		if (data[0] == 2)// actual message
+		if (data[0] == PS_UDP_PROTOCOL_DATA/*2*/)// actual message
 		{
 			ps_msg_header* hdr = (ps_msg_header*)data;
 
@@ -554,7 +581,7 @@ int ps_node_spin(ps_node_t* node)
 
 			packet_count++;
 		}
-		else if (data[0] == 3)
+		else if (data[0] == PS_UDP_PROTOCOL_KEEP_ALIVE/*3*/)
 		{
 			// keep alives, actually maybe lets not use this at all?
 			unsigned long stream_id = *(unsigned long*)data[1];
@@ -572,7 +599,7 @@ int ps_node_spin(ps_node_t* node)
 				}
 			}
 		}
-		else if (data[0] == 4)
+		else if (data[0] == PS_UDP_PROTOCOL_SUBSCRIBE_ACCEPT/*4*/)
 		{
 			ps_subscribe_accept_t* p = (ps_subscribe_accept_t*)data;
 			printf("Got subscribe accept for stream %i\n", p->sid);
@@ -598,7 +625,7 @@ int ps_node_spin(ps_node_t* node)
 				ps_deserialize_message_definition(&data[sizeof(ps_subscribe_accept_t)], &sub->received_message_def);
 			}
 		}
-		else if (data[0] == 1)
+		else if (data[0] == PS_UDP_PROTOCOL_SUBSCRIBE_REQUEST/*1*/)
 		{
 			//received subscribe request
 			ps_sub_req_header_t* p = (ps_sub_req_header_t*)data;
@@ -647,15 +674,6 @@ int ps_node_spin(ps_node_t* node)
 
 			//todo if it is a latched topic, need to publish our last value
 		}
-		else if (data[0] == 5)
-		{
-			// data format request
-			//todo need to do this for rostopic pub 
-			//todo only send this to clients who request it
-			int off = sizeof(ps_subscribe_accept_t);
-			//off += ps_serialize_message_definition(&data[off], msg);
-
-		}
 	}
 
 	// now receive multicast data and process it
@@ -677,7 +695,7 @@ int ps_node_spin(ps_node_t* node)
 		// then keep doing this until we run out of packets or hit a max
 
 		//todo add enums for these
-		if (data[0] == 1)
+		if (data[0] == PS_DISCOVERY_PROTOCOL_SUBSCRIBE_QUERY)
 		{
 			//subscribe query, from a node subscribing to a topic
 			int* addr = (int*)&data[1];
@@ -740,7 +758,7 @@ int ps_node_spin(ps_node_t* node)
 				ps_node_advertise(pub);
 			}
 		}
-		else if (data[0] == 2)
+		else if (data[0] == PS_DISCOVERY_PROTOCOL_ADVERTISE)
 		{
 			ps_advertise_req_t* p = (ps_advertise_req_t*)data;
 
@@ -788,7 +806,7 @@ int ps_node_spin(ps_node_t* node)
 			ep.port = p->port;
 			ps_send_subscribe(sub, &ep);
 		}
-		else if (data[0] == 3)
+		else if (data[0] == PS_DISCOVERY_PROTOCOL_UNSUBSCRIBE)
 		{
 			printf("Got unsubscribe request\n");
 
@@ -819,7 +837,7 @@ int ps_node_spin(ps_node_t* node)
 			client.endpoint.port = *port;
 			ps_pub_remove_client(pub, &client);
 		}
-		else if (data[0] == 4)
+		else if (data[0] == PS_DISCOVERY_PROTOCOL_QUERY_ALL)
 		{
 			printf("Got query request\n");
 			//overall query, maybe put this into fewer packets?
@@ -836,6 +854,43 @@ int ps_node_spin(ps_node_t* node)
 			{
 				ps_node_subscribe_query(node->subs[i]);// for now lets use this as the keep alive too
 			}
+		}
+		else if (data[0] == PS_DISCOVERY_PROTOCOL_QUERY_MSG_DEFINITION)
+		{
+			// data format request
+			int* addr = (int*)&data[1];
+			unsigned short* port = (unsigned short*)&data[5];
+
+			char* topic = (char*)&data[7];
+			printf("Got query message definition for %s", topic);
+
+			for (unsigned int i = 0; i < node->num_pubs; i++)
+			{
+				if (strcmp(node->pubs[i]->topic, topic) == 0)
+				{
+					break;
+				}
+			}
+
+			//check our pubs/subs for that topic
+
+			// send da udp packet!
+			/*sockaddr_in address;
+			address.sin_family = AF_INET;
+			address.sin_addr.s_addr = htonl(client->endpoint.address);
+			address.sin_port = htons(client->endpoint.port);
+
+			char data[1500];
+			ps_subscribe_accept_t* p = (ps_subscribe_accept_t*)data;
+			p->pid = 4;
+			p->sid = client->stream_id;
+
+			//todo only send this to clients who request it
+			int off = sizeof(ps_subscribe_accept_t);
+			off += ps_serialize_message_definition(&data[off], msg);
+
+			//also add other info...
+			int sent_bytes = sendto(pub->node->socket, (const char*)data, off, 0, (sockaddr*)&address, sizeof(sockaddr_in));*/
 		}
 	}
 

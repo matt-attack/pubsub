@@ -136,6 +136,7 @@ int main(int num_args, char** args)
 			{
 				// create a subscriber
 				ps_sub_t sub;
+				std::vector<void*> todo_msgs;
 
 				// subscribe to the topic and publish anything we get
 				bool subscribed = false;
@@ -160,13 +161,25 @@ int main(int num_args, char** args)
 						continue;
 					}
 
+					if (todo_msgs.size() && sub.received_message_def.fields != 0)
+					{
+						for (auto msg : todo_msgs)
+						{
+							ps_deserialize_print(msg, &sub.received_message_def);
+							printf("-------------\n");
+						}
+						todo_msgs.clear();
+					}
+
 					// get and deserialize the messages
 					void* data;
 					while ((data = ps_sub_deque(&sub)) && ps_okay())
 					{
 						if (sub.received_message_def.fields == 0)
 						{
-							printf("ERROR: got message but no message definition yet...\n");
+							//printf("WARN: got message but no message definition yet...\n");
+							// queue it up, then print them out once I get it
+							todo_msgs.push_back(data);
 						}
 						else
 						{
@@ -209,9 +222,11 @@ int main(int num_args, char** args)
 				//ok, lets get the topic type and publish at 1 Hz for the moment
 				ps_pub_t pub;
 				ps_msg_t msg;
+				msg.data = 0;
 
 				// subscribe to the topic and publish anything we get
 				bool got_data = false;
+				bool got_message = false;
 				while (ps_okay())
 				{
 					ps_node_spin(&node);
@@ -224,8 +239,13 @@ int main(int num_args, char** args)
 						std::cout << info->first.c_str() << " " << info->second.type.c_str();
 						got_data = true;
 
-						ps_message_definition_t *type;
-						ps_node_create_publisher(&node, info->first.c_str(), type, &pub);
+						//get the message definition from it
+						std::cout << "Querying for message definition...\n";
+						ps_node_query_message_definition(&node, info->second.type.c_str());
+
+						//todo how do we get this out?
+						//ps_message_definition_t *type;
+						//ps_node_create_publisher(&node, info->first.c_str(), type, &pub);
 						//ps_node_create_subscriber(&node, info->first.c_str(), info->second.type.c_str(), &sub, 1, true);
 
 						//okay, now serialize the message
@@ -238,6 +258,18 @@ int main(int num_args, char** args)
 					{
 						//printf("Waiting for topic...\n");
 						continue;
+					}
+
+					if (!got_message)
+					{
+						continue;
+					}
+					else if (msg.data == 0)
+					{
+						// encode the message according to the definition and create the publisher
+						//ps_node_create_publisher(&node, info->first.c_str(), type, &pub);
+
+						// then serialize the message into
 					}
 
 					//publish
