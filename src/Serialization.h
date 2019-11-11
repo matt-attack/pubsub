@@ -10,8 +10,10 @@ enum ps_field_types
 	FT_UInt16,
 	FT_UInt32,
 	FT_UInt64,
+	FT_MaxInteger,//for comparisons
 	FT_Float32,
 	FT_Float64,
+	FT_MaxFloat,// all floats and ints are less than this
 	FT_String,
 	FT_WString,
 	FT_Array, //indicates the number of fields following contained in it
@@ -50,3 +52,7 @@ void ps_deserialize_message_definition(const void* start, ps_message_definition_
 // print out the deserialized contents of the message to console, for rostopic echo like implementations
 // in yaml format
 void ps_deserialize_print(const void* data, const ps_message_definition_t* definition);
+
+void ps_print_definition(const ps_message_definition_t* definition);
+
+void* ps_get_msg_start(void* data);

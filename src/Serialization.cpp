@@ -1,4 +1,5 @@
 #include "Serialization.h"
+#include "Node.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -110,6 +111,26 @@ const char* ps_deserialize_internal(const char* data, const ps_field_t* fields, 
 					printf("%s: %i\n", field->name, (int)*(int*)data);
 					data += 4;
 					break;
+				case FT_Int64:
+					printf("%s: %li\n", field->name, (long int)*(long int*)data);
+					data += 8;
+					break;
+				case FT_UInt8:
+					printf("%i", (int)*(unsigned char*)data);
+					data += 1;
+					break;
+				case FT_UInt16:
+					printf("%s: %i\n", field->name, (int)*(unsigned short*)data);
+					data += 2;
+					break;
+				case FT_UInt32:
+					printf("%s: %i\n", field->name, (unsigned int)*(unsigned int*)data);
+					data += 4;
+					break;
+				case FT_UInt64:
+					printf("%s: %li\n", field->name, (unsigned long int)*(unsigned long int*)data);
+					data += 8;
+					break;
 				case FT_Float32:
 					printf("%s: %f\n", field->name, *(float*)data);
 					data += 4;
@@ -142,6 +163,26 @@ const char* ps_deserialize_internal(const char* data, const ps_field_t* fields, 
 					case FT_Int32:
 						printf("%i", (int)*(int*)data);
 						data += 4;
+						break;
+					case FT_Int64:
+						printf("%li", (long int)*(long int*)data);
+						data += 8;
+						break;
+					case FT_UInt8:
+						printf("%i", (int)*(unsigned char*)data);
+						data += 1;
+						break;
+					case FT_UInt16:
+						printf("%i", (int)*(unsigned short*)data);
+						data += 2;
+						break;
+					case FT_UInt32:
+						printf("%i", (unsigned int)*(unsigned int*)data);
+						data += 4;
+						break;
+					case FT_UInt64:
+						printf("%li", (unsigned long int)*(unsigned long int*)data);
+						data += 8;
 						break;
 					case FT_Float32:
 						printf("%f", *(float*)data);
@@ -177,4 +218,66 @@ const char* ps_deserialize_internal(const char* data, const ps_field_t* fields, 
 void ps_deserialize_print(const void * data, const ps_message_definition_t* definition)
 {
 	ps_deserialize_internal((char*)data, definition->fields, definition->num_fields, 0);
+}
+
+void* ps_get_msg_start(void* data)
+{
+	return (void*)((char*)data + sizeof(ps_msg_header));
+}
+
+const char* TypeToString(ps_field_types type)
+{
+	switch (type)
+	{
+		// declarations
+		// . . .
+	case FT_Int8:
+		return "int8";
+	case FT_Int16:
+		return "int16";
+	case FT_Int32:
+		return "int32";
+	case FT_Int64:
+		return "int64";
+	case FT_UInt8:
+		return "uint8";
+	case FT_UInt16:
+		return "uint16";
+	case FT_UInt32:
+		return "uint32";
+	case FT_UInt64:
+		return "uint64";
+	case FT_Float32:
+		return "float";
+	case FT_Float64:
+		return "double";
+	case FT_String:
+		// statements executed if the expression equals the
+		// value of this constant_expression
+		return "string";
+	default:
+		return "Unknown Type";
+	}
+}
+
+void ps_print_definition(const ps_message_definition_t* definition)
+{
+	printf("%s\n\n", definition->name);
+	for (int i = 0; i < definition->num_fields; i++)
+	{
+		const char* type_name = "";
+		ps_field_types type = definition->fields[i].type;
+		if (definition->fields[i].length > 1)
+		{
+			printf("%s %s[%i]\n", TypeToString(definition->fields[i].type), definition->fields[i].name, definition->fields[i].length);
+		}
+		else if (definition->fields[i].length == 0)
+		{
+			printf("%s[] %s\n", TypeToString(definition->fields[i].type), definition->fields[i].name);// dynamic array
+		}
+		else
+		{
+			printf("%s %s\n", TypeToString(definition->fields[i].type), definition->fields[i].name);
+		}
+	}
 }

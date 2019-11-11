@@ -133,6 +133,8 @@ void ps_node_create_publisher(ps_node_t* node, const char* topic, const ps_messa
 	pub->latched = latched;
 	pub->last_message.data = 0;
 	pub->last_message.len = 0;
+
+	ps_node_advertise(pub);
 }
 
 
@@ -461,7 +463,7 @@ void ps_node_create_subscriber(ps_node_t* node, const char* topic, const ps_mess
 
 void ps_pub_publish_accept(ps_pub_t* pub, ps_client_t* client, const ps_message_definition_t* msg)
 {
-	printf("Sending subscribe accept\n");
+	//printf("Sending subscribe accept\n");
 	// send da udp packet!
 	sockaddr_in address;
 	address.sin_family = AF_INET;
@@ -507,7 +509,7 @@ int ps_node_spin(ps_node_t* node)
 	{
 		node->_last_advertise = millis();
 #endif
-        //printf("Advertising\n");
+        printf("Advertising\n");
 
 		// send out an advertisement for each publisher we have
 		for (unsigned int i = 0; i < node->num_pubs; i++)
@@ -674,6 +676,21 @@ int ps_node_spin(ps_node_t* node)
 
 			//todo if it is a latched topic, need to publish our last value
 		}
+		else if (data[0] == 8)
+		{
+			//printf("got message definition");
+			if (node->def_cb)
+			{
+				char* type = (char*)&data[1];
+
+				// todo fix memory leak here
+				ps_message_definition_t def;
+				def.name = new char[strlen(type) + 1];
+				strcpy(def.name, type);
+				ps_deserialize_message_definition(&data[1 + strlen(type) + 1], &def);
+				node->def_cb("uh", &def);
+			}
+		}
 	}
 
 	// now receive multicast data and process it
@@ -799,7 +816,7 @@ int ps_node_spin(ps_node_t* node)
 
 			// check if we are already getting data from this person, if so lets not send another request to their advertise
 
-			printf("Got advertise notice for a topic we need\n");
+			//printf("Got advertise notice for a topic we need\n");
 
 			ps_endpoint_t ep;
 			ep.address = p->addr;
@@ -861,36 +878,54 @@ int ps_node_spin(ps_node_t* node)
 			int* addr = (int*)&data[1];
 			unsigned short* port = (unsigned short*)&data[5];
 
-			char* topic = (char*)&data[7];
-			printf("Got query message definition for %s", topic);
+			char* type = (char*)&data[7];
+			//printf("Got query message definition for %s", type);
 
+			// check if we have that message type
+			const ps_message_definition_t* def = 0;
 			for (unsigned int i = 0; i < node->num_pubs; i++)
 			{
-				if (strcmp(node->pubs[i]->topic, topic) == 0)
+				if (def == 0 && strcmp(node->pubs[i]->message_definition->name, type) == 0)
 				{
+					def = node->pubs[i]->message_definition;
 					break;
 				}
 			}
 
-			//check our pubs/subs for that topic
+			for (unsigned int i = 0; i < node->num_subs; i++)
+			{
+				if (def == 0 && node->subs[i]->type && strcmp(node->subs[i]->type->name, type) == 0)
+				{
+					def = node->subs[i]->type;
+					break;
+				}
+			}
+
+			if (!def)
+			{
+				break;
+			}
 
 			// send da udp packet!
-			/*sockaddr_in address;
+			sockaddr_in address;
 			address.sin_family = AF_INET;
-			address.sin_addr.s_addr = htonl(client->endpoint.address);
-			address.sin_port = htons(client->endpoint.port);
+			address.sin_addr.s_addr = htonl(*addr);// client->endpoint.address);
+			address.sin_port = htons(*port);// client->endpoint.port);
 
 			char data[1500];
 			ps_subscribe_accept_t* p = (ps_subscribe_accept_t*)data;
-			p->pid = 4;
-			p->sid = client->stream_id;
+			//p->pid = 8;
+			data[0] = 8;
+			//p->sid = 0;// client->stream_id;
+			// send the message type 
 
 			//todo only send this to clients who request it
-			int off = sizeof(ps_subscribe_accept_t);
-			off += ps_serialize_message_definition(&data[off], msg);
+			int off = 1;
+			off += serialize_string(&data[off], def->name);
+			off += ps_serialize_message_definition(&data[off], def);
 
 			//also add other info...
-			int sent_bytes = sendto(pub->node->socket, (const char*)data, off, 0, (sockaddr*)&address, sizeof(sockaddr_in));*/
+			int sent_bytes = sendto(node->socket, (const char*)data, off, 0, (sockaddr*)&address, sizeof(sockaddr_in));
 		}
 	}
 

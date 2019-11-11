@@ -28,7 +28,7 @@ void ps_send_subscribe(ps_sub_t* sub, ps_endpoint_t* ep)
 
 	//add topic name, node, and 
 	int sent_bytes = sendto(sub->node->socket, (const char*)data, off, 0, (sockaddr*)&address, sizeof(sockaddr_in));
-	printf("Subscribing...\n");
+	//printf("Subscribing...\n");
 }
 
 void ps_sub_destroy(ps_sub_t* sub)

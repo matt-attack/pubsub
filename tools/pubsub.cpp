@@ -12,6 +12,12 @@
 
 using namespace std;
 
+void ps_msg_alloc(unsigned int size, ps_msg_t* out_msg)
+{
+	out_msg->len = size;
+	out_msg->data = (void*)((char*)malloc(size + sizeof(ps_msg_header)));
+}
+
 void print_help()
 {
 	printf("Usage: pubsub <verb> <subverb> (arg1) (arg2)\n"
@@ -32,6 +38,7 @@ void wait(ps_node_t* node)
 	}
 }
 
+#include "src/Parse.h"
 #include <iostream>
 #include <map>
 #include <vector>
@@ -45,10 +52,16 @@ struct Topic
 
 std::map<std::string, Topic> _topics;
 
+ps_message_definition_t definition = { 0, 0 };
+
 int main(int num_args, char** args)
 {
 	ps_node_t node;
 	ps_node_init(&node, "Query");
+
+	// for running tests
+	//num_args = 5;
+	//char* args[] = { "aaa", "topic", "pub", "/data", "\"Testing\"" };
 
 	node.adv_cb = [](const char* topic, const char* type, const char* node, void* data)
 	{
@@ -96,6 +109,12 @@ int main(int num_args, char** args)
 		}
 		//printf("Get sub %s type %s node %s\n", topic, type, node);
 		return;
+	};
+
+	node.def_cb = [](const char* type, const ps_message_definition_t* def)
+	{
+		//printf("got message definition info");
+		definition = *def;
 	};
 
 	ps_node_system_query(&node);
@@ -213,6 +232,50 @@ int main(int num_args, char** args)
 			else if (subverb == "show")
 			{
 				// print out the message definition string
+				//ok, lets get the topic type and publish at 1 Hz for the moment
+				ps_pub_t pub;
+				ps_msg_t msg;
+				msg.data = 0;
+
+				// subscribe to the topic and publish anything we get
+				bool got_data = false;
+				bool got_message = false;
+				while (ps_okay())
+				{
+					ps_node_spin(&node);
+					Sleep(1);
+
+					// spin until we get the topic
+					auto info = _topics.find(topic);
+					if (!got_data && info != _topics.end())
+					{
+						std::cout << "Topic " << topic << " found!\n";
+						//std::cout << info->first.c_str() << " " << info->second.type.c_str();
+						got_data = true;
+
+						//get the message definition from it
+						std::cout << "Querying for message definition...\n";
+						ps_node_query_message_definition(&node, info->second.type.c_str());
+					}
+
+					if (!got_data)
+					{
+						//printf("Waiting for topic...\n");
+						continue;
+					}
+
+					if (!definition.num_fields)
+					{
+						//printf("Waiting for fields...\n");
+						continue;
+					}
+
+					printf("Got message description, publishing...\n");
+					// print the message format as a string
+					ps_print_definition(&definition);
+
+					return 0;
+				}
 			}
 
 			if (subverb == "pub")
@@ -230,6 +293,7 @@ int main(int num_args, char** args)
 				while (ps_okay())
 				{
 					ps_node_spin(&node);
+					Sleep(1);
 
 					// spin until we get the topic
 					auto info = _topics.find(topic);
@@ -242,16 +306,6 @@ int main(int num_args, char** args)
 						//get the message definition from it
 						std::cout << "Querying for message definition...\n";
 						ps_node_query_message_definition(&node, info->second.type.c_str());
-
-						//todo how do we get this out?
-						//ps_message_definition_t *type;
-						//ps_node_create_publisher(&node, info->first.c_str(), type, &pub);
-						//ps_node_create_subscriber(&node, info->first.c_str(), info->second.type.c_str(), &sub, 1, true);
-
-						//okay, now serialize the message
-						//std_msgs_String rmsg;
-						//rmsg.value = "Hello";
-						//msg = std_msgs_String_encode(&rmsg);
 					}
 
 					if (!got_data)
@@ -260,19 +314,74 @@ int main(int num_args, char** args)
 						continue;
 					}
 
-					if (!got_message)
+					if (!definition.num_fields)
 					{
+						//printf("Waiting for fields...\n");
 						continue;
 					}
 					else if (msg.data == 0)
 					{
+						printf("Found message description, publishing...\n");
 						// encode the message according to the definition and create the publisher
-						//ps_node_create_publisher(&node, info->first.c_str(), type, &pub);
+						ps_node_create_publisher(&node, info->first.c_str(), &definition, &pub);
 
-						// then serialize the message into
+						// then actually serialize the message
+						// build the input string from arguments
+						std::string input;
+						for (int i = 4; i < num_args; i++)
+						{
+							input += args[i];
+							input += ' ';
+						}
+						Value out;
+
+						try
+						{
+							parse(input, out);
+						}
+						catch (std::string error)
+						{
+							printf("Failure parsing message value: %s", error.c_str());
+							return -1;
+						}
+
+						// okay, lets handle serialization
+						// if we have just one field map the data to that field
+						if (out.type != Map && definition.num_fields == 1)
+						{
+							auto& field = definition.fields[0];
+							if (field.type < FT_MaxFloat)
+							{
+								// map to the appropriate size integer
+								printf("Unhandled datatype.\n");
+								return -1;
+							}
+							else if (field.type == FT_String)
+							{
+								// just shove it in there
+								if (out.type == String)
+								{
+									const char* val = out.str.c_str();
+									int len = strlen(val) + 1;
+									ps_msg_alloc(len, &msg);
+									memcpy(ps_get_msg_start(msg.data), val, len);
+								}
+								else
+								{
+									printf("Unhandled datatype.\n");
+									return -1;
+								}
+							}
+							else
+							{
+								printf("Unhandled datatype.\n");
+								return -1;
+							}
+						}
 					}
 
 					//publish
+					printf("publishing\n");
 					ps_pub_publish(&pub, &msg);
 					Sleep(1000);
 				}

@@ -6,6 +6,7 @@ struct ps_message_definition_t;
 
 typedef void(*ps_adv_cb_t)(const char* topic, const char* type, const char* node, void* data);
 typedef void(*ps_sub_cb_t)(const char* topic, const char* type, const char* node, void* data);
+typedef void(*ps_msg_def_cb_t)(const char* type, const ps_message_definition_t* definition);
 struct ps_node_t
 {
 	const char* name;
@@ -29,6 +30,7 @@ struct ps_node_t
 	//optional callbacks
 	ps_adv_cb_t adv_cb;
 	ps_sub_cb_t sub_cb;
+	ps_msg_def_cb_t def_cb;
 
 	//implementation data
 	unsigned long long _last_advertise;

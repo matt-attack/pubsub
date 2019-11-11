@@ -17,10 +17,10 @@ void ps_msg_alloc(unsigned int size, ps_msg_t* out_msg)
 	out_msg->data = (void*)((char*)malloc(size + sizeof(ps_msg_header)));
 }
 
-void* ps_get_msg_start(void* data)
+/*void* ps_get_msg_start(void* data)
 {
 	return (void*)((char*)data + sizeof(ps_msg_header));
-}
+}*/
 
 #include <Windows.h>
 
@@ -168,7 +168,7 @@ int main()
 	//ps_msg_t msg;
 	//ps_msg_alloc(6, &msg);
 
-	while (true)
+	while (ps_okay())
 	{
 		//need to make sure to reserve n bytes for the header
 		/*std_msgs_String rmsg;
@@ -184,8 +184,7 @@ int main()
 		jmsg.axes[3] = 0.75;
 		jmsg.buttons = 1234;
 
-		ps_msg_t msg2 = joy_msgs__Joy_encode(0, &jmsg);
-		ps_pub_publish(&adv_pub, &msg2);
+		ps_pub_publish_ez(&adv_pub, &jmsg);
 
 		//ok, so lets add timeouts, make pubsub unsubscribe before it dies and figure out why the wires are getting crossed
 		Sleep(10);
