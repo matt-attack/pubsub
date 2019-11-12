@@ -374,15 +374,8 @@ int main(int num_args, char** args)
 			}
 			else if (subverb == "show")
 			{
-				// print out the message definition string
-				//ok, lets get the topic type and publish at 1 Hz for the moment
-				ps_pub_t pub;
-				ps_msg_t msg;
-				msg.data = 0;
-
-				// subscribe to the topic and publish anything we get
+				// print out the message definition string for this topic
 				bool got_data = false;
-				bool got_message = false;
 				while (ps_okay())
 				{
 					ps_node_spin(&node);
