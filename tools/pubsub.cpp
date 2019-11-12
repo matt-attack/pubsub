@@ -86,11 +86,8 @@ ps_msg_t serialize_value(const Value& value)
 				}
 				else
 				{
-					// map string to string
-					for (int i = 0; i < definition.num_fields; i++)
-					{
-
-					}
+					// this should be safe
+					mapping[item.first] = item.second;
 				}
 			}
 		}
@@ -140,11 +137,15 @@ ps_msg_t serialize_value(const Value& value)
 		{
 			// fixed size
 			int size = ps_field_sizes[field.type];
-			if (value.type != Number)
+			if (value.type == Map && field.length > 1)
+			{
+				// this is fine
+			}
+			else if (value.type != Number && value.type != None)
 			{
 				throw std::string("Cannot map value to number");
 			}
-			message_size += size;
+			message_size += size*field.length;
 		}
 		else if (field.type == FT_Array)
 		{
@@ -176,14 +177,48 @@ ps_msg_t serialize_value(const Value& value)
 		{
 			// kinda lazy hacky atm
 			int size = ps_field_sizes[field.type];
-			int data = value.flt;
+			long int data = value.flt;
+			long long int max = 1;
+			max <<= size * 8;
+
 			// check range
-			if (data >= (1 << size * 8))
+			if (data >= max)
 			{
 				printf("WARNING: field is out of range for its type");
 			}
+
 			memcpy(pos, &data, size);
-			pos += ps_field_sizes[field.type];
+			pos += size;
+		}
+		else if (field.type == FT_Float32)
+		{
+			// do da float
+			if (value.type != Map)
+			{
+				// just write the same value n times
+				int size = ps_field_sizes[field.type];
+				float data = value.type == None ? 0.0 : value.flt;
+				for (int i = 0; i < field.length; i++)
+				{
+					memcpy(pos, &data, size);
+					pos += size;
+				}
+			}
+		}
+		else if (field.type == FT_Float64)
+		{
+			// do da float
+			if (value.type != Map)
+			{
+				// just write the same value n times
+				int size = ps_field_sizes[field.type];
+				double data = value.type == None ? 0.0 : value.flt;
+				for (int i = 0; i < field.length; i++)
+				{
+					memcpy(pos, &data, size);
+					pos += size;
+				}
+			}
 		}
 		else
 		{
@@ -191,20 +226,22 @@ ps_msg_t serialize_value(const Value& value)
 		}
 	}
 
+	ps_deserialize_print(ps_get_msg_start(msg.data), &definition);
+
 	return msg;
 }
 
 std::map<std::string, Topic> _topics;
 
 
-int main(int num_args, char** args)
+int main(int num_args, char** aargs)
 {
 	ps_node_t node;
 	ps_node_init(&node, "Query");
 
 	// for running tests
-	//num_args = 5;
-	//char* args[] = { "aaa", "topic", "pub", "/data", "{test}" };
+	num_args = 5;
+	char* args[] = { "aaa", "topic", "pub", "/joy", "{buttons:32}" };
 
 	node.adv_cb = [](const char* topic, const char* type, const char* node, void* data)
 	{
