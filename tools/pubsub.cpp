@@ -50,9 +50,152 @@ struct Topic
 	std::vector<std::string> publishers;
 };
 
-std::map<std::string, Topic> _topics;
 
 ps_message_definition_t definition = { 0, 0 };
+
+int ps_field_sizes[] = { 1,2,4,8,1,2,4,8,8,4,8,4,0,0,0 };
+ps_msg_t serialize_value(const Value& value)
+{
+	ps_msg_t msg;
+
+	// okay, lets do a mapping of values to fields
+	std::map<std::string, Value> mapping;
+	if (value.type == Map)
+	{
+		if (value.map.size() == 1 && definition.num_fields == 1)
+		{
+			//just map it and warn
+			if (value.map.begin()->first != definition.fields[0].name)
+			{
+				printf("Warning: field name %s doesn't match message which has field %s.\n", 
+					value.map.begin()->first.c_str(),
+					definition.fields[0].name);
+			}
+			mapping[definition.fields[0].name] = value.map.begin()->second;
+		}
+		else if (value.map.size() <= definition.num_fields)
+		{
+			// do the mapping yo and warn for anything left
+			for (auto& item : value.map)
+			{
+				if (item.first[0] >= '0' && item.first[0] <= '9')
+				{
+					// give it to the nth item of the map
+					int num = std::atoi(item.first.c_str());
+					mapping[definition.fields[num].name] = item.second;
+				}
+				else
+				{
+					// map string to string
+					for (int i = 0; i < definition.num_fields; i++)
+					{
+
+					}
+				}
+			}
+		}
+		else
+		{
+			throw std::string("More fields in message than expected.");
+		}
+	}
+	else if (definition.num_fields == 1)
+	{
+		mapping[definition.fields[0].name] = value;
+	}
+	else
+	{
+		throw std::string("Unexpected number of fields");
+	}
+
+	//okay, now serialize
+
+	// first iterate through and calculate size
+	int message_size = 0;
+	for (int i = 0; i < definition.num_fields; i++)
+	{
+		auto& field = definition.fields[i];
+		Value& value = mapping[field.name];// its okay if it doesnt exist, it gets filled with Value()
+
+		// now serialize based on the field type
+		// change it to the prefered type if necessary
+		if (field.type == FT_String)
+		{
+			if (value.type == None)
+			{
+				value = Value("");
+				message_size += 1;
+			}
+			else if (value.type == String)
+			{
+				message_size += 1 + value.str.length();
+			}
+			else
+			{
+				// for now lets throw
+				throw std::string("Cannot map value to string");
+			}
+		}
+		else if (field.type < FT_MaxFloat)
+		{
+			// fixed size
+			int size = ps_field_sizes[field.type];
+			if (value.type != Number)
+			{
+				throw std::string("Cannot map value to number");
+			}
+			message_size += size;
+		}
+		else if (field.type == FT_Array)
+		{
+			//unhandled for now
+			throw std::string("Unhandled field type");
+		}
+		else
+		{
+			//unhandled
+			throw std::string("Unhandled field type");
+		}
+	}
+
+	//allocate message
+	ps_msg_alloc(message_size, &msg);
+
+	// finally serialize
+	char* pos = (char*)ps_get_msg_start(msg.data);
+	for (int i = 0; i < definition.num_fields; i++)
+	{
+		auto& field = definition.fields[i];
+		const Value& value = mapping[field.name];
+		if (field.type == FT_String)
+		{
+			memcpy(pos, value.str.c_str(), value.str.length() + 1);
+			pos += value.str.length() + 1;
+		}
+		else if (field.type < FT_MaxInteger)
+		{
+			// kinda lazy hacky atm
+			int size = ps_field_sizes[field.type];
+			int data = value.flt;
+			// check range
+			if (data >= (1 << size * 8))
+			{
+				printf("WARNING: field is out of range for its type");
+			}
+			memcpy(pos, &data, size);
+			pos += ps_field_sizes[field.type];
+		}
+		else
+		{
+			throw std::string("Unhandled field type");
+		}
+	}
+
+	return msg;
+}
+
+std::map<std::string, Topic> _topics;
+
 
 int main(int num_args, char** args)
 {
@@ -61,7 +204,7 @@ int main(int num_args, char** args)
 
 	// for running tests
 	//num_args = 5;
-	//char* args[] = { "aaa", "topic", "pub", "/data", "\"Testing\"" };
+	//char* args[] = { "aaa", "topic", "pub", "/data", "{test}" };
 
 	node.adv_cb = [](const char* topic, const char* type, const char* node, void* data)
 	{
@@ -345,38 +488,14 @@ int main(int num_args, char** args)
 							return -1;
 						}
 
-						// okay, lets handle serialization
-						// if we have just one field map the data to that field
-						if (out.type != Map && definition.num_fields == 1)
+						try
 						{
-							auto& field = definition.fields[0];
-							if (field.type < FT_MaxFloat)
-							{
-								// map to the appropriate size integer
-								printf("Unhandled datatype.\n");
-								return -1;
-							}
-							else if (field.type == FT_String)
-							{
-								// just shove it in there
-								if (out.type == String)
-								{
-									const char* val = out.str.c_str();
-									int len = strlen(val) + 1;
-									ps_msg_alloc(len, &msg);
-									memcpy(ps_get_msg_start(msg.data), val, len);
-								}
-								else
-								{
-									printf("Unhandled datatype.\n");
-									return -1;
-								}
-							}
-							else
-							{
-								printf("Unhandled datatype.\n");
-								return -1;
-							}
+							msg = serialize_value(out);
+						}
+						catch (std::string error)
+						{
+							printf("Serializing failed: %s", error.c_str());
+							return -1;
 						}
 					}
 
