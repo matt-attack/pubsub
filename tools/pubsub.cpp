@@ -23,7 +23,13 @@ void print_help()
 	printf("Usage: pubsub <verb> <subverb> (arg1) (arg2)\n"
 		" Verbs:\n"
 		"   topic -\n"
-		"      info (topic name)\n");
+		"      list\n"
+		"      info (topic name)\n"
+		"      show (topic name)\n"
+		"      pub (topic name) (message)\n"
+	    "   node -\n"
+	    "      list\n"
+		"      into (node name)\n");
 }
 
 #include <Windows.h>
@@ -137,7 +143,7 @@ ps_msg_t serialize_value(const Value& value)
 		{
 			// fixed size
 			int size = ps_field_sizes[field.type];
-			if (value.type == Map && field.length > 1)
+			if (value.type == Array && field.length > 1)
 			{
 				// this is fine
 			}
@@ -177,7 +183,7 @@ ps_msg_t serialize_value(const Value& value)
 		{
 			// kinda lazy hacky atm
 			int size = ps_field_sizes[field.type];
-			long int data = value.flt;
+			long long int data = value.flt;
 			long long int max = 1;
 			max <<= size * 8;
 
@@ -193,7 +199,7 @@ ps_msg_t serialize_value(const Value& value)
 		else if (field.type == FT_Float32)
 		{
 			// do da float
-			if (value.type != Map)
+			if (value.type != Array)
 			{
 				// just write the same value n times
 				int size = ps_field_sizes[field.type];
@@ -204,11 +210,24 @@ ps_msg_t serialize_value(const Value& value)
 					pos += size;
 				}
 			}
+			else
+			{
+				// fill it in using the array
+				// just write the same value n times
+				int size = ps_field_sizes[field.type];
+				float data = value.type == None ? 0.0 : value.flt;
+				for (int i = 0; i < field.length; i++)
+				{
+					float data = i < value.arr.size() ? value.arr[i].flt : 0.0;
+					memcpy(pos, &data, size);
+					pos += size;
+				}
+			}
 		}
 		else if (field.type == FT_Float64)
 		{
 			// do da float
-			if (value.type != Map)
+			if (value.type != Array)
 			{
 				// just write the same value n times
 				int size = ps_field_sizes[field.type];
@@ -219,6 +238,10 @@ ps_msg_t serialize_value(const Value& value)
 					pos += size;
 				}
 			}
+			else
+			{
+
+			}
 		}
 		else
 		{
@@ -226,6 +249,7 @@ ps_msg_t serialize_value(const Value& value)
 		}
 	}
 
+	printf("Publishing The Message Below:\n");
 	ps_deserialize_print(ps_get_msg_start(msg.data), &definition);
 
 	return msg;
@@ -234,14 +258,14 @@ ps_msg_t serialize_value(const Value& value)
 std::map<std::string, Topic> _topics;
 
 
-int main(int num_args, char** aargs)
+int main(int num_args, char** args)
 {
 	ps_node_t node;
 	ps_node_init(&node, "Query");
 
 	// for running tests
-	num_args = 5;
-	char* args[] = { "aaa", "topic", "pub", "/joy", "{buttons:32}" };
+	//num_args = 5;
+	//char* args[] = { "aaa", "topic", "pub", "/joy", "{buttons:32, axes: [1,2,3,4]}" };
 
 	node.adv_cb = [](const char* topic, const char* type, const char* node, void* data)
 	{

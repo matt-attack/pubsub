@@ -11,7 +11,8 @@ enum ValueType
 	String,
 	Number,
 	Bool,
-	Map
+	Map,
+	Array
 };
 
 class Value
@@ -33,6 +34,7 @@ public:
 	std::string str;
 	bool boolean;
 	std::map<std::string, Value> map;
+	std::vector<Value> arr;
 };
 
 bool is_character(char c)
@@ -48,6 +50,8 @@ enum class TokenTypes
 	None,
 	OpenBracket,
 	CloseBracket,
+	OpenBox,
+	CloseBox,
 	String,
 	Number,
 	Colon,
@@ -91,6 +95,16 @@ void tokenize(const std::string& input, std::vector<Token>& tokens)
 		else if (c == '}')
 		{
 			tokens.push_back(Token(TokenTypes::CloseBracket));
+			index++;
+		}
+		else if (c == '[')
+		{
+			tokens.push_back(Token(TokenTypes::OpenBox));
+			index++;
+		}
+		else if (c == ']')
+		{
+			tokens.push_back(Token(TokenTypes::CloseBox));
 			index++;
 		}
 		else if (c == ':')
@@ -237,6 +251,43 @@ int parse(const std::vector<Token>& tokens, int start, Value& value)
 
 		// grab the close bracket
 		grab(tokens, start + count, TokenTypes::CloseBracket); count++;
+		return count;
+	}
+	else if (t.type == TokenTypes::OpenBox)
+	{
+		//its an array/map parse it
+		value.type = Array;
+
+		if (peek(tokens, start + 1) == TokenTypes::CloseBox)
+		{
+			return 2;
+		}
+
+		// start building it
+		int count = 1;
+		while (true)
+		{
+			//grab it as a value at this index
+			Value v;
+			count += parse(tokens, start + count, v);
+			//std::string key = std::to_string(value.map.size());
+			value.arr.push_back(v);
+
+			// if next is a commma
+			if (peek(tokens, start + count) == TokenTypes::Comma)
+			{
+				// grab it and continue
+				count++;
+				continue;
+			}
+			else
+			{
+				break;// we are done
+			}
+		}
+
+		// grab the close bracket
+		grab(tokens, start + count, TokenTypes::CloseBox); count++;
 		return count;
 	}
 	else if (t.type == TokenTypes::String)
