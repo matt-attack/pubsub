@@ -81,7 +81,7 @@ ps_msg_t joy_msgs_Joy_encode(void* allocator, const joy_msgs_Joy* msg)
 
 #include <stdint.h>
 
-struct joy_msgs__Joy
+/*struct joy_msgs__Joy
 {
 	int32_t buttons;
 	float axes[4];
@@ -108,7 +108,36 @@ ps_msg_t joy_msgs__Joy_encode(ps_allocator_t* allocator, const void* msg)
 	return omsg;
 }
 
-ps_message_definition_t joy_msgs__Joy_def = { 123456789, "joy_msgs/Joy", 2, joy_msgs__Joy_fields, joy_msgs__Joy_encode };
+ps_message_definition_t joy_msgs__Joy_def = { 123456789, "joy_msgs/Joy", 2, joy_msgs__Joy_fields, joy_msgs__Joy_encode };*/
+
+struct joy_msgs__Joy
+{
+	int32_t buttons;
+	float axes[4];
+};
+
+ps_field_t joy_msgs__Joy_fields[] = {
+	{ FT_Int32, "buttons", 1, 0 },
+{ FT_Float32, "axes", 4, 0 },
+};
+
+void* joy_msgs__Joy_decode(const void* data, ps_allocator_t* allocator)
+{
+	joy_msgs__Joy* out = (joy_msgs__Joy*)allocator->alloc(sizeof(joy_msgs__Joy), allocator->context);
+	*out = *(joy_msgs__Joy*)data;
+	return out;
+
+}
+
+ps_msg_t joy_msgs__Joy_encode(ps_allocator_t* allocator, const void* msg)
+{
+	int len = sizeof(joy_msgs__Joy);
+	ps_msg_t omsg;
+	ps_msg_alloc(len, &omsg);
+	memcpy(ps_get_msg_start(omsg.data), msg, len);
+	return omsg;
+}
+ps_message_definition_t joy_msgs__Joy_def = { 123456789, "joy_msgs/Joy", 2, joy_msgs__Joy_fields, joy_msgs__Joy_encode, joy_msgs__Joy_decode };
 
 struct std_msgs_Int32
 {

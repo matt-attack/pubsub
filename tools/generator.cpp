@@ -186,12 +186,6 @@ void generate(const char* definition, const char* name)
 	}
 	output += "};\n\n";
 
-	// generate the actual message definition
-	int field_count = fields.size();
-	int hash = 123456789;
-	output += "ps_message_definition_t " + type_name + "_def = { ";
-	output += std::to_string(hash) + ", \"" + name + "\", " + std::to_string(field_count) + ", " + type_name +"_fields };\n";
-
 	// okay, generate encoding/decoding
 	// for the moment, we can just copy it to decode, if its just a packed struct
 	/*void joy_msgs_Joy_decode(const void* data, joy_msgs_Joy* out)
@@ -225,11 +219,14 @@ void generate(const char* definition, const char* name)
 	if (is_pure)
 	{
 		//generate simple de/serializaton
-		output += "void " + type_name + "_decode(const void* data, "+ type_name + "* out)\n{\n";
-		output += "  *out = *(" + type_name + "*)data;\n}\n\n";
+		output += "void* " + type_name + "_decode(const void* data, ps_allocator_t* allocator)\n{\n";
+		output += "  " + type_name + "* out = (" + type_name + "*)allocator->alloc(sizeof(" + type_name + "), allocator->context);\n";
+		output += "  *out = *(" + type_name + "*)data;\n";
+		output += "  return out;\n";
+		output += "\n}\n\n";
 
 		// now for encode
-		output += "ps_msg_t " + type_name + "_encode(void* allocator, const " + type_name + "* msg)\n{\n";
+		output += "ps_msg_t " + type_name + "_encode(ps_allocator_t* allocator, const void* msg)\n{\n";
 		output += "  int len = sizeof(" + type_name + ");\n";
 		output += "  ps_msg_t omsg;\n";
 		output += "  ps_msg_alloc(len, &omsg);\n";
@@ -239,7 +236,16 @@ void generate(const char* definition, const char* name)
 	else
 	{
 		//need to split it in sections between the strings
-		output += "void " + type_name + "_decode(const void* data, " + type_name + "* out)\n{\n  char* p = data;\n";
+		output += "void* " + type_name + "_decode(const void* data, ps_allocator_t* allocator)\n{\n  char* p = data;\n";
+		output += "  int len = sizeof("+type_name+");\n";
+		for (int i = 0; i < fields.size(); i++)
+		{
+			if (fields[i].type == "string")
+			{
+				output += "  len -= sizeof(char*);\n";
+			}
+		}
+		output += "  "+type_name+"* out = allocator->alloc(len, allocator->context);\n";
 		// for now lets just decode non strings
 		for (int i = 0; i < fields.size(); i++)
 		{
@@ -251,14 +257,17 @@ void generate(const char* definition, const char* name)
 			else
 			{
 				// need to allocate the string somehow...
-				output += "  int len_" + fields[i].name + " = strlen(p); \n";
-				output += "  out->" + fields[i].name + " = malloc(len_" + fields[i].name + " + 1);\n";
-				output += "  strcpy(out->" + fields[i].name + ", p);\n";
+				output += "  int len_" + fields[i].name + " = strlen(p) + 1; \n";
+				output += "  out->" + fields[i].name + " = allocator->alloc(len_" + fields[i].name + ", allocator->context);\n";
+				output += "  memcpy(out->" + fields[i].name + ", p, len_" + fields[i].name + ");\n";// is memcpy faster in this case?
+				output += "  p += len_" + fields[i].name + ";\n";
 			}
 		}
+		output += "  return (void*)out;\n";
 		output += "}\n";
 
-		output += "ps_msg_t " + type_name + "_encode(void* allocator, const " + type_name + "* msg)\n{\n";
+		output += "ps_msg_t " + type_name + "_encode(void* allocator, const void* data)\n{\n";
+		output += "  const " + type_name + "* msg = (const " + type_name + "*)data";
 		output += "  int len = sizeof(" + type_name + ");\n";
 		output += "  // for each string, add their length\n";
 		int n_str = 0;
@@ -292,6 +301,12 @@ void generate(const char* definition, const char* name)
 		output += "}\n";
 	}
 
+	// generate the actual message definition
+	int field_count = fields.size();
+	int hash = 123456789;
+	output += "ps_message_definition_t " + type_name + "_def = { ";
+	output += std::to_string(hash) + ", \"" + name + "\", " + std::to_string(field_count) + ", " + type_name + "_fields, " + type_name + "_encode, " + type_name + "_decode };\n";
+
 
 	printf("Output:\n%s", output.c_str());
 }
@@ -313,8 +328,11 @@ void main(int num_args, char** args)
 	const char* test2 = "int data1[5]\nstring data2";
 
 	const char* test3 = "int buttons\nfloat axes[4]";
+	const char* test4 = "int a";
 	generate(test, "std_msgs/String");
 	generate(test2, "std_msgs/Test");
 	generate(test3, "joy_msgs/Joy");
+
+	generate(test4, "std_msgs/Int");
 	getchar();
 }
