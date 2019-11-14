@@ -112,8 +112,6 @@ void ps_node_system_query(ps_node_t* node);
 void ps_node_query_message_definition(ps_node_t* node, const char* message);
 
 
-void ps_node_set_advertise_cb(ps_node_t* node, ps_adv_cb_t cb, void* data);
-
 int ps_okay();
 
 void ps_node_destroy(ps_node_t* node);
@@ -127,6 +125,7 @@ enum
 	PS_UDP_PROTOCOL_KEEP_ALIVE = 3,
 	PS_UDP_PROTOCOL_SUBSCRIBE_ACCEPT = 4,
 	PS_UDP_PROTOCOL_SUBSCRIBE_REQUEST = 1,
+	PS_UDP_PROTOCOL_MESSAGE_DEFINITION = 8,
 };
 
 enum

@@ -37,6 +37,7 @@ struct ps_sub_req_header_t
 };
 #pragma pack(pop)
 
+// if the subscriber was initialized with a type this returns decoded messages
 void* ps_sub_deque(ps_sub_t* sub);
 
 void ps_sub_destroy(ps_sub_t* sub);

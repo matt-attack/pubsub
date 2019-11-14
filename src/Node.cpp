@@ -53,8 +53,6 @@ void ps_node_query_message_definition(ps_node_t* node, const char* message)
 
 	int off = 7;
 	off += serialize_string(&data[off], message);
-	//int off = 7;
-	//off += serialize_string(&data[off], node->name);
 
 	//add topic name, node, and 
 	int sent_bytes = sendto(node->socket, (const char*)data, off, 0, (sockaddr*)&address, sizeof(sockaddr_in));
@@ -509,7 +507,7 @@ int ps_node_spin(ps_node_t* node)
 	{
 		node->_last_advertise = millis();
 #endif
-        printf("Advertising\n");
+        //printf("Advertising\n");
 
 		// send out an advertisement for each publisher we have
 		for (unsigned int i = 0; i < node->num_pubs; i++)
@@ -542,13 +540,15 @@ int ps_node_spin(ps_node_t* node)
 		// then keep doing this until we run out of packets or hit a max
 
 		//we got message data or a specific request
-		if (data[0] == PS_UDP_PROTOCOL_DATA/*2*/)// actual message
+		if (data[0] == PS_UDP_PROTOCOL_DATA)// actual message
 		{
 			ps_msg_header* hdr = (ps_msg_header*)data;
 
 			//printf("Got message packet seq %i\n", hdr->seq);
 
 			// find the sub
+			// todo, is this the fastest method?
+			// works great for small subscriber counts
 			ps_sub_t* sub = 0;
 			for (unsigned int i = 0; i < node->num_subs; i++)
 			{
@@ -560,15 +560,32 @@ int ps_node_spin(ps_node_t* node)
 			}
 			if (sub == 0)
 			{
-				printf("Could not find sub matching stream id %i\n", hdr->id);
+				printf("ERROR: Could not find sub matching stream id %i\n", hdr->id);
 				continue;
 			}
 
 			// queue up the data, and copy :/ (can make zero copy for arduino version)
 			int data_size = received_bytes - sizeof(ps_msg_header);
-			void* out_data = sub->allocator->alloc(data_size, sub->allocator->context);
-			memcpy(out_data, data + sizeof(ps_msg_header), data_size);
 
+			// todo also allow queueless operation and just call callbacks here
+
+
+			// also todo fastpath for PoD message types
+			
+			// okay, if we have the message definition, deserialize and output in a message
+			void* out_data;
+			if (sub->type)
+			{
+				out_data = sub->type->decode(data + sizeof(ps_msg_header), sub->allocator);
+			}
+			else
+			{
+				out_data = sub->allocator->alloc(data_size, sub->allocator->context);
+				memcpy(out_data, data + sizeof(ps_msg_header), data_size);
+			}
+
+			// maybe todo, this doesnt do fifo very correctly
+			// only does first newest than two old ones
 			//add it to the fifo packet queue which always shows the n most recent packets
 			//most recent is always first
 			//so lets push to the front (highest open index or highest if full)
@@ -583,7 +600,7 @@ int ps_node_spin(ps_node_t* node)
 
 			packet_count++;
 		}
-		else if (data[0] == PS_UDP_PROTOCOL_KEEP_ALIVE/*3*/)
+		else if (data[0] == PS_UDP_PROTOCOL_KEEP_ALIVE)
 		{
 			// keep alives, actually maybe lets not use this at all?
 			unsigned long stream_id = *(unsigned long*)data[1];
@@ -601,7 +618,7 @@ int ps_node_spin(ps_node_t* node)
 				}
 			}
 		}
-		else if (data[0] == PS_UDP_PROTOCOL_SUBSCRIBE_ACCEPT/*4*/)
+		else if (data[0] == PS_UDP_PROTOCOL_SUBSCRIBE_ACCEPT)
 		{
 			ps_subscribe_accept_t* p = (ps_subscribe_accept_t*)data;
 			printf("Got subscribe accept for stream %i\n", p->sid);
@@ -627,7 +644,7 @@ int ps_node_spin(ps_node_t* node)
 				ps_deserialize_message_definition(&data[sizeof(ps_subscribe_accept_t)], &sub->received_message_def);
 			}
 		}
-		else if (data[0] == PS_UDP_PROTOCOL_SUBSCRIBE_REQUEST/*1*/)
+		else if (data[0] == PS_UDP_PROTOCOL_SUBSCRIBE_REQUEST)
 		{
 			//received subscribe request
 			ps_sub_req_header_t* p = (ps_sub_req_header_t*)data;
@@ -676,7 +693,7 @@ int ps_node_spin(ps_node_t* node)
 
 			//todo if it is a latched topic, need to publish our last value
 		}
-		else if (data[0] == 8)
+		else if (data[0] == PS_UDP_PROTOCOL_MESSAGE_DEFINITION/*8*/)
 		{
 			//printf("got message definition");
 			if (node->def_cb)
@@ -913,11 +930,7 @@ int ps_node_spin(ps_node_t* node)
 			address.sin_port = htons(*port);// client->endpoint.port);
 
 			char data[1500];
-			ps_subscribe_accept_t* p = (ps_subscribe_accept_t*)data;
-			//p->pid = 8;
-			data[0] = 8;
-			//p->sid = 0;// client->stream_id;
-			// send the message type 
+			data[0] = PS_UDP_PROTOCOL_MESSAGE_DEFINITION;
 
 			//todo only send this to clients who request it
 			int off = 1;

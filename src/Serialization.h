@@ -31,13 +31,16 @@ struct ps_field_t
 };
 
 
+// encoded message
 struct ps_msg_t
 {
 	void* data;
 	unsigned int len;
 };
 
-typedef ps_msg_t(*ps_fn_encode_t)(void* allocator, const void* msg);
+struct ps_allocator_t;
+typedef ps_msg_t(*ps_fn_encode_t)(ps_allocator_t* allocator, const void* msg);
+typedef void*(*ps_fn_decode_t)(const void* data, ps_allocator_t* allocator);// allocates the message
 struct ps_message_definition_t
 {
 	unsigned int hash;
@@ -45,6 +48,7 @@ struct ps_message_definition_t
 	unsigned int num_fields;
 	ps_field_t* fields;
 	ps_fn_encode_t encode;
+	ps_fn_decode_t decode;
 };
 
 int ps_serialize_message_definition(void* start, const ps_message_definition_t* definition);

@@ -56,6 +56,8 @@ void ps_deserialize_message_definition(const void * start, ps_message_definition
 	def_header* hdr = (def_header*)start;
 	definition->hash = hdr->hash;
 	definition->num_fields = hdr->num_fields;
+	definition->decode = 0;
+	definition->encode = 0;
 
 	definition->fields = (ps_field_t*)malloc(sizeof(ps_field_t)*definition->num_fields);
 
