@@ -8,8 +8,8 @@
 #include "../src/Publisher.h"
 #include "../src/Subscriber.h"
 
-// simple pub sub library implementation in plain C, with lightweight version for embedded
-// serialization is handled in a different api, this is just the protocol handling blobs
+
+#include <Windows.h>
 
 void ps_msg_alloc(unsigned int size, ps_msg_t* out_msg)
 {
@@ -17,15 +17,20 @@ void ps_msg_alloc(unsigned int size, ps_msg_t* out_msg)
 	out_msg->data = (void*)((char*)malloc(size + sizeof(ps_msg_header)));
 }
 
+#include "../msg/std_msgs__Joy.msg.h"
+#include "../msg/std_msgs__String.msg.h"
+
+// simple pub sub library implementation in plain C, with lightweight version for embedded
+// serialization is handled in a different api, this is just the protocol handling blobs
+
 /*void* ps_get_msg_start(void* data)
 {
 	return (void*)((char*)data + sizeof(ps_msg_header));
 }*/
 
-#include <Windows.h>
 
 // generation test
-ps_field_t std_msgs__String_fields[] = { { FT_String, "value", 1, 0 } };
+/*ps_field_t std_msgs__String_fields[] = { { FT_String, "value", 1, 0 } };
 struct std_msgs__String
 {
 	char* value;
@@ -53,7 +58,7 @@ ps_msg_t std_msgs__String_encode(ps_allocator_t* allocator, const void* imsg)
 }
 
 
-ps_message_definition_t std_msgs__String_def = { 123456789/*hash*/, "std_msgs/String", 1, std_msgs__String_fields, std_msgs__String_encode, std_msgs__String_decode };
+ps_message_definition_t std_msgs__String_def = { 123456789, "std_msgs/String", 1, std_msgs__String_fields, std_msgs__String_encode, std_msgs__String_decode };*/
 
 /*ps_field_t joy_msgs_Joy_fields[] = { { FT_Float32, "axes", 4, 0 }, { FT_Int32, "buttons", 1, 0 } };
 ps_message_definition_t joy_msgs_Joy_def = { 12345678910, "joy_msgs/Joy", 2, joy_msgs_Joy_fields };
@@ -78,8 +83,6 @@ ps_msg_t joy_msgs_Joy_encode(void* allocator, const joy_msgs_Joy* msg)
 
 	return omsg;
 }*/
-
-#include <stdint.h>
 
 /*struct joy_msgs__Joy
 {
@@ -110,7 +113,7 @@ ps_msg_t joy_msgs__Joy_encode(ps_allocator_t* allocator, const void* msg)
 
 ps_message_definition_t joy_msgs__Joy_def = { 123456789, "joy_msgs/Joy", 2, joy_msgs__Joy_fields, joy_msgs__Joy_encode };*/
 
-struct joy_msgs__Joy
+/*struct joy_msgs__Joy
 {
 	int32_t buttons;
 	float axes[4];
@@ -138,26 +141,7 @@ ps_msg_t joy_msgs__Joy_encode(ps_allocator_t* allocator, const void* msg)
 	return omsg;
 }
 ps_message_definition_t joy_msgs__Joy_def = { 123456789, "joy_msgs/Joy", 2, joy_msgs__Joy_fields, joy_msgs__Joy_encode, joy_msgs__Joy_decode };
-
-struct std_msgs_Int32
-{
-	int value;
-};
-
-void std_msgs_Int32_decode()
-{
-
-}
-
-void std_msgs_Int32_encode()
-{
-
-}
-
-struct std_msgs_Float32
-{
-	float value;
-};
+*/
 
 int main()
 {
@@ -168,7 +152,7 @@ int main()
 	ps_node_create_publisher(&node, "/data", &std_msgs__String_def, &string_pub, true);
 
 	ps_pub_t adv_pub;
-	ps_node_create_publisher(&node, "/joy", &joy_msgs__Joy_def, &adv_pub);
+	ps_node_create_publisher(&node, "/joy", &std_msgs__Joy_def, &adv_pub);
 
 	ps_sub_t string_sub;
 	ps_node_create_subscriber(&node, "/data", &std_msgs__String_def, &string_sub, 10);
@@ -194,7 +178,7 @@ int main()
 		rmsg.value = "Woah 2";
 		ps_pub_publish_ez(&string_pub, &rmsg);
 
-		joy_msgs__Joy jmsg;
+		std_msgs__Joy jmsg;
 		jmsg.axes[0] = 0.0;
 		jmsg.axes[1] = 0.25;
 		jmsg.axes[2] = 0.5;

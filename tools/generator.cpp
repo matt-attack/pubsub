@@ -78,6 +78,8 @@ struct field
 		{
 			return "double";
 		}
+
+		return "invalid";
 	}
 
 	std::string getTypeEnum()
@@ -99,10 +101,12 @@ struct field
 		{
 			return "FT_Float64";
 		}
+
+		return "invalid";
 	}
 };
 
-void generate(const char* definition, const char* name)
+std::string generate(const char* definition, const char* name)
 {
 	std::string output;
 
@@ -111,9 +115,28 @@ void generate(const char* definition, const char* name)
 	
 	auto lines = split(definition, '\n');
 
-	// todo remove comments
+	// now lets remove comments from lines so we can generate a hash from it
+	// todo, also remove extra spacing
 	for (auto& line : lines)
 	{
+		// go through and remove everything after a #
+		size_t p = line.find_first_of('#');
+		if (p != -1)
+		{
+			line = line.substr(0, p);
+		}
+	}
+
+	// also generate the has while we are at it
+	uint32_t hash = 0;
+	for (auto& line : lines)
+	{
+		for (int i = 0; i < line.length(); i++)
+		{
+			hash *= std::abs(line[i]);
+			hash += i;
+		}
+
 		//okay so each of these should contain a type, then a field
 		auto words = split(line, ' ');
 		if (words.size() == 0)
@@ -157,6 +180,11 @@ void generate(const char* definition, const char* name)
 		}
 		c++;
 	}
+
+	// add header guard
+	output += "#pragma once\n\n";
+
+	output += "#include <stdint.h>\n\n";
 
 	// now that we have these, generate stuff!, start with the struct
 	output += "struct " + type_name + "\n{\n";
@@ -236,16 +264,25 @@ void generate(const char* definition, const char* name)
 	else
 	{
 		//need to split it in sections between the strings
-		output += "void* " + type_name + "_decode(const void* data, ps_allocator_t* allocator)\n{\n  char* p = data;\n";
+		output += "void* " + type_name + "_decode(const void* data, ps_allocator_t* allocator)\n{\n";
+		output += "  char* p = (char*)data;\n";
 		output += "  int len = sizeof("+type_name+");\n";
 		for (int i = 0; i < fields.size(); i++)
 		{
 			if (fields[i].type == "string")
 			{
 				output += "  len -= sizeof(char*);\n";
+				output += "  int len_" + fields[i].name + " = strlen(p) + 1; \n";
+				output += "  len += len_" + fields[i].name + ";\n";
+				output += "  p += len_" + fields[i].name + ";\n";
+			}
+			else
+			{
+				output += "  p += sizeof(" + fields[i].getBaseType() + ");\n";
 			}
 		}
-		output += "  "+type_name+"* out = allocator->alloc(len, allocator->context);\n";
+		output += "  p = (char*)data;\n";// start from beginning again
+		output += "  "+type_name+"* out = (" + type_name + "*)allocator->alloc(len, allocator->context);\n";
 		// for now lets just decode non strings
 		for (int i = 0; i < fields.size(); i++)
 		{
@@ -257,17 +294,17 @@ void generate(const char* definition, const char* name)
 			else
 			{
 				// need to allocate the string somehow...
-				output += "  int len_" + fields[i].name + " = strlen(p) + 1; \n";
-				output += "  out->" + fields[i].name + " = allocator->alloc(len_" + fields[i].name + ", allocator->context);\n";
+				output += "  out->" + fields[i].name + " = (char*)allocator->alloc(len_" + fields[i].name + ", allocator->context);\n";
 				output += "  memcpy(out->" + fields[i].name + ", p, len_" + fields[i].name + ");\n";// is memcpy faster in this case?
 				output += "  p += len_" + fields[i].name + ";\n";
 			}
 		}
 		output += "  return (void*)out;\n";
-		output += "}\n";
+		output += "}\n\n";
 
-		output += "ps_msg_t " + type_name + "_encode(void* allocator, const void* data)\n{\n";
-		output += "  const " + type_name + "* msg = (const " + type_name + "*)data";
+		//typedef ps_msg_t(*ps_fn_encode_t)(ps_allocator_t* allocator, const void* msg);
+		output += "ps_msg_t " + type_name + "_encode(ps_allocator_t* allocator, const void* data)\n{\n";
+		output += "  const " + type_name + "* msg = (const " + type_name + "*)data;\n";
 		output += "  int len = sizeof(" + type_name + ");\n";
 		output += "  // for each string, add their length\n";
 		int n_str = 0;
@@ -275,7 +312,7 @@ void generate(const char* definition, const char* name)
 		{
 			if (fields[i].type == "string")
 			{
-				output += "  int len_" + fields[i].name + " = strlen(msg->" + fields[i].name + "); \n";
+				output += "  int len_" + fields[i].name + " = strlen(msg->" + fields[i].name + ") + 1; \n";
 				output += "  len += len_" + fields[i].name + ";\n";
 				n_str++;
 			}
@@ -283,13 +320,13 @@ void generate(const char* definition, const char* name)
 		output += "  len -= " + std::to_string(n_str) + "*sizeof(char*);\n";
 		output += "  ps_msg_t omsg;\n";
 		output += "  ps_msg_alloc(len, &omsg);\n";
-		output += "  char* start = ps_get_msg_start(omsg.data);\n";
+		output += "  char* start = (char*)ps_get_msg_start(omsg.data);\n";
 		for (int i = 0; i < fields.size(); i++)
 		{
 			if (fields[i].type == "string")
 			{
 				output += "  strcpy(start, msg->" + fields[i].name + ");\n";
-				output += "  start += len_" + fields[i].name + " + 1;\n";
+				output += "  start += len_" + fields[i].name + ";\n";
 			}
 			else
 			{
@@ -298,19 +335,25 @@ void generate(const char* definition, const char* name)
 				output += "  start += sizeof(" + fields[i].getBaseType() + ");\n";
 			}
 		}
+		output += "  return omsg;\n";
 		output += "}\n";
 	}
 
 	// generate the actual message definition
 	int field_count = fields.size();
-	int hash = 123456789;
 	output += "ps_message_definition_t " + type_name + "_def = { ";
 	output += std::to_string(hash) + ", \"" + name + "\", " + std::to_string(field_count) + ", " + type_name + "_fields, " + type_name + "_encode, " + type_name + "_decode };\n";
 
 
 	printf("Output:\n%s", output.c_str());
+
+	return output;
 }
 
+
+#include <string>
+#include <fstream>
+#include <streambuf>
 void main(int num_args, char** args)
 {
 	//ok, so this reads in a list of files then converts those all to header files which define serialization and the
@@ -318,10 +361,54 @@ void main(int num_args, char** args)
 
 	// takes in first, the message file, then the message name w/ namespace
 	// ex: string.msg std_msgs/String
+	//num_args = 2;
+	//args[1] = "C:\\Users\\space\\Desktop\\pubsub_proto\\PubSub\\msg\\std_msgs__Joy.txt";
 
 	// okay, read in each message file then lets generate things for it
+	for (int i = 1; i < num_args; i++)
+	{
+		printf("%s\n", args[i]);
+		std::ifstream t(args[i], std::ios::binary);
+		std::string str;
 
-	int num_messages = 5;
+		t.seekg(0, std::ios::end);
+		str.reserve(t.tellg());
+		t.seekg(3, std::ios::beg);
+
+		str.assign((std::istreambuf_iterator<char>(t)),
+			std::istreambuf_iterator<char>());
+
+		// remove a BOM if there is one
+		/*if (str.length() >= 3 && str[0] == 0xEF
+			&& str[1] == 0xBB && str[2] == 0xBF)
+		{
+			//str[0] = ' ';
+			//str[1] = ' ';
+			//str[2] = ' ';
+		}*/
+		printf("%s\n", str.c_str());
+
+		std::string file_name = args[i];
+		for (int i = 0; i < file_name.size(); i++)
+		{
+			if (file_name[i] == '\\')
+			{
+				file_name[i] = '/';
+			}
+		}
+		file_name = file_name.substr(file_name.find_last_of('/') + 1);
+		// remove everything after the .
+		std::string name = file_name.substr(0, file_name.find_first_of('.'));
+		std::string output = generate(str.c_str(), name.c_str());
+
+		// write it back to file
+		std::string out_name = args[i];
+		out_name += ".h";
+		std::ofstream o(out_name, std::ios::binary);
+		o << output;
+	}
+
+	/*int num_messages = 5;
 
 	const char* test = "string data";
 
@@ -333,6 +420,6 @@ void main(int num_args, char** args)
 	generate(test2, "std_msgs/Test");
 	generate(test3, "joy_msgs/Joy");
 
-	generate(test4, "std_msgs/Int");
-	getchar();
+	generate(test4, "std_msgs/Int");*/
+	//getchar();
 }

@@ -10,19 +10,56 @@ add_executable (info "pubsub.cpp")
 target_link_libraries(info pubsub)
 add_dependencies(info pubsub)
 
+add_executable(pubsub_msg_gen "generator.cpp")
 
-add_executable(pubsub_gen "generator.cpp")
+# This is used to generate messages for a package
+macro(generate_messages)
+  set(options "DIRECTORY" "TARGET")
+  cmake_parse_arguments(ARG "" "${options}" "FILES" "" ${ARGN})
+  if(ARG_UNPARSED_ARGUMENTS)
+    message(FATAL_ERROR "add_service_files() called with unused arguments: ${ARG_UNPARSED_ARGUMENTS}")
+  endif()
 
-#add_custom_target(test2_run
-#  COMMAND generator.exe
-#  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-#  COMMENT "run generated test2 in ${CMAKE_CURRENT_SOURCE_DIR}"
-#  SOURCES ${test2_SOURCES}
-#)
+  if(NOT ARG_DIRECTORY)
+    set(ARG_DIRECTORY msg)
+  endif()
+
+  if (NOT ARG_TARGET)
+    set(ARG_TARGET ${PROJECT_NAME}_msgs)
+  endif()
+
+  set(MESSAGE_DEPS)
+  foreach (_file ${ARG_FILES})
+    add_custom_command(
+      COMMAND C:/Users/space/Desktop/pubsub_proto/PubSub/build/x86-Debug/tools/pubsub_msg_gen.exe ${_file}
+      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/${ARG_DIRECTORY}/
+      DEPENDS ${CMAKE_SOURCE_DIR}/${ARG_DIRECTORY}/${_file} pubsub_msg_gen
+      OUTPUT ${CMAKE_SOURCE_DIR}/${ARG_DIRECTORY}/${_file}.h
+    )
+
+    set(MESSAGE_DEPS ${MESSAGE_DEPS} ${CMAKE_SOURCE_DIR}/${ARG_DIRECTORY}/${_file}.h)
+  endforeach()
+
+  add_custom_target(${ARG_TARGET}
+    DEPENDS ${MESSAGE_DEPS} 
+  )
+endmacro()
+
+generate_messages(FILES 
+  std_msgs__Joy.msg
+  std_msgs__String.msg 
+)
+
 
 
 add_executable(pubsubtest "PubSubTest.cpp")
 target_link_libraries(pubsubtest pubsub)
-#add_dependencies(pubsubtest pubsub test2_run)
+add_dependencies(pubsubtest pubsub pubsub_msgs)
 
 # TODO: Add tests and install targets if needed.
+
+install(TARGETS pubsub_msg_gen
+  ARCHIVE DESTINATION "s"
+  LIBRARY DESTINATION "s"
+  RUNTIME DESTINATION "s"
+)
