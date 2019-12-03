@@ -315,7 +315,7 @@ int main(int num_args, char** args)
 		return;
 	};
 
-	node.def_cb = [](const char* type, const ps_message_definition_t* def)
+	node.def_cb = [](const ps_message_definition_t* def)
 	{
 		//printf("got message definition info");
 		definition = *def;

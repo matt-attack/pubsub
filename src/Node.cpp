@@ -185,6 +185,8 @@ int ps_okay()
 {
 	return 1;
 }
+
+typedef int SOCKET;
 #endif
 
 char* GetPrimaryIp()
@@ -210,7 +212,11 @@ char* GetPrimaryIp()
 	char* ip = inet_ntoa(name.sin_addr);
 	//assert(p);
 
+#ifdef _WIN32
 	closesocket(sock);
+#else
+	close(sock);
+#endif
 	return ip;
 }
 
@@ -230,6 +236,7 @@ void ps_node_init(ps_node_t* node, const char* name, const char* ip, bool broadc
 
 	node->adv_cb = 0;
 	node->sub_cb = 0;
+	node->def_cb = 0;
 
 	node->_last_advertise = 0;
 
@@ -278,7 +285,11 @@ void ps_node_init(ps_node_t* node, const char* name, const char* ip, bool broadc
 		int err = WSAGetLastError();
 		printf("Failed to Bind Socket, %i\n", err);
 #endif
+#ifdef _WIN32
 		closesocket(node->socket);
+#else
+		close(node->socket);
+#endif
 		return;
 	}
 
@@ -299,7 +310,11 @@ void ps_node_init(ps_node_t* node, const char* name, const char* ip, bool broadc
 	if (ioctlsocket(node->socket, FIONBIO, &nonBlocking) != 0)
 	{
 		printf("Failed to Set Socket as Non-Blocking!\n");
+#ifdef _WIN32
 		closesocket(node->socket);
+#else
+		close(node->socket);
+#endif
 		return;
 	}
 #endif
@@ -350,7 +365,11 @@ void ps_node_init(ps_node_t* node, const char* name, const char* ip, bool broadc
 		int err = WSAGetLastError();
 		printf("Failed to Bind mc Socket, %i\n", err);
 #endif
+#ifdef _WIN32
 		closesocket(node->mc_socket);
+#else
+		close(node->mc_socket);
+#endif
 		return;
 	}
 
@@ -394,8 +413,13 @@ void ps_node_destroy(ps_node_t* node)
 		ps_sub_destroy(node->subs[i]);
 	}
 
+#ifdef _WIN32
 	closesocket(node->socket);
 	closesocket(node->mc_socket);
+#else
+	close(node->socket);
+	close(node->mc_socket);
+#endif
 
 	node->socket = node->mc_socket = 0;
 	node->num_pubs = node->num_subs = 0;
@@ -603,7 +627,7 @@ int ps_node_spin(ps_node_t* node)
 		else if (data[0] == PS_UDP_PROTOCOL_KEEP_ALIVE)
 		{
 			// keep alives, actually maybe lets not use this at all?
-			unsigned long stream_id = *(unsigned long*)data[1];
+			unsigned long stream_id = *(unsigned long*)&data[1];
 			//find the client and update the keep alive
 
 			for (unsigned int i = 0; i < node->num_pubs; i++)
@@ -705,7 +729,7 @@ int ps_node_spin(ps_node_t* node)
 				def.name = new char[strlen(type) + 1];
 				strcpy(def.name, type);
 				ps_deserialize_message_definition(&data[1 + strlen(type) + 1], &def);
-				node->def_cb("uh", &def);
+				node->def_cb(&def);
 			}
 		}
 	}
@@ -926,13 +950,12 @@ int ps_node_spin(ps_node_t* node)
 			// send da udp packet!
 			sockaddr_in address;
 			address.sin_family = AF_INET;
-			address.sin_addr.s_addr = htonl(*addr);// client->endpoint.address);
-			address.sin_port = htons(*port);// client->endpoint.port);
+			address.sin_addr.s_addr = htonl(*addr);
+			address.sin_port = htons(*port);
 
 			char data[1500];
 			data[0] = PS_UDP_PROTOCOL_MESSAGE_DEFINITION;
 
-			//todo only send this to clients who request it
 			int off = 1;
 			off += serialize_string(&data[off], def->name);
 			off += ps_serialize_message_definition(&data[off], def);
@@ -962,10 +985,8 @@ int ps_node_spin(ps_node_t* node)
 
 int serialize_string(char* data, const char* str)
 {
-#ifdef ARDUINO
+	// todo do this smarter
 	strcpy(data, str);
-#else
-	strcpy_s(data, 128, str);
-#endif
+
 	return strlen(str) + 1;
 }
