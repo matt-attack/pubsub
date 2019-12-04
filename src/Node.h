@@ -4,6 +4,12 @@ struct ps_sub_t;
 struct ps_pub_t;
 struct ps_message_definition_t;
 
+#ifndef _WIN32
+typedef unsigned int ps_socket_t;
+#else
+typedef int ps_socket_t;
+#endif
+
 typedef void(*ps_adv_cb_t)(const char* topic, const char* type, const char* node, void* data);
 typedef void(*ps_sub_cb_t)(const char* topic, const char* type, const char* node, void* data);
 typedef void(*ps_msg_def_cb_t)(const ps_message_definition_t* definition);
@@ -16,8 +22,8 @@ struct ps_node_t
 	ps_sub_t** subs;
 
 	//lets just have one big socket for everything I guess for the moment
-	int socket;
-	int mc_socket;// socket for multicast
+	ps_socket_t socket;
+	ps_socket_t mc_socket;// socket for multicast
 	unsigned short advertise_port;
 
 	// my core socket port and address

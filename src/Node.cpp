@@ -186,7 +186,6 @@ int ps_okay()
 	return 1;
 }
 
-typedef int SOCKET;
 #endif
 
 char* GetPrimaryIp()
@@ -206,7 +205,7 @@ char* GetPrimaryIp()
 	//assert(err != -1);
 
 	sockaddr_in name;
-	int namelen = sizeof(name);
+	socklen_t namelen = sizeof(name);
 	err = getsockname(sock, (sockaddr*)&name, &namelen);
 	//assert(err != -1);
 	char* ip = inet_ntoa(name.sin_addr);
@@ -293,11 +292,7 @@ void ps_node_init(ps_node_t* node, const char* name, const char* ip, bool broadc
 		return;
 	}
 
-#ifdef ARDUINO
-	unsigned int outlen = sizeof(sockaddr_in);
-#else
-	int outlen = sizeof(sockaddr_in);
-#endif
+	socklen_t outlen = sizeof(sockaddr_in);
 	sockaddr_in outaddr;
 	getsockname(node->socket, (sockaddr*)&outaddr, &outlen);
 	node->port = ntohs(outaddr.sin_port);
@@ -505,6 +500,19 @@ void ps_pub_publish_accept(ps_pub_t* pub, ps_client_t* client, const ps_message_
 	int sent_bytes = sendto(pub->node->socket, (const char*)data, off, 0, (sockaddr*)&address, sizeof(sockaddr_in));
 }
 
+#ifndef _WIN32
+#ifndef ARDUINO
+/// Returns the number of ticks since an undefined time (usually system startup).
+static uint64_t GetTickCount64()
+{
+	struct timespec ts;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+
+	return (uint64_t)(ts.tv_nsec / 1000000) + ((uint64_t)ts.tv_sec * 1000ull);
+}
+#endif
+#endif
 
 //returns nonzero if we got a message
 int ps_node_spin(ps_node_t* node)
@@ -521,7 +529,7 @@ int ps_node_spin(ps_node_t* node)
 
 	//need to also send out our occasional advertisements
 	//also send out keepalives which are still todo
-#ifndef ARUDINO
+#ifndef ARDUINO
 	unsigned long long now = GetTickCount64();
 	if (node->_last_advertise + 25 * 1000 < GetTickCount64())
 	{
