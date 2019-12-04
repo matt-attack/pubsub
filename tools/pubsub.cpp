@@ -5,6 +5,7 @@
 #include "src/Publisher.h"
 #include "src/Subscriber.h"
 #include "src/Serialization.h"
+#include "src/System.h"
 
 #include <stdio.h>
 
@@ -33,26 +34,6 @@ void print_help()
 	    "      list\n"
 		"      into (node name)\n");
 }
-
-//#include <Windows.h>
-
-#ifdef _WIN32
-#include <Windows.h>
-void sleep(unsigned int time_ms)
-{
-	Sleep(time_ms);
-}
-#else
-void sleep(unsigned int time_ms)
-{
-	//usleep(time_ms*1000);
-}
-
-unsigned int GetTickCount()
-{
-	return 0;
-}
-#endif
 
 void wait(ps_node_t* node)
 {
@@ -460,7 +441,7 @@ int main(int num_args, char** args)
 				while (ps_okay())
 				{
 					ps_node_spin(&node);
-					sleep(1);
+					ps_sleep(1);
 
 					// spin until we get the topic
 					auto info = _topics.find(topic);
@@ -510,7 +491,7 @@ int main(int num_args, char** args)
 				while (ps_okay())
 				{
 					ps_node_spin(&node);
-					sleep(1);
+					ps_sleep(1);
 
 					// spin until we get the topic
 					auto info = _topics.find(topic);
@@ -576,7 +557,7 @@ int main(int num_args, char** args)
 					//publish
 					printf("publishing\n");
 					ps_pub_publish(&pub, &msg);
-					sleep(1000);
+					ps_sleep(1000);
 				}
 			}
 		}

@@ -4,12 +4,12 @@
 #include <cstdlib>
 #include <stdio.h>
 
+#include <string.h>
+
 #include "../src/Node.h"
 #include "../src/Publisher.h"
 #include "../src/Subscriber.h"
-
-
-#include <Windows.h>
+#include "../src/System.h"
 
 void ps_msg_alloc(unsigned int size, ps_msg_t* out_msg)
 {
@@ -202,7 +202,7 @@ int main()
 		}
 
 		printf("Num subs: %i %i\n", ps_pub_get_subscriber_count(&string_pub), ps_pub_get_subscriber_count(&adv_pub));
-		Sleep(1000);
+		ps_sleep(1000);
 	}
 
 	ps_sub_destroy(&string_sub);
