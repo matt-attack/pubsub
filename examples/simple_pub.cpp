@@ -23,8 +23,12 @@ int main()
 	//ps_pub_publish(&string_pub, &msg);
 	ps_pub_publish_ez(&string_pub, &rmsg);
 
+	int i = 0;
 	while (ps_okay())
 	{
+		char value[20];
+		sprintf(value, "Hello %i", i++);
+		rmsg.value = value;
 		ps_pub_publish_ez(&string_pub, &rmsg);
 
 		ps_node_spin(&node);

@@ -90,6 +90,8 @@ void* ps_sub_deque(ps_sub_t* sub)
 		//printf("Warning: dequeued when there was nothing in queue\n");
 		return 0;
 	}
-
-	return sub->queue[--sub->queue_len];
+	
+	void* data = sub->queue[--sub->queue_len];
+	sub->queue[sub->queue_len] = 0;
+	return data;
 }

@@ -120,6 +120,10 @@ void ps_pub_publish(ps_pub_t* pub, ps_msg_t* msg)
 		}
 		pub->last_message = *msg;
 	}
+	else
+	{
+		free(msg->data);// todo use allocator
+	}
 }
 
 int ps_pub_get_subscriber_count(const ps_pub_t* pub)
