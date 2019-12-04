@@ -31,7 +31,7 @@ macro(generate_messages)
   set(MESSAGE_DEPS)
   foreach (_file ${ARG_FILES})
     add_custom_command(
-      COMMAND ${CMAKE_BINARY_DIR}/tools/pubsub_msg_gen.exe ${_file}
+      COMMAND ${CMAKE_CURRENT_BINARY_DIR}/pubsub_msg_gen.exe ${_file}
       WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/${ARG_DIRECTORY}/
       DEPENDS ${CMAKE_SOURCE_DIR}/${ARG_DIRECTORY}/${_file} pubsub_msg_gen
       OUTPUT ${CMAKE_SOURCE_DIR}/${ARG_DIRECTORY}/${_file}.h
