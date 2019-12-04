@@ -188,7 +188,7 @@ int main()
 		ps_pub_publish_ez(&adv_pub, &jmsg);
 
 		//ok, so lets add timeouts, make pubsub unsubscribe before it dies and figure out why the wires are getting crossed
-		Sleep(10);
+		ps_sleep(10);
 
 		ps_node_spin(&node);
 		//while (ps_node_spin(&node) == 0) { Sleep(1); }
