@@ -1,2 +1,2 @@
-﻿int buttons
+﻿int32 buttons
 float axes[5]

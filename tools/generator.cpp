@@ -3,33 +3,6 @@
 
 #include <map>
 
-
-
-/*
-// generation test
-ps_field_t std_msgs_String_fields[] = { { FT_String, "value", 1, 0 } };
-ps_message_definition_t std_msgs_String_def = { 123456789, "std_msgs/String", 1, std_msgs_String_fields};
-struct std_msgs_String
-{
-	char* value;
-};
-
-// todo, this might have a data lifetime issue
-void std_msgs_String_decode(const void* data, std_msgs_String* out)
-{
-	out->value = (char*)data;
-}
-
-ps_msg_t std_msgs_String_encode(const std_msgs_String* msg)
-{
-	int len = strlen(msg->value) + 1;
-	ps_msg_t omsg;
-	ps_msg_alloc(len, &omsg);
-	memcpy(ps_get_msg_start(omsg.data), msg->value, len);
-	return omsg;
-}
-*/
-
 #include <vector>
 #include <string>
 #include <sstream>
@@ -61,9 +34,29 @@ struct field
 
 	std::string getBaseType()
 	{
-		if (type == "int")
+		if (type == "int32")
 		{
 			return "int32_t";
+		}
+		if (type == "int16")
+		{
+			return "int16_t";
+		}
+		if (type == "int8")
+		{
+			return "int8_t";
+		}
+		if (type == "uint32")
+		{
+			return "uint32_t";
+		}
+		if (type == "uint16")
+		{
+			return "uint16_t";
+		}
+		if (type == "uint8")
+		{
+			return "uint8_t";
 		}
 		if (type == "string")
 		{
@@ -84,9 +77,29 @@ struct field
 
 	std::string getTypeEnum()
 	{
-		if (type == "int")
+		if (type == "int32")
 		{
 			return "FT_Int32";
+		}
+		if (type == "int16")
+		{
+			return "FT_Int16";
+		}
+		if (type == "int8")
+		{
+			return "FT_Int8";
+		}
+		if (type == "uint32")
+		{
+			return "FT_UInt32";
+		}
+		if (type == "uint16")
+		{
+			return "FT_UInt16";
+		}
+		if (type == "uint8")
+		{
+			return "FT_UInt8";
 		}
 		if (type == "string")
 		{
@@ -131,7 +144,7 @@ std::string generate(const char* definition, const char* name)
 	uint32_t hash = 0;
 	for (auto& line : lines)
 	{
-		for (int i = 0; i < line.length(); i++)
+		for (unsigned int i = 0; i < line.length(); i++)
 		{
 			hash *= std::abs(line[i]);
 			hash += i;
@@ -268,7 +281,7 @@ std::string generate(const char* definition, const char* name)
 		output += "void* " + type_name + "_decode(const void* data, ps_allocator_t* allocator)\n{\n";
 		output += "  char* p = (char*)data;\n";
 		output += "  int len = sizeof("+type_name+");\n";
-		for (int i = 0; i < fields.size(); i++)
+		for (size_t i = 0; i < fields.size(); i++)
 		{
 			if (fields[i].type == "string")
 			{
@@ -285,7 +298,7 @@ std::string generate(const char* definition, const char* name)
 		output += "  p = (char*)data;\n";// start from beginning again
 		output += "  "+type_name+"* out = (" + type_name + "*)allocator->alloc(len, allocator->context);\n";
 		// for now lets just decode non strings
-		for (int i = 0; i < fields.size(); i++)
+		for (size_t i = 0; i < fields.size(); i++)
 		{
 			if (fields[i].type != "string")
 			{
@@ -309,7 +322,7 @@ std::string generate(const char* definition, const char* name)
 		output += "  int len = sizeof(" + type_name + ");\n";
 		output += "  // for each string, add their length\n";
 		int n_str = 0;
-		for (int i = 0; i < fields.size(); i++)
+		for (size_t i = 0; i < fields.size(); i++)
 		{
 			if (fields[i].type == "string")
 			{
@@ -322,7 +335,7 @@ std::string generate(const char* definition, const char* name)
 		output += "  ps_msg_t omsg;\n";
 		output += "  ps_msg_alloc(len, &omsg);\n";
 		output += "  char* start = (char*)ps_get_msg_start(omsg.data);\n";
-		for (int i = 0; i < fields.size(); i++)
+		for (size_t i = 0; i < fields.size(); i++)
 		{
 			if (fields[i].type == "string")
 			{
@@ -345,8 +358,7 @@ std::string generate(const char* definition, const char* name)
 	output += "ps_message_definition_t " + type_name + "_def = { ";
 	output += std::to_string(hash) + ", \"" + name + "\", " + std::to_string(field_count) + ", " + type_name + "_fields, " + type_name + "_encode, " + type_name + "_decode };\n";
 
-
-	printf("Output:\n%s", output.c_str());
+	//printf("Output:\n%s", output.c_str());
 
 	return output;
 }
@@ -390,10 +402,10 @@ int main(int num_args, char** args)
 
 		//str = str.substr(3);
 
-		printf("%s\n", str.c_str());
+		//printf("%s\n", str.c_str());
 
 		std::string file_name = args[i];
-		for (int i = 0; i < file_name.size(); i++)
+		for (size_t i = 0; i < file_name.size(); i++)
 		{
 			if (file_name[i] == '\\')
 			{

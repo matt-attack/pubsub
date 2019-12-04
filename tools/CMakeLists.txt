@@ -1,6 +1,4 @@
-﻿# CMakeList.txt : CMake project for PubSubCMake, include source and define
-# project specific logic here.
-#
+﻿
 cmake_minimum_required (VERSION 3.8)
 
 # Add source to this project's executable.
@@ -13,16 +11,19 @@ add_dependencies(info pubsub)
 add_executable(pubsub_msg_gen "generator.cpp")
 
 if ( MSVC )
+if ( DEFINED CMAKE_NINJA_DEPTYPE_C )
+else ()
 set( bin_directory "Debug/")
+endif ()
 set( bin_extension ".exe")
-endif (MSVC)
+endif ( MSVC )
 
 # This is used to generate messages for a package
 macro(generate_messages)
   set(options "DIRECTORY" "TARGET")
   cmake_parse_arguments(ARG "" "${options}" "FILES" "" ${ARGN})
   if(ARG_UNPARSED_ARGUMENTS)
-    message(FATAL_ERROR "add_service_files() called with unused arguments: ${ARG_UNPARSED_ARGUMENTS}")
+    message(FATAL_ERROR "generate_messages() called with unused arguments: ${ARG_UNPARSED_ARGUMENTS}")
   endif()
 
   if(NOT ARG_DIRECTORY)

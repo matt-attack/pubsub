@@ -75,7 +75,7 @@ public:
 
 void tokenize(const std::string& input, std::vector<Token>& tokens)
 {
-	int index = 0;
+	unsigned int index = 0;
 	while (index < input.length())
 	{
 		// strip leading whitespace
@@ -173,7 +173,7 @@ void tokenize(const std::string& input, std::vector<Token>& tokens)
 	}
 }
 
-TokenTypes peek(const std::vector<Token>& tokens, int index)
+TokenTypes peek(const std::vector<Token>& tokens, unsigned int index)
 {
 	if (index >= tokens.size())
 	{
@@ -182,7 +182,7 @@ TokenTypes peek(const std::vector<Token>& tokens, int index)
 	return tokens[index].type;
 }
 
-void grab(const std::vector<Token>& tokens, int index, TokenTypes type)
+void grab(const std::vector<Token>& tokens, unsigned int index, TokenTypes type)
 {
 	if (index >= tokens.size())
 	{

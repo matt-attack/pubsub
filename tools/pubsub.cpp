@@ -1,25 +1,21 @@
-// PubSubCMake.cpp : Defines the entry point for the application.
-//
 
 #include "src/Node.h"
 #include "src/Publisher.h"
 #include "src/Subscriber.h"
 #include "src/Serialization.h"
 #include "src/System.h"
+#include "src/Parse.h"
+
+#include <iostream>
+#include <map>
+#include <vector>
 
 #include <stdio.h>
 
 #include <string>
-
 #include <string.h>
 
 using namespace std;
-
-void ps_msg_alloc(unsigned int size, ps_msg_t* out_msg)
-{
-	out_msg->len = size;
-	out_msg->data = (void*)((char*)malloc(size + sizeof(ps_msg_header)));
-}
 
 void print_help()
 {
@@ -38,17 +34,13 @@ void print_help()
 void wait(ps_node_t* node)
 {
 	printf("Waiting for responses...\n\n");
-	int start = GetTimeMs();
+	unsigned int start = GetTimeMs();
 	while (ps_okay() && start + 3000 > GetTimeMs())
 	{
 		ps_node_spin(node);
 	}
 }
 
-#include "src/Parse.h"
-#include <iostream>
-#include <map>
-#include <vector>
 struct Topic
 {
 	std::string type;
@@ -115,8 +107,8 @@ ps_msg_t serialize_value(const Value& value)
 	//okay, now serialize
 
 	// first iterate through and calculate size
-	int message_size = 0;
-	for (int i = 0; i < definition.num_fields; i++)
+	unsigned int message_size = 0;
+	for (unsigned int i = 0; i < definition.num_fields; i++)
 	{
 		auto& field = definition.fields[i];
 		Value& value = mapping[field.name];// its okay if it doesnt exist, it gets filled with Value()
@@ -171,7 +163,7 @@ ps_msg_t serialize_value(const Value& value)
 
 	// finally serialize
 	char* pos = (char*)ps_get_msg_start(msg.data);
-	for (int i = 0; i < definition.num_fields; i++)
+	for (unsigned int i = 0; i < definition.num_fields; i++)
 	{
 		auto& field = definition.fields[i];
 		const Value& value = mapping[field.name];
@@ -205,7 +197,7 @@ ps_msg_t serialize_value(const Value& value)
 				// just write the same value n times
 				int size = ps_field_sizes[field.type];
 				float data = value.type == None ? 0.0 : value.flt;
-				for (int i = 0; i < field.length; i++)
+				for (unsigned int i = 0; i < field.length; i++)
 				{
 					memcpy(pos, &data, size);
 					pos += size;
@@ -217,7 +209,7 @@ ps_msg_t serialize_value(const Value& value)
 				// just write the same value n times
 				int size = ps_field_sizes[field.type];
 				float data = value.type == None ? 0.0 : value.flt;
-				for (int i = 0; i < field.length; i++)
+				for (unsigned int i = 0; i < field.length; i++)
 				{
 					float data = i < value.arr.size() ? value.arr[i].flt : 0.0;
 					memcpy(pos, &data, size);
@@ -233,7 +225,7 @@ ps_msg_t serialize_value(const Value& value)
 				// just write the same value n times
 				int size = ps_field_sizes[field.type];
 				double data = value.type == None ? 0.0 : value.flt;
-				for (int i = 0; i < field.length; i++)
+				for (unsigned int i = 0; i < field.length; i++)
 				{
 					memcpy(pos, &data, size);
 					pos += size;
@@ -281,7 +273,7 @@ int main(int num_args, char** args)
 		else
 		{
 			auto& t = _topics[topic];
-			for (int i = 0; i < t.publishers.size(); i++)
+			for (unsigned int i = 0; i < t.publishers.size(); i++)
 			{
 				if (t.publishers[i] == node)
 					return;
@@ -305,7 +297,7 @@ int main(int num_args, char** args)
 		else
 		{
 			auto& t = _topics[topic];
-			for (int i = 0; i < t.subscribers.size(); i++)
+			for (unsigned int i = 0; i < t.subscribers.size(); i++)
 			{
 				if (t.subscribers[i] == node)
 					return;

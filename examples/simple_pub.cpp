@@ -6,12 +6,6 @@
 #include "../src/Subscriber.h"
 #include "../src/System.h"
 
-void ps_msg_alloc(unsigned int size, ps_msg_t* out_msg)
-{
-	out_msg->len = size;
-	out_msg->data = (void*)((char*)malloc(size + sizeof(ps_msg_header)));
-}
-
 #include "../msg/std_msgs__String.msg.h"
 
 int main()
