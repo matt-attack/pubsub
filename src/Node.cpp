@@ -192,7 +192,7 @@ char* GetPrimaryIp()
 {
 	//assert(buflen >= 16);
 
-	SOCKET sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	ps_socket_t sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 	//assert(sock != -1);
 
 	sockaddr_in serv;
@@ -502,6 +502,7 @@ void ps_pub_publish_accept(ps_pub_t* pub, ps_client_t* client, const ps_message_
 
 #ifndef _WIN32
 #ifndef ARDUINO
+#include <time.h>
 /// Returns the number of ticks since an undefined time (usually system startup).
 static uint64_t GetTickCount64()
 {
