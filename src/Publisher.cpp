@@ -2,6 +2,9 @@
 #include "Node.h"
 
 #include <stdio.h>
+#ifndef ANDROID
+#include <stdlib.h>
+#endif
 
 #include "Net.h"
 

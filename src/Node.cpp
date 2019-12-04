@@ -12,6 +12,8 @@
 
 #ifdef ARDUINO
 #include "Arduino.h"
+#else
+#include <stdlib.h>
 #endif
 
 // sends out a system query message for all nodes to advertise
