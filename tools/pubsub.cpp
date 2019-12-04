@@ -10,6 +10,8 @@
 
 #include <string>
 
+#include <string.h>
+
 using namespace std;
 
 void ps_msg_alloc(unsigned int size, ps_msg_t* out_msg)
