@@ -12,6 +12,11 @@ add_dependencies(info pubsub)
 
 add_executable(pubsub_msg_gen "generator.cpp")
 
+if ( MSVC )
+set( bin_directory "Debug/")
+set( bin_extension ".exe")
+endif (MSVC)
+
 # This is used to generate messages for a package
 macro(generate_messages)
   set(options "DIRECTORY" "TARGET")
@@ -31,7 +36,7 @@ macro(generate_messages)
   set(MESSAGE_DEPS)
   foreach (_file ${ARG_FILES})
     add_custom_command(
-      COMMAND ${CMAKE_CURRENT_BINARY_DIR}/pubsub_msg_gen.exe ${_file}
+      COMMAND ${CMAKE_CURRENT_BINARY_DIR}/${bin_directory}pubsub_msg_gen${bin_extension} ${_file}
       WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/${ARG_DIRECTORY}/
       DEPENDS ${CMAKE_SOURCE_DIR}/${ARG_DIRECTORY}/${_file} pubsub_msg_gen
       OUTPUT ${CMAKE_SOURCE_DIR}/${ARG_DIRECTORY}/${_file}.h
