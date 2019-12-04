@@ -4,9 +4,7 @@
 #include "../src/Node.h"
 #include "../src/Publisher.h"
 #include "../src/Subscriber.h"
-
-
-#include <Windows.h>
+#include "../src/System.h"
 
 void ps_msg_alloc(unsigned int size, ps_msg_t* out_msg)
 {
@@ -26,7 +24,7 @@ int main()
 
 	while (ps_okay())
 	{
-		Sleep(1);
+		ps_sleep(1);
 
 		ps_node_spin(&node);
 

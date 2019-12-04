@@ -4,9 +4,7 @@
 #include "../src/Node.h"
 #include "../src/Publisher.h"
 #include "../src/Subscriber.h"
-
-
-#include <Windows.h>
+#include "../src/System.h"
 
 void ps_msg_alloc(unsigned int size, ps_msg_t* out_msg)
 {
@@ -38,7 +36,7 @@ int main()
 		ps_node_spin(&node);
 
 		printf("Num subs: %i\n", ps_pub_get_subscriber_count(&string_pub));
-		Sleep(333);
+		ps_sleep(333);
 	}
 
 	ps_pub_destroy(&string_pub);
