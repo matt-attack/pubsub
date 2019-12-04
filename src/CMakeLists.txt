@@ -9,6 +9,7 @@ add_library (pubsub
   "Publisher.cpp"
   "Subscriber.cpp"
   "Serialization.cpp"
+  "System.cpp"
   )
 
 

@@ -38,8 +38,8 @@ void print_help()
 void wait(ps_node_t* node)
 {
 	printf("Waiting for responses...\n\n");
-	int start = GetTickCount();
-	while (ps_okay() && start + 3000 > GetTickCount())
+	int start = GetTimeMs();
+	while (ps_okay() && start + 3000 > GetTimeMs())
 	{
 		ps_node_spin(node);
 	}

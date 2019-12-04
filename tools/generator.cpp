@@ -184,7 +184,8 @@ std::string generate(const char* definition, const char* name)
 	// add header guard
 	output += "#pragma once\n\n";
 
-	output += "#include <stdint.h>\n\n";
+	output += "#include <stdint.h>\n";
+	output += "#include <string.h>\n\n;";
 
 	// now that we have these, generate stuff!, start with the struct
 	output += "struct " + type_name + "\n{\n";
