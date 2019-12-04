@@ -354,7 +354,7 @@ std::string generate(const char* definition, const char* name)
 #include <string>
 #include <fstream>
 #include <streambuf>
-void main(int num_args, char** args)
+int main(int num_args, char** args)
 {
 	//ok, so this reads in a list of files then converts those all to header files which define serialization and the
 	//message definition
@@ -378,7 +378,7 @@ void main(int num_args, char** args)
 		str.assign((std::istreambuf_iterator<char>(t)),
 			std::istreambuf_iterator<char>());
 
-		// remove a BOM if there is one
+		// todo remove a BOM if there is one
 		/*if (str.length() >= 3 && str[0] == 0xEF
 			&& str[1] == 0xBB && str[2] == 0xBF)
 		{
@@ -386,6 +386,9 @@ void main(int num_args, char** args)
 			//str[1] = ' ';
 			//str[2] = ' ';
 		}*/
+
+		//str = str.substr(3);
+
 		printf("%s\n", str.c_str());
 
 		std::string file_name = args[i];
@@ -422,4 +425,5 @@ void main(int num_args, char** args)
 
 	generate(test4, "std_msgs/Int");*/
 	//getchar();
+	return 0;
 }
