@@ -254,7 +254,7 @@ std::map<std::string, Topic> _topics;
 int main(int num_args, char** args)
 {
 	ps_node_t node;
-	ps_node_init(&node, "Query");
+	ps_node_init(&node, "Query", "", false);
 
 	// for running tests
 	//num_args = 5;
@@ -368,7 +368,7 @@ int main(int num_args, char** args)
 						//std::cout << info->first.c_str() << " " <<  info->second.type.c_str();
 						subscribed = true;
 
-						ps_node_create_subscriber(&node, info->first.c_str(), 0/*info->second.type.c_str()*/, &sub, 1, true);
+						ps_node_create_subscriber(&node, info->first.c_str(), 0/*info->second.type.c_str()*/, &sub, 1, true, 0, false);
 					}
 
 					if (!subscribed)
@@ -513,7 +513,7 @@ int main(int num_args, char** args)
 					{
 						printf("Found message description, publishing...\n");
 						// encode the message according to the definition and create the publisher
-						ps_node_create_publisher(&node, info->first.c_str(), &definition, &pub);
+						ps_node_create_publisher(&node, info->first.c_str(), &definition, &pub, true);
 
 						// then actually serialize the message
 						// build the input string from arguments

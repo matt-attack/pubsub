@@ -10,35 +10,35 @@
 #include "Net.h"
 
 
-void ps_send_subscribe(ps_sub_t* sub, ps_endpoint_t* ep)
+void ps_send_subscribe(struct ps_sub_t* sub, struct ps_endpoint_t* ep)
 {
 	// send da udp packet!
-	sockaddr_in address;
+	struct sockaddr_in address;
 	address.sin_family = AF_INET;
 	address.sin_addr.s_addr = htonl(ep->address);
 	address.sin_port = htons(ep->port);
 
 	char data[1200];
-	ps_sub_req_header_t* p = (ps_sub_req_header_t*)data;
+	struct ps_sub_req_header_t* p = (struct ps_sub_req_header_t*)data;
 	p->id = PS_UDP_PROTOCOL_SUBSCRIBE_REQUEST;
 	p->addr = sub->node->addr;
 	p->port = sub->node->port;
 	p->sub_id = sub->sub_id;
 
-	int off = sizeof(ps_sub_req_header_t);
+	int off = sizeof(struct ps_sub_req_header_t);
 	off += serialize_string(&data[off], sub->topic);
 	off += serialize_string(&data[off], sub->type ? sub->type->name : "");
 
 	//add topic name, node, and 
-	int sent_bytes = sendto(sub->node->socket, (const char*)data, off, 0, (sockaddr*)&address, sizeof(sockaddr_in));
+	int sent_bytes = sendto(sub->node->socket, (const char*)data, off, 0, (struct sockaddr*)&address, sizeof(struct sockaddr_in));
 	//printf("Subscribing...\n");
 }
 
-void ps_sub_destroy(ps_sub_t* sub)
+void ps_sub_destroy(struct ps_sub_t* sub)
 {
 	//send out unsub message
 	// send da udp packet!
-	sockaddr_in address;
+	struct sockaddr_in address;
 	address.sin_family = AF_INET;
 	address.sin_addr.s_addr = sub->node->advertise_addr;
 	address.sin_port = htons(sub->node->advertise_port);
@@ -54,12 +54,12 @@ void ps_sub_destroy(ps_sub_t* sub)
 	off += serialize_string(&data[off], sub->topic);
 	off += serialize_string(&data[off], sub->type ? sub->type->name : "");
 
-	int sent_bytes = sendto(sub->node->socket, (const char*)data, off, 0, (sockaddr*)&address, sizeof(sockaddr_in));
+	int sent_bytes = sendto(sub->node->socket, (const char*)data, off, 0, (struct sockaddr*)&address, sizeof(struct sockaddr_in));
 
 	//remove it from my list of subs
 	sub->node->num_subs--;
-	ps_sub_t** old_subs = sub->node->subs;
-	sub->node->subs = (ps_sub_t**)malloc(sizeof(ps_sub_t*)*sub->node->num_subs);
+	struct ps_sub_t** old_subs = sub->node->subs;
+	sub->node->subs = (struct ps_sub_t**)malloc(sizeof(struct ps_sub_t*)*sub->node->num_subs);
 	int ind = 0;
 	for (unsigned int i = 0; i < sub->node->num_subs+1; i++)
 	{
@@ -83,7 +83,7 @@ void ps_sub_destroy(ps_sub_t* sub)
 	free(sub->queue);
 }
 
-void* ps_sub_deque(ps_sub_t* sub)
+void* ps_sub_deque(struct ps_sub_t* sub)
 {
 	if (sub->queue_len == 0)
 	{

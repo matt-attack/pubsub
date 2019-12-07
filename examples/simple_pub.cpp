@@ -1,44 +1,41 @@
 #include <cstdlib>
 #include <stdio.h>
 
-#include "../src/Node.h"
-#include "../src/Publisher.h"
-#include "../src/Subscriber.h"
+#include "../high_level_api/Node.h"
 #include "../src/System.h"
 
 #include "../msg/std_msgs__String.msg.h"
 
+namespace std_msgs
+{
+	struct String : public std_msgs__String
+	{
+		static const ps_message_definition_t* GetDefinition()
+		{
+			return &std_msgs__String_def;
+		}
+	};
+}
+
 int main()
 {
-	ps_node_t node;
-	ps_node_init(&node, "simple_publisher", "", true);
+	pubsub::Node node("simple_publisher", true);
 
-	ps_pub_t string_pub;
-	ps_node_create_publisher(&node, "/data", &std_msgs__String_def, &string_pub, true);
-
-	// user is responsible for lifetime of the message they publish
-	std_msgs__String rmsg;
-	rmsg.value = "Hello";
-	//ps_msg_t msg = std_msgs__String_encode(&rmsg);
-	//ps_pub_publish(&string_pub, &msg);
-	ps_pub_publish_ez(&string_pub, &rmsg);
+	pubsub::Publisher<std_msgs::String> string_pub(node, "/data");
 
 	int i = 0;
 	while (ps_okay())
 	{
+		std_msgs::String msg;
 		char value[20];
 		sprintf(value, "Hello %i", i++);
-		rmsg.value = value;
-		ps_pub_publish_ez(&string_pub, &rmsg);
+		msg.value = value;
+		string_pub.publish(msg);
 
-		ps_node_spin(&node);
+		ps_node_spin(node.getNode());
 
-		printf("Num subs: %i\n", ps_pub_get_subscriber_count(&string_pub));
 		ps_sleep(333);
 	}
-
-	ps_pub_destroy(&string_pub);
-	ps_node_destroy(&node);
 
     return 0;
 }

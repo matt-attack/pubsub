@@ -1,4 +1,4 @@
-#include <cstdlib>
+//#include <cstdlib>
 #include <stdio.h>
 
 #include "../src/Node.h"
@@ -10,11 +10,11 @@
 
 int main()
 {
-	/*ps_node_t node;
+	struct ps_node_t node;
 	ps_node_init(&node, "simple_subscriber", "", true);
 
-	ps_sub_t string_sub;
-	ps_node_create_subscriber(&node, "/data", &std_msgs__String_def, &string_sub, 10);
+	struct ps_sub_t string_sub;
+	ps_node_create_subscriber(&node, "/data", &std_msgs__String_def, &string_sub, 10, false, 0, true);
 
 	while (ps_okay())
 	{
@@ -23,7 +23,8 @@ int main()
 		ps_node_spin(&node);
 
 		// our sub has a message definition, so the queue contains real messages
-		while (std_msgs__String* data = (std_msgs__String*)ps_sub_deque(&string_sub))
+		struct std_msgs__String* data;
+		while (data = (struct std_msgs__String*)ps_sub_deque(&string_sub))
 		{
 			// user is responsible for freeing the message and its arrays
 			printf("Got message: %s\n", data->value);
@@ -33,7 +34,7 @@ int main()
 	}
 
 	ps_sub_destroy(&string_sub);
-	ps_node_destroy(&node);*/
+	ps_node_destroy(&node);
 
     return 0;
 }

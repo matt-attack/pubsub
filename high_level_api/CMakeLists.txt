@@ -4,13 +4,8 @@
 cmake_minimum_required (VERSION 3.8)
 
 # Add source to this project's executable.
-add_library (pubsub 
-  "Node.c"
-  "Publisher.c"
-  "Subscriber.c"
-  "Serialization.c"
-  "System.c"
+include_directories("../")
+
+add_library (pubsub_cpp
+  "Node.cpp"
   )
-
-
-# TODO: Add tests and install targets if needed.

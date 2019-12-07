@@ -25,17 +25,17 @@ struct field
 
 
 
-int ps_serialize_message_definition(void* start, const ps_message_definition_t* definition)
+int ps_serialize_message_definition(void* start, const struct ps_message_definition_t* definition)
 {
 	//ok, write out number of fields
-	def_header* hdr = (def_header*)start;
+	struct def_header* hdr = (struct def_header*)start;
 	hdr->hash = definition->hash;
 	hdr->num_fields = definition->num_fields;
 
-	char* cur = ((char*)start) + sizeof(def_header);
+	char* cur = ((char*)start) + sizeof(struct def_header);
 	for (unsigned int i = 0; i < definition->num_fields; i++)
 	{
-		field* f = (field*)cur;
+		struct field* f = (struct field*)cur;
 		f->type = definition->fields[i].type;
 		f->length = definition->fields[i].length;
 		f->content_length = definition->fields[i].content_length;
@@ -50,21 +50,21 @@ int ps_serialize_message_definition(void* start, const ps_message_definition_t* 
 	return cur - (char*)start;
 }
 
-void ps_deserialize_message_definition(const void * start, ps_message_definition_t * definition)
+void ps_deserialize_message_definition(const void * start, struct ps_message_definition_t * definition)
 {
 	//ok, write out number of fields
-	def_header* hdr = (def_header*)start;
+	struct def_header* hdr = (struct def_header*)start;
 	definition->hash = hdr->hash;
 	definition->num_fields = hdr->num_fields;
 	definition->decode = 0;
 	definition->encode = 0;
 
-	definition->fields = (ps_field_t*)malloc(sizeof(ps_field_t)*definition->num_fields);
+	definition->fields = (struct ps_field_t*)malloc(sizeof(struct ps_field_t)*definition->num_fields);
 
-	char* cur = ((char*)start) + sizeof(def_header);
+	char* cur = ((char*)start) + sizeof(struct def_header);
 	for (unsigned int i = 0; i < definition->num_fields; i++)
 	{
-		field* f = (field*)cur;
+		struct field* f = (struct field*)cur;
 		definition->fields[i].type = (ps_field_types)f->type;
 		definition->fields[i].length = f->length;
 		definition->fields[i].content_length = f->content_length;
@@ -76,12 +76,12 @@ void ps_deserialize_message_definition(const void * start, ps_message_definition
 	}
 }
 
-const char* ps_deserialize_internal(const char* data, const ps_field_t* fields, int num_fields, int indentation = 0)
+const char* ps_deserialize_internal(const char* data, const struct ps_field_t* fields, int num_fields, int indentation)
 {
 	//ok, lets work our way through this
 	for (int i = 0; i < num_fields; i++)
 	{
-		const ps_field_t* field = &fields[i];
+		const struct ps_field_t* field = &fields[i];
 		if (field->type == FT_String)
 		{
 			// for now lets just null terminate strings
@@ -217,14 +217,14 @@ const char* ps_deserialize_internal(const char* data, const ps_field_t* fields, 
 	return data;
 }
 
-void ps_deserialize_print(const void * data, const ps_message_definition_t* definition)
+void ps_deserialize_print(const void * data, const struct ps_message_definition_t* definition)
 {
 	ps_deserialize_internal((char*)data, definition->fields, definition->num_fields, 0);
 }
 
 void* ps_get_msg_start(void* data)
 {
-	return (void*)((char*)data + sizeof(ps_msg_header));
+	return (void*)((char*)data + sizeof(struct ps_msg_header));
 }
 
 const char* TypeToString(ps_field_types type)
@@ -262,10 +262,10 @@ const char* TypeToString(ps_field_types type)
 	}
 }
 
-void ps_print_definition(const ps_message_definition_t* definition)
+void ps_print_definition(const struct ps_message_definition_t* definition)
 {
 	printf("%s\n\n", definition->name);
-	for (int i = 0; i < definition->num_fields; i++)
+	for (unsigned int i = 0; i < definition->num_fields; i++)
 	{
 		const char* type_name = "";
 		ps_field_types type = definition->fields[i].type;
@@ -284,8 +284,8 @@ void ps_print_definition(const ps_message_definition_t* definition)
 	}
 }
 
-void ps_msg_alloc(unsigned int size, ps_msg_t* out_msg)
+void ps_msg_alloc(unsigned int size, struct ps_msg_t* out_msg)
 {
 	out_msg->len = size;
-	out_msg->data = (void*)((char*)malloc(size + sizeof(ps_msg_header)));
+	out_msg->data = (void*)((char*)malloc(size + sizeof(struct ps_msg_header)));
 }

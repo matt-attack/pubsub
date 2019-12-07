@@ -9,6 +9,7 @@ project ("pubsub")
 add_subdirectory("tools")
 add_subdirectory("src")
 add_subdirectory("examples")
+add_subdirectory("high_level_api")
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)

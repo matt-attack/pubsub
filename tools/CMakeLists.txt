@@ -4,12 +4,15 @@ cmake_minimum_required (VERSION 3.8)
 # Add source to this project's executable.
 include_directories("../")
 
+# Build the debugging tool
 add_executable (info "pubsub.cpp")
 target_link_libraries(info pubsub)
 add_dependencies(info pubsub)
 
+# Build the serialization generator
 add_executable(pubsub_msg_gen "generator.cpp")
 
+# Hacks for getting the macro below to work
 if ( MSVC )
 if ( DEFINED CMAKE_NINJA_DEPTYPE_C )
 else ()
@@ -57,7 +60,7 @@ generate_messages(FILES
 )
 
 
-
+# Build the test program
 add_executable(pubsubtest "PubSubTest.cpp")
 target_link_libraries(pubsubtest pubsub)
 add_dependencies(pubsubtest pubsub pubsub_msgs)
