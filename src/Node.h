@@ -4,19 +4,26 @@ struct ps_sub_t;
 struct ps_pub_t;
 struct ps_message_definition_t;
 
+#ifndef _WIN32
+typedef unsigned int ps_socket_t;
+#else
+typedef int ps_socket_t;
+#endif
+
 typedef void(*ps_adv_cb_t)(const char* topic, const char* type, const char* node, void* data);
 typedef void(*ps_sub_cb_t)(const char* topic, const char* type, const char* node, void* data);
+typedef void(*ps_msg_def_cb_t)(const ps_message_definition_t* definition);
 struct ps_node_t
 {
 	const char* name;
-	int num_pubs;
+	unsigned int num_pubs;
 	ps_pub_t** pubs;
-	int num_subs;
+	unsigned int num_subs;
 	ps_sub_t** subs;
 
 	//lets just have one big socket for everything I guess for the moment
-	int socket;
-	int mc_socket;// socket for multicast
+	ps_socket_t socket;
+	ps_socket_t mc_socket;// socket for multicast
 	unsigned short advertise_port;
 
 	// my core socket port and address
@@ -29,6 +36,10 @@ struct ps_node_t
 	//optional callbacks
 	ps_adv_cb_t adv_cb;
 	ps_sub_cb_t sub_cb;
+	ps_msg_def_cb_t def_cb;
+
+	//implementation data
+	unsigned long long _last_advertise;
 };
 
 //todo move elsewhere probably
@@ -72,13 +83,26 @@ struct ps_subscribe_accept_t
 };
 #pragma pack(pop)
 
+// defines a transport implementation
+//so when you request a subscription, you would request a transport type 
+//then the pub can either do it, or fall back to default UDP transport
+
+typedef void(*ps_transport_fn_pub_t)(const char* topic, const char* type, const char* node, void* data);
+typedef void(*ps_transport_fn_spin_t)(const char* topic, const char* type, const char* node, void* data);
+struct ps_transport_t
+{
+	unsigned short uuid;// unique id for this transport type, listed in advertisements for it
+	ps_transport_fn_pub_t pub;
+	ps_transport_fn_spin_t spin;
+};
+
 //not threadsafe, but thats obvious isnt it
 // set broadcast to true to use that for advertising instead of multicast
-void ps_node_init(ps_node_t* node, const char* name, const char* ip, bool broadcast = false);
+void ps_node_init(ps_node_t* node, const char* name, const char* ip = "", bool broadcast = false);
 
-void ps_node_create_publisher(ps_node_t* node, const char* topic, const ps_message_definition_t* type, ps_pub_t* pub);
+void ps_node_create_publisher(ps_node_t* node, const char* topic, const ps_message_definition_t* type, ps_pub_t* pub, bool latched = false);
 
-void ps_node_create_subscriber(ps_node_t* node, const char* topic, const char* type,
+void ps_node_create_subscriber(ps_node_t* node, const char* topic, const ps_message_definition_t* type,
 	ps_sub_t* sub,
 	unsigned int queue_size = 1,
 	bool want_message_def = false,
@@ -91,5 +115,30 @@ int serialize_string(char* data, const char* str);
 // sends out a system query message for all nodes to advertise
 void ps_node_system_query(ps_node_t* node);
 
+void ps_node_query_message_definition(ps_node_t* node, const char* message);
 
-void ps_node_set_advertise_cb(ps_node_t* node, ps_adv_cb_t cb, void* data);
+
+int ps_okay();
+
+void ps_node_destroy(ps_node_t* node);
+
+
+// implementation types
+
+enum
+{
+	PS_UDP_PROTOCOL_DATA = 2,
+	PS_UDP_PROTOCOL_KEEP_ALIVE = 3,
+	PS_UDP_PROTOCOL_SUBSCRIBE_ACCEPT = 4,
+	PS_UDP_PROTOCOL_SUBSCRIBE_REQUEST = 1,
+	PS_UDP_PROTOCOL_MESSAGE_DEFINITION = 8,
+};
+
+enum
+{
+	PS_DISCOVERY_PROTOCOL_SUBSCRIBE_QUERY = 1,
+	PS_DISCOVERY_PROTOCOL_ADVERTISE = 2,
+	PS_DISCOVERY_PROTOCOL_UNSUBSCRIBE = 3,
+	PS_DISCOVERY_PROTOCOL_QUERY_ALL = 4,
+	PS_DISCOVERY_PROTOCOL_QUERY_MSG_DEFINITION = 5// used for getting message formats
+};

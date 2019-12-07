@@ -3,6 +3,9 @@
 #include "Node.h"
 
 #include <stdio.h>
+#ifndef ANDROID
+#include <stdlib.h>
+#endif
 
 #include "Net.h"
 
@@ -12,24 +15,23 @@ void ps_send_subscribe(ps_sub_t* sub, ps_endpoint_t* ep)
 	// send da udp packet!
 	sockaddr_in address;
 	address.sin_family = AF_INET;
-	address.sin_addr.s_addr = htonl(ep->address);// todo put this port in a global
+	address.sin_addr.s_addr = htonl(ep->address);
 	address.sin_port = htons(ep->port);
 
 	char data[1200];
 	ps_sub_req_header_t* p = (ps_sub_req_header_t*)data;
-	p->id = 1;
+	p->id = PS_UDP_PROTOCOL_SUBSCRIBE_REQUEST;
 	p->addr = sub->node->addr;
-	p->port = sub->node->port;// todo need to assign port uniquely per node also replace me with my port
-							//also add other indo...
+	p->port = sub->node->port;
 	p->sub_id = sub->sub_id;
 
 	int off = sizeof(ps_sub_req_header_t);
 	off += serialize_string(&data[off], sub->topic);
-	off += serialize_string(&data[off], sub->type);
+	off += serialize_string(&data[off], sub->type ? sub->type->name : "");
 
 	//add topic name, node, and 
 	int sent_bytes = sendto(sub->node->socket, (const char*)data, off, 0, (sockaddr*)&address, sizeof(sockaddr_in));
-	printf("Subscribing...\n");
+	//printf("Subscribing...\n");
 }
 
 void ps_sub_destroy(ps_sub_t* sub)
@@ -42,7 +44,7 @@ void ps_sub_destroy(ps_sub_t* sub)
 	address.sin_port = htons(sub->node->advertise_port);
 
 	char data[1200];
-	data[0] = 3;
+	data[0] = PS_DISCOVERY_PROTOCOL_UNSUBSCRIBE;
 	int* addr = (int*)&data[1];
 	*addr = sub->node->addr;
 	unsigned short* port = (unsigned short*)&data[5];
@@ -50,7 +52,7 @@ void ps_sub_destroy(ps_sub_t* sub)
 
 	int off = 7;
 	off += serialize_string(&data[off], sub->topic);
-	off += serialize_string(&data[off], sub->type);
+	off += serialize_string(&data[off], sub->type ? sub->type->name : "");
 
 	int sent_bytes = sendto(sub->node->socket, (const char*)data, off, 0, (sockaddr*)&address, sizeof(sockaddr_in));
 
@@ -59,17 +61,16 @@ void ps_sub_destroy(ps_sub_t* sub)
 	ps_sub_t** old_subs = sub->node->subs;
 	sub->node->subs = (ps_sub_t**)malloc(sizeof(ps_sub_t*)*sub->node->num_subs);
 	int ind = 0;
-	for (int i = 0; i < sub->node->num_subs; i++)
+	for (unsigned int i = 0; i < sub->node->num_subs+1; i++)
 	{
-		if (old_subs[ind] == sub)
+		if (old_subs[i] == sub)
 		{
 			//skip me
 		}
 		else
 		{
-			sub->node->subs[i] = old_subs[ind];
+			sub->node->subs[ind++] = old_subs[i];
 		}
-		ind++;
 	}
 	free(old_subs);
 
@@ -89,6 +90,8 @@ void* ps_sub_deque(ps_sub_t* sub)
 		//printf("Warning: dequeued when there was nothing in queue\n");
 		return 0;
 	}
-	;
-	return sub->queue[--sub->queue_len];
+	
+	void* data = sub->queue[--sub->queue_len];
+	sub->queue[sub->queue_len] = 0;
+	return data;
 }

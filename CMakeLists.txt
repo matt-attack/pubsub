@@ -8,6 +8,7 @@ project ("pubsub")
 # Include sub-projects.
 add_subdirectory("tools")
 add_subdirectory("src")
+add_subdirectory("examples")
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)

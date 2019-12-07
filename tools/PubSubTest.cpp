@@ -1,5 +1,3 @@
-// PubSub.cpp : Defines the entry point for the console application.
-//
 
 #include <cstdlib>
 #include <stdio.h>
@@ -7,44 +5,25 @@
 #include "../src/Node.h"
 #include "../src/Publisher.h"
 #include "../src/Subscriber.h"
+#include "../src/System.h"
 
-// simple pub sub library implementation in plain C, with lightweight version for embedded
-// serialization is handled in a different api, this is just the protocol handling blobs
 
-void ps_msg_alloc(unsigned int size, ps_msg_t* out_msg)
-{
-	out_msg->len = size;
-	out_msg->data = (void*)((char*)malloc(size + sizeof(ps_msg_header)));
-}
-
-void* ps_get_msg_start(void* data)
-{
-	return (void*)((char*)data + sizeof(ps_msg_header));
-}
-
-#include <Windows.h>
-
+#include "../msg/std_msgs__Joy.msg.h"
+#include "../msg/std_msgs__String.msg.h"
 
 int main()
 {
 	ps_node_t node;
-	ps_node_init(&node, "pub", "192.168.0.104", false);
-
-	ps_field_t field;
-	field.type = FT_String;
-	field.name = "data";
-	field.content_length = field.length = 0;
-	ps_message_definition_t def;
-	def.name = "std_msgs/String";
-	def.fields = &field;
-	def.num_fields = 1;
-	def.hash = 0;//todo do something with this
+	ps_node_init(&node, "pub", "", true);
 
 	ps_pub_t string_pub;
-	ps_node_create_publisher(&node, "/data", &def, &string_pub);
+	ps_node_create_publisher(&node, "/data", &std_msgs__String_def, &string_pub, true);
+
+	ps_pub_t adv_pub;
+	ps_node_create_publisher(&node, "/joy", &std_msgs__Joy_def, &adv_pub);
 
 	ps_sub_t string_sub;
-	ps_node_create_subscriber(&node, "/data", "std_msgs/String", &string_sub);
+	ps_node_create_subscriber(&node, "/data", &std_msgs__String_def, &string_sub, 10);
 
 	// wait until we get the subscription request
 	while (ps_pub_get_subscriber_count(&string_pub) == 0) 
@@ -54,31 +33,49 @@ int main()
 
 	printf("Ok, stopping waiting as we got our subscriber\n");
 
-	//ok, need to handle received messages now...
+	// user is responsible for lifetime of the message they publish
+	std_msgs__String rmsg;
+	rmsg.value = "Hello";
+	//where does the allocation happen? probably should be in teh encode function which should return the ps_msg_t
+	//ps_msg_t msg = std_msgs__String_encode(&rmsg);
+	//ps_pub_publish(&string_pub, &msg);
+	ps_pub_publish_ez(&string_pub, &rmsg);
 
-	ps_msg_t msg;
-	ps_msg_alloc(6, &msg);
-
-	while (true)
+	while (ps_okay())
 	{
-		//need to make sure to reserve n bytes for the header
-		memcpy(ps_get_msg_start(msg.data), "hello", 6);
-		ps_pub_publish(&string_pub, &msg);
+		rmsg.value = "Woah 2";
+		ps_pub_publish_ez(&string_pub, &rmsg);
 
-		Sleep(10);
+		std_msgs__Joy jmsg;
+		jmsg.axes[0] = 0.0;
+		jmsg.axes[1] = 0.25;
+		jmsg.axes[2] = 0.5;
+		jmsg.axes[3] = 0.75;
+		jmsg.buttons = 1234;
+
+		ps_pub_publish_ez(&adv_pub, &jmsg);
+
+		//ok, so lets add timeouts, make pubsub unsubscribe before it dies and figure out why the wires are getting crossed
+		ps_sleep(10);
 
 		ps_node_spin(&node);
-		//while (ps_node_spin(&node) == 0) {}
+		//while (ps_node_spin(&node) == 0) { Sleep(1); }
 
-		char* data = (char*)ps_sub_deque(&string_sub);
+		// our sub has a message definition, so the queue contains real messages
+		while (std_msgs__String* data = (std_msgs__String*)ps_sub_deque(&string_sub))
+		{
+			printf("Got message: %s\n", data->value);
+			free(data->value);
+			free(data);//todo use allocator free
+		}
 
-		free(data);//todo use allocator free
-		Sleep(1000);
+		printf("Num subs: %i %i\n", ps_pub_get_subscriber_count(&string_pub), ps_pub_get_subscriber_count(&adv_pub));
+		ps_sleep(1000);
 	}
 
 	ps_sub_destroy(&string_sub);
 	ps_pub_destroy(&string_pub);
-	//ps_node_destroy(&node);
+	ps_node_destroy(&node);
 
     return 0;
 }
