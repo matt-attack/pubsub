@@ -6,17 +6,6 @@
 
 #include "../msg/std_msgs__String.msg.h"
 
-namespace std_msgs
-{
-	struct String : public std_msgs__String
-	{
-		static const ps_message_definition_t* GetDefinition()
-		{
-			return &std_msgs__String_def;
-		}
-	};
-}
-
 int main()
 {
 	pubsub::Node node("simple_publisher", true);
@@ -32,7 +21,7 @@ int main()
 		msg.value = value;
 		string_pub.publish(msg);
 
-		ps_node_spin(node.getNode());
+		node.spin();
 
 		ps_sleep(333);
 	}

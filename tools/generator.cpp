@@ -358,6 +358,15 @@ std::string generate(const char* definition, const char* name)
 	output += "struct ps_message_definition_t " + type_name + "_def = { ";
 	output += std::to_string(hash) + ", \"" + name + "\", " + std::to_string(field_count) + ", " + type_name + "_fields, " + type_name + "_encode, " + type_name + "_decode };\n";
 
+	std::string ns = "std_msgs";//todo parse me out
+	std::string raw_name = split(name, '_').back();
+	output += "\n#ifdef __cplusplus\n";
+	output += "namespace " + ns + "\n{\n";
+	output += "struct " + raw_name + ": public " + type_name + "\n{\n";
+	output += "  static const ps_message_definition_t* GetDefinition()\n  {\n";
+	output += "    return &" + type_name + "_def;\n  }\n";
+	output += "  };\n}\n";
+	output += "#endif\n";
 	//printf("Output:\n%s", output.c_str());
 
 	return output;

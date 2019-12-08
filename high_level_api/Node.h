@@ -3,6 +3,7 @@
 #include "../src/Node.h"
 #include "../src/Publisher.h"
 #include "../src/Subscriber.h"
+#include "../src/System.h"
 
 
 #include <vector>
@@ -93,7 +94,7 @@ void initialize(const char** args, const int argc)
 // valid names must be all lowercase and only
 std::string validate_name(const std::string& name, bool remove_leading_slashes = false)
 {
-	for (int i = 0; i < name.length(); i++)
+	for (size_t i = 0; i < name.length(); i++)
 	{
 		if (name[i] >= 'A' && name[i] <= 'Z')
 		{
@@ -114,14 +115,22 @@ std::string validate_name(const std::string& name, bool remove_leading_slashes =
 
 // safe to use each node in a different thread after initialize is called
 // making calls to functions on the same node is not thread safe
+class SubscriberBase;
+class Spinner;
 class Node
 {
+	friend class Spinner;
+	friend class SubscriberBase;
 	std::string original_name_;
 	std::string real_name_;
 	std::string namespace_;
 
 	ps_node_t node_;
 public:
+	// todo fix me being public
+	// probably need to add advertise and subscribe functions to me
+	std::vector<SubscriberBase*> subscribers_;
+
 	Node(const std::string& name, bool use_broadcast = false) : original_name_(name)
 	{
 		// look up the namespace for this node (todo)
@@ -162,20 +171,12 @@ public:
 	{
 		return namespace_;
 	}
-};
 
-/*#include "../msg/std_msgs__Joy.msg.h"
-
-namespace std_msgs
-{
-struct Joy : public std_msgs__Joy
-{
-	static const ps_message_definition_t* GetDefinition()
+	inline int spin()
 	{
-		return &std_msgs__Joy_def;
+		return ps_node_spin(&node_);
 	}
 };
-}*/
 
 template<class T> 
 class Publisher
@@ -191,10 +192,9 @@ public:
 		// clean up the topic
 		std::string real_topic = validate_name(topic_);
 
-		// todo look up remapping
+		// look up remapping
 		remapped_topic_ = handle_remap(real_topic, "/" + node.getNamespace());
 
-		// todo, how do I get the message definition?
 		ps_node_create_publisher(node.getNode(), remapped_topic_.c_str(), T::GetDefinition(), &publisher_, latched);
 	}
 
@@ -217,31 +217,56 @@ public:
 };
 
 class Spinner;
+class SubscriberBase
+{
+	friend class Spinner;
+protected:
+	ps_sub_t subscriber_;
+
+	std::function<void(void*)> raw_cb_;
+public:
+
+	ps_sub_t* GetSub()
+	{
+		return &subscriber_;
+	}
+};
+
 template<class T> 
-class Subscriber
+class Subscriber: public SubscriberBase
 {
 	friend class Spinner;
 	std::string remapped_topic_;
 
-	ps_sub_t subscriber_;
+	//ps_sub_t subscriber_;
 
 	std::function<void(T*)> cb_;
 public:
 	Subscriber(Node& node, const std::string& topic, std::function<void(T*)> cb, unsigned int queue_size = 1) : cb_(cb)
 	{
 		// clean up the topic
-		std::string topic = validate_name(topic_);
+		std::string validated_topic = validate_name(topic);
 
-		// todo look up remapping
-		remapped_topic_ = handle_remap(topic, "/" + node.getNamespace());
+		remapped_topic_ = handle_remap(validated_topic, "/" + node.getNamespace());
 
-		// todo how to get message definition?
 		ps_node_create_subscriber(node.getNode(), remapped_topic_.c_str(), T::GetDefinition(), &subscriber_, queue_size, false, 0, true);
+
+		node.subscribers_.push_back(this);
+
+		raw_cb_ = [this](void* msg)
+		{
+			cb_((T*)msg);
+		};
 	}
 
 	~Subscriber()
 	{
 		ps_sub_destroy(&subscriber_);
+
+		// todo remove me from the list
+		//auto it = std::find(node.subscribers_.begin(), node.subscribers_.end(), 5);
+		//if (it != node.subscribers_.end())
+		//	node.subscribers_.erase(it);
 	}
 
 	T* deque()
@@ -254,8 +279,6 @@ public:
 		return remapped_topic_;
 	}
 };
-
-#include <Windows.h>
 
 // todo use smart pointers
 class Spinner
@@ -281,11 +304,19 @@ public:
 					if (ps_node_spin(node->getNode()))
 					{
 						// we got a message, now call a subscriber
+						for (int i = 0; i < node->subscribers_.size(); i++)
+						{
+							auto sub = node->subscribers_[i]->GetSub();
+							while (void* msg = ps_sub_deque(sub))
+							{
+								node->subscribers_[i]->raw_cb_(msg);
+							}
+						}
 					}
 				}
 				list_mutex_.unlock();
 
-				Sleep(10);// make this configurable?
+				ps_sleep(10);// make this configurable?
 			}
 		});
 	}
@@ -295,6 +326,11 @@ public:
 		list_mutex_.lock();
 		nodes_.push_back(&node);
 		list_mutex_.unlock();
+	}
+
+	void wait()
+	{
+		thread_.join();
 	}
 
 	void stop()
