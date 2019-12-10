@@ -361,17 +361,73 @@ std::string generate(const char* definition, const char* name)
 	std::string ns = "std_msgs";//todo parse me out
 	std::string raw_name = split(name, '_').back();
 	output += "\n#ifdef __cplusplus\n";
+	output += "#include <memory>\n";
 	output += "namespace " + ns + "\n{\n";
 	output += "struct " + raw_name + ": public " + type_name + "\n{\n";
+	// create destructor
+	bool added_destructor = false;
+	for (size_t i = 0; i < fields.size(); i++)
+	{
+		if (fields[i].type == "string")
+		{
+			if (added_destructor == false)
+			{
+				added_destructor = true;
+				output += "  ~" + raw_name + "()\n  {\n";
+			}
+			output += "    if (this->" + fields[i].name + ")\n";
+			output += "      free(this->" + fields[i].name + ");\n";
+		}
+	}
+	if (added_destructor)
+	{
+		output += "  }\n";
+
+		// add a copy constructor and constructor now...
+		output += "  " + raw_name + "(const " + raw_name + "& obj)\n  {\n";
+		for (size_t i = 0; i < fields.size(); i++)
+		{
+			if (fields[i].type == "string")
+			{
+				output += "    " + fields[i].name + " = new char[strlen(obj." + fields[i].name + ") + 1];\n";
+				output += "    strcpy(" + fields[i].name + ", obj." + fields[i].name + ");\n";
+			}
+		}
+		output += "  }\n";
+		// todo maybe just use stl types for strings/arrays?
+
+		output += "  " + raw_name + "& operator=(const " + raw_name + "& obj)\n  {\n";
+		for (size_t i = 0; i < fields.size(); i++)
+		{
+			if (fields[i].type == "string")
+			{
+				output += "    " + fields[i].name + " = new char[strlen(obj." + fields[i].name + ") + 1];\n";
+				output += "    strcpy(" + fields[i].name + ", obj." + fields[i].name + ");\n";
+			}
+		}
+		output += "    return *this;\n  }\n";
+
+		// mark all pointers as null to avoid crashes
+		output += "  " + raw_name + "()\n  {\n";
+		for (size_t i = 0; i < fields.size(); i++)
+		{
+			if (fields[i].type == "string")
+			{
+				output += "    " + fields[i].name + " = 0;\n";
+			}
+		}
+		output += "  }\n";
+	}
 	output += "  static const ps_message_definition_t* GetDefinition()\n  {\n";
 	output += "    return &" + type_name + "_def;\n  }\n";
-	output += "  };\n}\n";
+	output += "};\n";
+	output += "typedef std::shared_ptr<" + raw_name + "> " + raw_name + "SharedPtr;\n";
+	output += "}\n";
 	output += "#endif\n";
 	//printf("Output:\n%s", output.c_str());
 
 	return output;
 }
-
 
 #include <string>
 #include <fstream>

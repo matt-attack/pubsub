@@ -10,10 +10,9 @@ int main()
 {
 	pubsub::Node node("simple_subscriber");
 
-	pubsub::Subscriber<std_msgs::String> subscriber(node, "/data", [](std_msgs::String* msg) {
+	pubsub::Subscriber<std_msgs::String> subscriber(node, "/data", [](const std_msgs::StringSharedPtr& msg) {
 		printf("Got message %s\n", msg->value);
-		free(msg);
-	});
+	}, 10);
 
 	pubsub::Spinner spinner;
 	spinner.addNode(node);

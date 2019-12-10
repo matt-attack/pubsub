@@ -16,6 +16,11 @@ namespace pubsub
 {
 static std::map<std::string, std::string> _remappings;
 
+// how intraprocess passing works
+class SubscriberBase;
+static std::mutex _subscriber_mutex;
+static std::multimap<std::string, SubscriberBase*> _subscribers;
+
 // this assumes topic and ns are properly checked
 // ns should not have a leading slash, topic should if it is absolute
 std::string handle_remap(const std::string& topic, const std::string& ns)
@@ -98,7 +103,7 @@ std::string validate_name(const std::string& name, bool remove_leading_slashes =
 	{
 		if (name[i] >= 'A' && name[i] <= 'Z')
 		{
-			printf("Identifier %i is invalid. All characters must be lowecase");
+			printf("Identifier %c is invalid. All characters must be lowecase", name[i]);
 			return "";
 		}
 	}
@@ -112,6 +117,8 @@ std::string validate_name(const std::string& name, bool remove_leading_slashes =
 	}
 	return name;
 }
+
+// todo need to make sure multiple subscribers in a process share data
 
 // safe to use each node in a different thread after initialize is called
 // making calls to functions on the same node is not thread safe
@@ -203,10 +210,53 @@ public:
 		ps_pub_destroy(&publisher_);
 	}
 
-	// this publish type copies the message
+	// this does not copy the message for intraprocess
+	void publish(const std::shared_ptr<T>& msg)
+	{
+		// loop through shared subscribers
+		_subscriber_mutex.lock();
+		auto subs = _subscribers.equal_range(remapped_topic_);
+		for (auto ii = subs.first; ii != subs.second; ii++)
+		{
+			printf("Publishing locally copy-free..\n");
+			auto sub = ii->second;
+
+			// hopefully its the right type
+			// todo verify or this will crash horribly
+			auto specific_sub = (Subscriber<T>*)sub;
+			specific_sub->cb_(msg);
+		}
+		_subscriber_mutex.unlock();
+
+		ps_pub_publish_ez(&publisher_, (void*)msg.get());
+	}
+
+	// this publish type copies the message for intraprocess
 	void publish(const T& msg)
 	{
-		// todo if we have any subscribers in the same node, push to them
+		std::shared_ptr<T> copy;
+		// loop through shared subscribers
+		_subscriber_mutex.lock();
+		auto subs = _subscribers.equal_range(remapped_topic_);
+		for (auto ii = subs.first; ii != subs.second; ii++)
+		{
+			printf("Publishing locally with a copy..\n");
+			if (!copy)
+			{
+				//copy to shared ptr
+				copy = std::shared_ptr<T>(new T);
+				*copy = msg;
+			}
+			auto sub = ii->second;
+
+			// hopefully its the right type
+			// todo verify or this will crash horribly
+			auto specific_sub = (Subscriber<T>*)sub;
+			specific_sub->cb_(copy);
+		}
+		_subscriber_mutex.unlock();
+
+		// todo make this only copy/encode if necessary
 		ps_pub_publish_ez(&publisher_, (void*)&msg);
 	}
 
@@ -238,11 +288,11 @@ class Subscriber: public SubscriberBase
 	friend class Spinner;
 	std::string remapped_topic_;
 
-	//ps_sub_t subscriber_;
-
-	std::function<void(T*)> cb_;
 public:
-	Subscriber(Node& node, const std::string& topic, std::function<void(T*)> cb, unsigned int queue_size = 1) : cb_(cb)
+	// todo put me in the right place
+	std::function<void(const std::shared_ptr<T>&)> cb_;
+
+	Subscriber(Node& node, const std::string& topic, std::function<void(const std::shared_ptr<T>&)> cb, unsigned int queue_size = 1) : cb_(cb)
 	{
 		// clean up the topic
 		std::string validated_topic = validate_name(topic);
@@ -255,12 +305,31 @@ public:
 
 		raw_cb_ = [this](void* msg)
 		{
-			cb_((T*)msg);
+			// convert to shared ptr
+			auto msg_ptr = std::shared_ptr<T>((T*)msg);
+			cb_(msg_ptr);
 		};
+
+		_subscriber_mutex.lock();
+		_subscribers.insert(std::pair<std::string, SubscriberBase*>(remapped_topic_, this));
+		_subscriber_mutex.unlock();
 	}
 
 	~Subscriber()
 	{
+		_subscriber_mutex.lock();
+		// remove me from the list
+		auto iterpair = _subscribers.equal_range(remapped_topic_);
+		for (auto it = iterpair.first; it != iterpair.second; ++it)
+		{
+			if (it->second == this) 
+			{
+				_subscribers.erase(it);
+				break;
+			}
+		}
+		_subscriber_mutex.unlock();
+
 		ps_sub_destroy(&subscriber_);
 
 		// todo remove me from the list
@@ -280,7 +349,7 @@ public:
 	}
 };
 
-// todo use smart pointers
+// todo use smart pointers for nodes
 class Spinner
 {
 	std::vector<Node*> nodes_;
@@ -304,7 +373,7 @@ public:
 					if (ps_node_spin(node->getNode()))
 					{
 						// we got a message, now call a subscriber
-						for (int i = 0; i < node->subscribers_.size(); i++)
+						for (size_t i = 0; i < node->subscribers_.size(); i++)
 						{
 							auto sub = node->subscribers_[i]->GetSub();
 							while (void* msg = ps_sub_deque(sub))
@@ -319,6 +388,14 @@ public:
 				ps_sleep(10);// make this configurable?
 			}
 		});
+	}
+
+	~Spinner()
+	{
+		if (running_)
+		{
+			stop();
+		}
 	}
 
 	void addNode(Node& node)
@@ -336,6 +413,11 @@ public:
 	void stop()
 	{
 		// kill everything
+		if (!running_)
+		{
+			return;
+		}
+
 		running_ = false;
 		thread_.join();// wait for it to stop
 	}
