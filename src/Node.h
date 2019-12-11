@@ -119,6 +119,16 @@ void ps_node_create_subscriber(struct ps_node_t* node, const char* topic, const 
 	bool ignore_local);// if ignore local is set, this node ignores publications from itself
 							 // this facilitiates passing messages through shared memory
 
+typedef void(*ps_subscriber_fn_cb_t)(void* message, void* data);
+void ps_node_create_subscriber_cb(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,
+	struct ps_sub_t* sub,
+	ps_subscriber_fn_cb_t cb,
+	void* cb_data,
+	bool want_message_def,
+	struct ps_allocator_t* allocator,
+	bool ignore_local
+);
+
 int ps_node_spin(struct ps_node_t* node);
 
 int serialize_string(char* data, const char* str);

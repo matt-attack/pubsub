@@ -8,6 +8,7 @@ extern "C"
 #include <stdbool.h>
 
 #include "Serialization.h"
+#include "Node.h"
 
 struct ps_endpoint_t;
 struct ps_node_t;
@@ -24,10 +25,17 @@ struct ps_sub_t
 	bool want_message_definition;
 	struct ps_message_definition_t received_message_def;
 
+	// ignores local publications
+	bool ignore_local;
 
 	int sub_id;
 
 	struct ps_allocator_t* allocator;
+
+	// used instead of a queue optionally
+	ps_subscriber_fn_cb_t cb;
+	void* cb_data;
+
 	int queue_size;// maximum size of the queue
 	int queue_len;
 	void** queue;// pointers to each of the queue items
@@ -43,6 +51,8 @@ struct ps_sub_req_header_t
 	int sub_id;
 };
 #pragma pack(pop)
+
+void ps_sub_enqueue(struct ps_sub_t* sub, void* message);
 
 // if the subscriber was initialized with a type this returns decoded messages
 void* ps_sub_deque(struct ps_sub_t* sub);

@@ -460,6 +460,7 @@ void ps_node_create_subscriber(struct ps_node_t* node, const char* topic, const 
 	sub->type = type;
 	sub->sub_id = node->sub_index++;
 	sub->allocator = allocator;
+	sub->ignore_local = ignore_local;
 
 	sub->want_message_definition = type ? want_message_def : true;
 	sub->received_message_def.fields = 0;
@@ -481,6 +482,54 @@ void ps_node_create_subscriber(struct ps_node_t* node, const char* topic, const 
 	{
 		sub->queue[i] = 0;
 	}
+
+	// send out the subscription query while we are at it
+	ps_node_subscribe_query(sub);
+}
+
+void ps_node_create_subscriber_cb(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,
+	struct ps_sub_t* sub,
+	ps_subscriber_fn_cb_t cb,
+	void* cb_data,
+	bool want_message_def,
+	struct ps_allocator_t* allocator,
+	bool ignore_local
+)
+{
+	node->num_subs++;
+	struct ps_sub_t** old_subs = node->subs;
+	node->subs = (struct ps_sub_t**)malloc(sizeof(struct ps_sub_t*)*node->num_subs);
+	for (unsigned int i = 0; i < node->num_subs - 1; i++)
+	{
+		node->subs[i] = old_subs[i];
+	}
+	node->subs[node->num_subs - 1] = sub;
+	free(old_subs);
+
+	if (allocator == 0)
+	{
+		allocator = &ps_default_allocator;
+	}
+
+	sub->node = node;
+	sub->topic = topic;
+	sub->type = type;
+	sub->sub_id = node->sub_index++;
+	sub->allocator = allocator;
+	sub->ignore_local = ignore_local;
+
+	sub->want_message_definition = type ? want_message_def : true;
+	sub->received_message_def.fields = 0;
+	sub->received_message_def.hash = 0;
+	sub->received_message_def.num_fields = 0;
+
+	sub->cb = cb;
+	sub->cb_data = cb_data;
+
+	// we dont need a queue
+	sub->queue_len = 0;
+	sub->queue_size = 0;
+	sub->queue = 0;
 
 	// send out the subscription query while we are at it
 	ps_node_subscribe_query(sub);
@@ -630,7 +679,11 @@ int ps_node_spin(struct ps_node_t* node)
 			//add it to the fifo packet queue which always shows the n most recent packets
 			//most recent is always first
 			//so lets push to the front (highest open index or highest if full)
-			if (sub->queue_size == sub->queue_len)
+			if (sub->queue_size == 0)
+			{
+				sub->cb(out_data, sub->cb_data);
+			}
+			else if (sub->queue_size == sub->queue_len)
 			{
 				sub->queue[sub->queue_size - 1] = out_data;
 			}
@@ -862,6 +915,12 @@ int ps_node_spin(struct ps_node_t* node)
 			if (sub == 0)
 			{
 				//printf("Got advertise notice, but it was for a topic we don't have\n");
+				continue;
+			}
+
+			if (sub->ignore_local && sub->node->port == p->port && sub->node->addr == p->addr)
+			{
+				printf("Got advertise notice, but it was for a local pub which we are set to ignore\n");
 				continue;
 			}
 

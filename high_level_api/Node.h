@@ -272,6 +272,7 @@ class SubscriberBase
 	friend class Spinner;
 protected:
 	ps_sub_t subscriber_;
+	Node* node_;
 
 	std::function<void(void*)> raw_cb_;
 public:
@@ -294,14 +295,12 @@ public:
 
 	Subscriber(Node& node, const std::string& topic, std::function<void(const std::shared_ptr<T>&)> cb, unsigned int queue_size = 1) : cb_(cb)
 	{
+		node_ = &node;
+
 		// clean up the topic
 		std::string validated_topic = validate_name(topic);
 
 		remapped_topic_ = handle_remap(validated_topic, "/" + node.getNamespace());
-
-		ps_node_create_subscriber(node.getNode(), remapped_topic_.c_str(), T::GetDefinition(), &subscriber_, queue_size, false, 0, true);
-
-		node.subscribers_.push_back(this);
 
 		raw_cb_ = [this](void* msg)
 		{
@@ -309,6 +308,19 @@ public:
 			auto msg_ptr = std::shared_ptr<T>((T*)msg);
 			cb_(msg_ptr);
 		};
+
+		auto cb2 = [](void* msg, void* th)
+		{
+			// convert to shared ptr
+			auto msg_ptr = std::shared_ptr<T>((T*)msg);
+
+			auto real_this = (Subscriber<T>*)th;
+			real_this->cb_(msg_ptr);
+		};
+
+		ps_node_create_subscriber_cb(node.getNode(), remapped_topic_.c_str(), T::GetDefinition(), &subscriber_, cb2, this, false, 0, true);
+
+		node.subscribers_.push_back(this);
 
 		_subscriber_mutex.lock();
 		_subscribers.insert(std::pair<std::string, SubscriberBase*>(remapped_topic_, this));
@@ -373,14 +385,14 @@ public:
 					if (ps_node_spin(node->getNode()))
 					{
 						// we got a message, now call a subscriber
-						for (size_t i = 0; i < node->subscribers_.size(); i++)
+						/*for (size_t i = 0; i < node->subscribers_.size(); i++)
 						{
 							auto sub = node->subscribers_[i]->GetSub();
 							while (void* msg = ps_sub_deque(sub))
 							{
 								node->subscribers_[i]->raw_cb_(msg);
 							}
-						}
+						}*/
 					}
 				}
 				list_mutex_.unlock();
