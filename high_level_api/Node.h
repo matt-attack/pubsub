@@ -11,6 +11,8 @@
 #include <mutex>
 #include <string>
 #include <map>
+#include <deque>
+#include <functional>
 
 namespace pubsub
 {
@@ -134,6 +136,8 @@ class Node
 
 	ps_node_t node_;
 public:
+	std::mutex lock_;
+
 	// todo fix me being public
 	// probably need to add advertise and subscribe functions to me
 	std::vector<SubscriberBase*> subscribers_;
@@ -185,11 +189,15 @@ public:
 	}
 };
 
+template<class T>
+class Subscriber;
 template<class T> 
 class Publisher
 {
 	std::string topic_;
 	std::string remapped_topic_;
+
+	Node* node_;
 
 	ps_pub_t publisher_;
 public:
@@ -202,12 +210,16 @@ public:
 		// look up remapping
 		remapped_topic_ = handle_remap(real_topic, "/" + node.getNamespace());
 
+		node.lock_.lock();
 		ps_node_create_publisher(node.getNode(), remapped_topic_.c_str(), T::GetDefinition(), &publisher_, latched);
+		node.lock_.unlock();
 	}
 
 	~Publisher()
 	{
+		node_->lock_.lock();
 		ps_pub_destroy(&publisher_);
+		node_->lock_.unlock();
 	}
 
 	// this does not copy the message for intraprocess
@@ -223,8 +235,17 @@ public:
 
 			// hopefully its the right type
 			// todo verify or this will crash horribly
+
+			// also help this isnt thread safe
 			auto specific_sub = (Subscriber<T>*)sub;
-			specific_sub->cb_(msg);
+			specific_sub->queue_mutex_.lock();
+			specific_sub->queue_.push_front(msg);
+			if (specific_sub->queue_.size() > specific_sub->queue_size_)
+			{
+				specific_sub->queue_.pop_back();
+			}
+			specific_sub->queue_mutex_.unlock();
+			//specific_sub->cb_(msg);
 		}
 		_subscriber_mutex.unlock();
 
@@ -236,6 +257,7 @@ public:
 	{
 		std::shared_ptr<T> copy;
 		// loop through shared subscribers
+		//todo make this lock less often
 		_subscriber_mutex.lock();
 		auto subs = _subscribers.equal_range(remapped_topic_);
 		for (auto ii = subs.first; ii != subs.second; ii++)
@@ -251,8 +273,17 @@ public:
 
 			// hopefully its the right type
 			// todo verify or this will crash horribly
+
+			// help this isnt thread safe
 			auto specific_sub = (Subscriber<T>*)sub;
-			specific_sub->cb_(copy);
+			specific_sub->queue_mutex_.lock();
+			specific_sub->queue_.push_front(copy);
+			if (specific_sub->queue_.size() > specific_sub->queue_size_)
+			{
+				specific_sub->queue_.pop_back();
+			}
+			specific_sub->queue_mutex_.unlock();
+			//specific_sub->cb_(copy);
 		}
 		_subscriber_mutex.unlock();
 
@@ -281,19 +312,26 @@ public:
 	{
 		return &subscriber_;
 	}
+
+	virtual void CallOne() = 0;
 };
 
 template<class T> 
 class Subscriber: public SubscriberBase
 {
 	friend class Spinner;
+	friend class Publisher<T>;
 	std::string remapped_topic_;
 
-public:
-	// todo put me in the right place
+	std::mutex queue_mutex_;
+	unsigned int queue_size_;
+	std::deque<std::shared_ptr<T>> queue_;
+
 	std::function<void(const std::shared_ptr<T>&)> cb_;
 
-	Subscriber(Node& node, const std::string& topic, std::function<void(const std::shared_ptr<T>&)> cb, unsigned int queue_size = 1) : cb_(cb)
+public:
+
+	Subscriber(Node& node, const std::string& topic, std::function<void(const std::shared_ptr<T>&)> cb, unsigned int queue_size = 1) : cb_(cb), queue_size_(queue_size)
 	{
 		node_ = &node;
 
@@ -315,16 +353,40 @@ public:
 			auto msg_ptr = std::shared_ptr<T>((T*)msg);
 
 			auto real_this = (Subscriber<T>*)th;
-			real_this->cb_(msg_ptr);
+			real_this->queue_mutex_.lock();
+			real_this->queue_.push_front(msg_ptr);
+			if (real_this->queue_.size() > real_this->queue_size_)
+			{
+				real_this->queue_.pop_back();
+			}
+			real_this->queue_mutex_.unlock();
+			//real_this->cb_(msg_ptr);
 		};
 
+		node.lock_.lock();
 		ps_node_create_subscriber_cb(node.getNode(), remapped_topic_.c_str(), T::GetDefinition(), &subscriber_, cb2, this, false, 0, true);
 
 		node.subscribers_.push_back(this);
+		node.lock_.unlock();
 
 		_subscriber_mutex.lock();
 		_subscribers.insert(std::pair<std::string, SubscriberBase*>(remapped_topic_, this));
 		_subscriber_mutex.unlock();
+	}
+
+	virtual void CallOne()
+	{
+		queue_mutex_.lock();
+		if (queue_.size() > 0)
+		{
+			auto back = queue_.back();
+			queue_.pop_back();
+
+			queue_mutex_.unlock();
+			cb_(back);
+			return;
+		}
+		queue_mutex_.unlock();
 	}
 
 	~Subscriber()
@@ -342,12 +404,12 @@ public:
 		}
 		_subscriber_mutex.unlock();
 
+		node_->lock_.lock();
+		auto it = std::find(node_->subscribers_.begin(), node_->subscribers_.end(), this);
+		if (it != node_->subscribers_.end())
+			node_->subscribers_.erase(it);
 		ps_sub_destroy(&subscriber_);
-
-		// todo remove me from the list
-		//auto it = std::find(node.subscribers_.begin(), node.subscribers_.end(), 5);
-		//if (it != node.subscribers_.end())
-		//	node.subscribers_.erase(it);
+		node_->lock_.unlock();
 	}
 
 	T* deque()
@@ -382,18 +444,17 @@ public:
 				list_mutex_.lock();
 				for (auto node : nodes_)
 				{
+					node->lock_.lock();
 					if (ps_node_spin(node->getNode()))
 					{
-						// we got a message, now call a subscriber
-						/*for (size_t i = 0; i < node->subscribers_.size(); i++)
-						{
-							auto sub = node->subscribers_[i]->GetSub();
-							while (void* msg = ps_sub_deque(sub))
-							{
-								node->subscribers_[i]->raw_cb_(msg);
-							}
-						}*/
+
 					}
+					// we got a message, now call a subscriber
+					for (size_t i = 0; i < node->subscribers_.size(); i++)
+					{
+						node->subscribers_[i]->CallOne();
+					}
+					node->lock_.unlock();
 				}
 				list_mutex_.unlock();
 
