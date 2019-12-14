@@ -8,7 +8,7 @@
 
 #include "Net.h"
 
-inline void ps_pub_publish_client(struct ps_pub_t* pub, struct ps_client_t* client, struct ps_msg_t* msg)
+void ps_pub_publish_client(struct ps_pub_t* pub, struct ps_client_t* client, struct ps_msg_t* msg)
 {
 	// send da udp packet!
 	struct sockaddr_in address;
