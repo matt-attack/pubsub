@@ -13,6 +13,7 @@
 #include <map>
 #include <deque>
 #include <functional>
+#include <algorithm>
 
 namespace pubsub
 {
@@ -258,6 +259,8 @@ public:
 		std::shared_ptr<T> copy;
 		// loop through shared subscribers
 		//todo make this lock less often
+		//this subscriber lock causes only one node to be able to publish at a time
+		//	which may be okay, but could be problematic
 		_subscriber_mutex.lock();
 		auto subs = _subscribers.equal_range(remapped_topic_);
 		for (auto ii = subs.first; ii != subs.second; ii++)
@@ -449,6 +452,9 @@ public:
 					{
 
 					}
+					// todo how to make this not scale with subscriber count...
+					// though, it isnt very important here
+					// its probably worth more effort just make it not run any of this if we get no messages
 					// we got a message, now call a subscriber
 					for (size_t i = 0; i < node->subscribers_.size(); i++)
 					{
@@ -457,6 +463,8 @@ public:
 					node->lock_.unlock();
 				}
 				list_mutex_.unlock();
+				//todo okay, this limits messaging rate to 100 per sub per second
+				//	need to rethink
 
 				ps_sleep(10);// make this configurable?
 			}
