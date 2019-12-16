@@ -231,7 +231,7 @@ public:
 		auto subs = _subscribers.equal_range(remapped_topic_);
 		for (auto ii = subs.first; ii != subs.second; ii++)
 		{
-			printf("Publishing locally copy-free..\n");
+			//printf("Publishing locally copy-free..\n");
 			auto sub = ii->second;
 
 			// hopefully its the right type
@@ -253,6 +253,7 @@ public:
 		ps_pub_publish_ez(&publisher_, (void*)msg.get());
 	}
 
+	// todo fix the actual publish call not being thread safe
 	// this publish type copies the message for intraprocess
 	void publish(const T& msg)
 	{
@@ -265,7 +266,7 @@ public:
 		auto subs = _subscribers.equal_range(remapped_topic_);
 		for (auto ii = subs.first; ii != subs.second; ii++)
 		{
-			printf("Publishing locally with a copy..\n");
+			//printf("Publishing locally with a copy..\n");
 			if (!copy)
 			{
 				//copy to shared ptr
@@ -350,7 +351,7 @@ public:
 			cb_(msg_ptr);
 		};
 
-		auto cb2 = [](void* msg, void* th)
+		auto cb2 = [](void* msg, unsigned int size, void* th)
 		{
 			// convert to shared ptr
 			auto msg_ptr = std::shared_ptr<T>((T*)msg);

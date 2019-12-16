@@ -250,9 +250,32 @@ ps_msg_t serialize_value(const Value& value)
 
 std::map<std::string, Topic> _topics;
 
+#include <deque>
+
+#include <Windows.h>
+double PCFreq;
+__int64 CounterStart = 0;
+void StartCounter()
+{
+	LARGE_INTEGER li;
+	if (!QueryPerformanceFrequency(&li))
+		cout << "QueryPerformanceFrequency failed!\n";
+
+	PCFreq = double(li.QuadPart) / 1000.0;
+
+	QueryPerformanceCounter(&li);
+	CounterStart = li.QuadPart;
+}
+double GetCounter()
+{
+	LARGE_INTEGER li;
+	QueryPerformanceCounter(&li);
+	return double(li.QuadPart - CounterStart) / PCFreq;
+}
 
 int main(int num_args, char** args)
 {
+	StartCounter();
 	ps_node_t node;
 	ps_node_init(&node, "Query", "", false);
 
@@ -405,6 +428,104 @@ int main(int num_args, char** args)
 					}
 				}
 			}
+			else if (subverb == "hz" || subverb == "bw")
+			{
+				// create a subscriber
+				ps_sub_t sub;
+				std::vector<void*> todo_msgs;
+
+				int window = 100;
+				std::deque<std::pair<double, unsigned int>> message_times;
+
+				// subscribe to the topic
+				while (ps_okay())
+				{
+					ps_node_spin(&node);
+
+					// spin until we get the topic
+					auto info = _topics.find(topic);
+					if (info != _topics.end())
+					{
+						std::cout << "Topic " << topic << " found!\n";
+						//std::cout << info->first.c_str() << " " <<  info->second.type.c_str();
+
+						auto cb = [](void* message, unsigned int size, void* data)
+						{
+							std::deque<std::pair<double, unsigned int>>* message_times = (std::deque<std::pair<double, unsigned int>>*)data;
+							message_times->push_back({ GetCounter(), size });// GetTimeMs());
+
+							if (message_times->size() > 100)
+								message_times->pop_front();
+						};
+
+						ps_node_create_subscriber_cb(&node, info->first.c_str(), 0, &sub, cb, &message_times, false, 0, false);
+						//ps_node_create_subscriber(&node, info->first.c_str(), 0/*info->second.type.c_str()*/, &sub, 100, true, 0, false);
+						break;
+					}
+				}
+
+				// now just receive and time as fast as we can
+				unsigned int last_print = GetTimeMs();
+				while (ps_okay())
+				{
+					ps_node_spin(&node);
+
+					if (last_print + 1000 < GetTimeMs())
+					{
+						// print the timing
+						last_print = GetTimeMs();
+
+						if (message_times.size() < 2)
+						{
+							printf("Not enough messages...\n");
+						}
+						else
+						{
+							if (subverb == "bw")
+							{
+								// in ms
+								double delta = GetCounter()/*message_times.back().first*/ - message_times.front().first;
+								delta /= 1000.0;// in sec
+								unsigned long long total = 0;
+								for (int i = 0; i < message_times.size(); i++)
+								{
+									total += message_times[i].second;
+								}
+								double rate = ((double)total) / ((double)delta);
+								if (rate > 5000000)
+								{
+									printf("Bw: %0.3lf MB/s n=%i\n", rate/1000000.0, message_times.size());
+								}
+								else if (rate > 5000)
+								{
+									printf("Bw: %0.3lf KB/s n=%i\n", rate/1000.0, message_times.size());
+								}
+								else
+								{
+									printf("Bw: %lf B/s n=%i\n", rate, message_times.size());
+								}
+							}
+							else
+							{
+								double delta = GetCounter()/*message_times.back().first*/ - message_times.front().first;
+								double rate = ((double)(message_times.size() - 1)) / ((double)delta);
+								rate *= 1000.0;
+								printf("Rate: %lf Hz n=%i\n", rate, message_times.size());
+							}
+						}
+					}
+
+					// get and deserialize the messages
+					/*void* data;
+					while ((data = ps_sub_deque(&sub)) && ps_okay())
+					{
+						message_times.push_back(GetCounter());// GetTimeMs());
+
+						if (message_times.size() > window)
+							message_times.pop_front();
+					}*/
+				}
+			}
 			else if (subverb == "info")
 			{
 				wait(&node);
@@ -467,8 +588,7 @@ int main(int num_args, char** args)
 					return 0;
 				}
 			}
-
-			if (subverb == "pub")
+			else if (subverb == "pub")
 			{
 				std::string data = num_args > 4 ? "" : args[4];
 

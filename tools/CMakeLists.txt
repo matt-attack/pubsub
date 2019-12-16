@@ -12,15 +12,6 @@ add_dependencies(info pubsub)
 # Build the serialization generator
 add_executable(pubsub_msg_gen "generator.cpp")
 
-# Hacks for getting the macro below to work
-if ( MSVC )
-if ( DEFINED CMAKE_NINJA_DEPTYPE_C )
-else ()
-set( bin_directory "Debug/")
-endif ()
-set( bin_extension ".exe")
-endif ( MSVC )
-
 # This is used to generate messages for a package
 macro(generate_messages)
   set(options "DIRECTORY" "TARGET")
@@ -41,7 +32,6 @@ macro(generate_messages)
   foreach (_file ${ARG_FILES})
     add_custom_command(
 	  COMMAND $<TARGET_FILE:pubsub_msg_gen> ${_file}
-      #COMMAND ${CMAKE_CURRENT_BINARY_DIR}/${bin_directory}pubsub_msg_gen${bin_extension} ${_file}
       WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/${ARG_DIRECTORY}/
       DEPENDS ${CMAKE_SOURCE_DIR}/${ARG_DIRECTORY}/${_file} pubsub_msg_gen
       OUTPUT ${CMAKE_SOURCE_DIR}/${ARG_DIRECTORY}/${_file}.h

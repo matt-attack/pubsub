@@ -681,7 +681,7 @@ int ps_node_spin(struct ps_node_t* node)
 			//so lets push to the front (highest open index or highest if full)
 			if (sub->queue_size == 0)
 			{
-				sub->cb(out_data, sub->cb_data);
+				sub->cb(out_data, data_size, sub->cb_data);
 			}
 			else if (sub->queue_size == sub->queue_len)
 			{
@@ -691,7 +691,7 @@ int ps_node_spin(struct ps_node_t* node)
 			{
 				sub->queue[sub->queue_len++] = out_data;
 			}
-			printf("Got message, queue len %i\n", sub->queue_len);
+			//printf("Got message, queue len %i\n", sub->queue_len);
 
 			packet_count++;
 		}

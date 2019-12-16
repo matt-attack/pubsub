@@ -119,7 +119,7 @@ void ps_node_create_subscriber(struct ps_node_t* node, const char* topic, const 
 	bool ignore_local);// if ignore local is set, this node ignores publications from itself
 							 // this facilitiates passing messages through shared memory
 
-typedef void(*ps_subscriber_fn_cb_t)(void* message, void* data);
+typedef void(*ps_subscriber_fn_cb_t)(void* message, unsigned int size, void* data);
 void ps_node_create_subscriber_cb(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,
 	struct ps_sub_t* sub,
 	ps_subscriber_fn_cb_t cb,
