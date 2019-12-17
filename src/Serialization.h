@@ -65,3 +65,5 @@ void ps_print_definition(const struct ps_message_definition_t* definition);
 void ps_msg_alloc(unsigned int size, struct ps_msg_t* out_msg);
 
 void* ps_get_msg_start(void* data);
+
+struct ps_msg_t ps_msg_cpy(const struct ps_msg_t* msg);

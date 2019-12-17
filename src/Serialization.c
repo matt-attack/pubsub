@@ -289,3 +289,12 @@ void ps_msg_alloc(unsigned int size, struct ps_msg_t* out_msg)
 	out_msg->len = size;
 	out_msg->data = (void*)((char*)malloc(size + sizeof(struct ps_msg_header)));
 }
+
+
+struct ps_msg_t ps_msg_cpy(const struct ps_msg_t* msg)
+{
+	struct ps_msg_t out;
+	ps_msg_alloc(msg->len, &out);
+	memcpy(ps_get_msg_start(out.data), ps_get_msg_start(msg->data), msg->len);
+	return out;
+}

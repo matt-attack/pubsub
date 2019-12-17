@@ -285,14 +285,14 @@ std::string generate(const char* definition, const char* name)
 		{
 			if (fields[i].type == "string")
 			{
-				output += "  len -= sizeof(char*);\n";
+				//output += "  len -= sizeof(char*);\n";
 				output += "  int len_" + fields[i].name + " = strlen(p) + 1; \n";
-				output += "  len += len_" + fields[i].name + ";\n";
-				output += "  p += len_" + fields[i].name + ";\n";
+				//output += "  len += len_" + fields[i].name + ";\n";
+				//output += "  p += len_" + fields[i].name + ";\n";
 			}
 			else
 			{
-				output += "  p += sizeof(" + fields[i].getBaseType() + ");\n";
+				//output += "  p += sizeof(" + fields[i].getBaseType() + ");\n";
 			}
 		}
 		output += "  p = (char*)data;\n";// start from beginning again

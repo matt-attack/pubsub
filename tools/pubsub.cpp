@@ -434,9 +434,9 @@ int main(int num_args, char** args)
 				ps_sub_t sub;
 				std::vector<void*> todo_msgs;
 
-				int window = 100;
+				//int window = 100;
 				std::deque<std::pair<double, unsigned int>> message_times;
-
+				static int window = 100;
 				// subscribe to the topic
 				while (ps_okay())
 				{
@@ -447,19 +447,17 @@ int main(int num_args, char** args)
 					if (info != _topics.end())
 					{
 						std::cout << "Topic " << topic << " found!\n";
-						//std::cout << info->first.c_str() << " " <<  info->second.type.c_str();
 
 						auto cb = [](void* message, unsigned int size, void* data)
 						{
 							std::deque<std::pair<double, unsigned int>>* message_times = (std::deque<std::pair<double, unsigned int>>*)data;
-							message_times->push_back({ GetCounter(), size });// GetTimeMs());
+							message_times->push_back({ GetCounter(), size });
 
-							if (message_times->size() > 100)
+							if (message_times->size() > window)
 								message_times->pop_front();
 						};
 
 						ps_node_create_subscriber_cb(&node, info->first.c_str(), 0, &sub, cb, &message_times, false, 0, false);
-						//ps_node_create_subscriber(&node, info->first.c_str(), 0/*info->second.type.c_str()*/, &sub, 100, true, 0, false);
 						break;
 					}
 				}
@@ -514,16 +512,6 @@ int main(int num_args, char** args)
 							}
 						}
 					}
-
-					// get and deserialize the messages
-					/*void* data;
-					while ((data = ps_sub_deque(&sub)) && ps_okay())
-					{
-						message_times.push_back(GetCounter());// GetTimeMs());
-
-						if (message_times.size() > window)
-							message_times.pop_front();
-					}*/
 				}
 			}
 			else if (subverb == "info")
@@ -668,7 +656,9 @@ int main(int num_args, char** args)
 
 					//publish
 					printf("publishing\n");
-					ps_pub_publish(&pub, &msg);
+					// copy the message
+					ps_msg_t cpy = ps_msg_cpy(&msg);
+					ps_pub_publish(&pub, &cpy);
 					ps_sleep(1000);
 				}
 			}
