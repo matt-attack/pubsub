@@ -21,8 +21,11 @@ static std::map<std::string, std::string> _remappings;
 
 // how intraprocess passing works
 class SubscriberBase;
-static std::mutex _subscriber_mutex;
-static std::multimap<std::string, SubscriberBase*> _subscribers;
+class PublisherBase;
+//static std::mutex _subscriber_mutex;
+//static std::multimap<std::string, SubscriberBase*> _subscribers;
+static std::mutex _publisher_mutex;
+static std::multimap<std::string, PublisherBase*> _publishers;
 
 // this assumes topic and ns are properly checked
 // ns should not have a leading slash, topic should if it is absolute
@@ -137,7 +140,9 @@ class Node
 
 	ps_node_t node_;
 public:
-	std::mutex lock_;
+	// todo try and eliminate this needing to be recursive
+	// recursive for the moment...
+	std::recursive_mutex lock_;
 
 	// todo fix me being public
 	// probably need to add advertise and subscribe functions to me
@@ -190,21 +195,45 @@ public:
 	}
 };
 
-template<class T>
-class Subscriber;
-template<class T> 
-class Publisher
+class SubscriberBase;
+class PublisherBase
 {
+	friend class SubscriberBase;
+protected:
 	std::string topic_;
 	std::string remapped_topic_;
 
 	Node* node_;
 
 	ps_pub_t publisher_;
+
+	std::vector<SubscriberBase*> subs_;
+
+public:
+	const std::string& GetTopic()
+	{
+		return remapped_topic_;
+	}
+
+	Node* GetNode()
+	{
+		return node_;
+	}
+};
+
+template<class T>
+class Subscriber;
+template<class T> 
+class Publisher: public PublisherBase
+{
+
 public:
 
-	Publisher(Node& node, const std::string& topic, bool latched = false) : topic_(topic)
+	Publisher(Node& node, const std::string& topic, bool latched = false)// : topic_(topic)
 	{
+		node_ = &node;
+		topic_ = topic;
+
 		// clean up the topic
 		std::string real_topic = validate_name(topic_);
 
@@ -214,10 +243,29 @@ public:
 		node.lock_.lock();
 		ps_node_create_publisher(node.getNode(), remapped_topic_.c_str(), T::GetDefinition(), &publisher_, latched);
 		node.lock_.unlock();
+
+		//add me to the publisher list
+		_publisher_mutex.lock();
+		_publishers.insert(std::pair<std::string, PublisherBase*>(remapped_topic_, this));
+		_publisher_mutex.unlock();
 	}
 
 	~Publisher()
 	{
+		//remove me from the publisher list
+		_publisher_mutex.lock();
+		// remove me from the list
+		auto iterpair = _publishers.equal_range(remapped_topic_);
+		for (auto it = iterpair.first; it != iterpair.second; ++it)
+		{
+			if (it->second == this)
+			{
+				_publishers.erase(it);
+				break;
+			}
+		}
+		_publisher_mutex.unlock();
+
 		node_->lock_.lock();
 		ps_pub_destroy(&publisher_);
 		node_->lock_.unlock();
@@ -227,17 +275,15 @@ public:
 	void publish(const std::shared_ptr<T>& msg)
 	{
 		// loop through shared subscribers
-		_subscriber_mutex.lock();
-		auto subs = _subscribers.equal_range(remapped_topic_);
-		for (auto ii = subs.first; ii != subs.second; ii++)
+		node_->lock_.lock();
+		// now go through my local subscriber list
+		for (size_t i = 0; i < subs_.size(); i++)
 		{
-			//printf("Publishing locally copy-free..\n");
-			auto sub = ii->second;
+			auto sub = subs_[i];
 
-			// hopefully its the right type
-			// todo verify or this will crash horribly
+			//printf("Publishing locally with no copy..\n");
 
-			// also help this isnt thread safe
+			// help this isnt thread safe
 			auto specific_sub = (Subscriber<T>*)sub;
 			specific_sub->queue_mutex_.lock();
 			specific_sub->queue_.push_front(msg);
@@ -246,26 +292,24 @@ public:
 				specific_sub->queue_.pop_back();
 			}
 			specific_sub->queue_mutex_.unlock();
-			//specific_sub->cb_(msg);
+			//specific_sub->cb_(copy);
 		}
-		_subscriber_mutex.unlock();
 
 		ps_pub_publish_ez(&publisher_, (void*)msg.get());
+		node_->lock_.unlock();
 	}
 
-	// todo fix the actual publish call not being thread safe
 	// this publish type copies the message for intraprocess
 	void publish(const T& msg)
 	{
 		std::shared_ptr<T> copy;
-		// loop through shared subscribers
-		//todo make this lock less often
-		//this subscriber lock causes only one node to be able to publish at a time
-		//	which may be okay, but could be problematic
-		_subscriber_mutex.lock();
-		auto subs = _subscribers.equal_range(remapped_topic_);
-		for (auto ii = subs.first; ii != subs.second; ii++)
+	
+		node_->lock_.lock();
+		// now go through my local subscriber list
+		for (size_t i = 0; i < subs_.size(); i++)
 		{
+			auto sub = subs_[i];
+
 			//printf("Publishing locally with a copy..\n");
 			if (!copy)
 			{
@@ -273,10 +317,6 @@ public:
 				copy = std::shared_ptr<T>(new T);
 				*copy = msg;
 			}
-			auto sub = ii->second;
-
-			// hopefully its the right type
-			// todo verify or this will crash horribly
 
 			// help this isnt thread safe
 			auto specific_sub = (Subscriber<T>*)sub;
@@ -289,10 +329,10 @@ public:
 			specific_sub->queue_mutex_.unlock();
 			//specific_sub->cb_(copy);
 		}
-		_subscriber_mutex.unlock();
-
 		// todo make this only copy/encode if necessary
 		ps_pub_publish_ez(&publisher_, (void*)&msg);
+
+		node_->lock_.unlock();
 	}
 
 	unsigned int getNumSubscribers()
@@ -308,8 +348,49 @@ class SubscriberBase
 protected:
 	ps_sub_t subscriber_;
 	Node* node_;
+	
+	// note only one pub/sub can be created/destroyed at a time
+	static void AddSubscriber(const std::string& topic, SubscriberBase* sub)
+	{
+		_publisher_mutex.lock();
 
-	std::function<void(void*)> raw_cb_;
+		auto iterpair = _publishers.equal_range(topic);
+		for (auto it = iterpair.first; it != iterpair.second; ++it)
+		{
+			if (it->second->GetTopic() == topic)
+			{
+				// todo verify that the message type is the same or that I'm a generic sub
+				// also todo add generic C++ subs
+				it->second->GetNode()->lock_.lock();
+				// add me to its sub list
+				it->second->subs_.push_back(sub);
+				it->second->GetNode()->lock_.unlock();
+			}
+		}
+
+		_publisher_mutex.unlock();
+	}
+
+	static void RemoveSubscriber(const std::string& topic, const SubscriberBase* sub)
+	{
+		_publisher_mutex.lock();
+
+		auto iterpair = _publishers.equal_range(topic);
+		for (auto it = iterpair.first; it != iterpair.second; ++it)
+		{
+			if (it->second->GetTopic() == topic)
+			{
+				it->second->GetNode()->lock_.lock();
+				// remove me from its list if im there
+				auto pos = std::find(it->second->subs_.begin(), it->second->subs_.end(), sub);
+				if (pos != it->second->subs_.end())
+					it->second->subs_.erase(pos);
+				it->second->GetNode()->lock_.unlock();
+			}
+		}
+
+		_publisher_mutex.unlock();
+	}
 public:
 
 	ps_sub_t* GetSub()
@@ -317,8 +398,11 @@ public:
 		return &subscriber_;
 	}
 
-	virtual void CallOne() = 0;
+	// returns if there are still more messages in the queue
+	virtual bool CallOne() = 0;
 };
+
+
 
 template<class T> 
 class Subscriber: public SubscriberBase
@@ -344,17 +428,10 @@ public:
 
 		remapped_topic_ = handle_remap(validated_topic, "/" + node.getNamespace());
 
-		raw_cb_ = [this](void* msg)
-		{
-			// convert to shared ptr
-			auto msg_ptr = std::shared_ptr<T>((T*)msg);
-			cb_(msg_ptr);
-		};
-
 		auto cb2 = [](void* msg, unsigned int size, void* th)
 		{
 			// convert to shared ptr
-			auto msg_ptr = std::shared_ptr<T>((T*)msg);
+			std::shared_ptr<T> msg_ptr((T*)msg);
 
 			auto real_this = (Subscriber<T>*)th;
 			real_this->queue_mutex_.lock();
@@ -373,12 +450,10 @@ public:
 		node.subscribers_.push_back(this);
 		node.lock_.unlock();
 
-		_subscriber_mutex.lock();
-		_subscribers.insert(std::pair<std::string, SubscriberBase*>(remapped_topic_, this));
-		_subscriber_mutex.unlock();
+		AddSubscriber(remapped_topic_, this);
 	}
 
-	virtual void CallOne()
+	virtual bool CallOne()
 	{
 		queue_mutex_.lock();
 		if (queue_.size() > 0)
@@ -388,25 +463,15 @@ public:
 
 			queue_mutex_.unlock();
 			cb_(back);
-			return;
+			return queue_.size() > 0;
 		}
 		queue_mutex_.unlock();
+		return false;
 	}
 
 	~Subscriber()
 	{
-		_subscriber_mutex.lock();
-		// remove me from the list
-		auto iterpair = _subscribers.equal_range(remapped_topic_);
-		for (auto it = iterpair.first; it != iterpair.second; ++it)
-		{
-			if (it->second == this) 
-			{
-				_subscribers.erase(it);
-				break;
-			}
-		}
-		_subscriber_mutex.unlock();
+		RemoveSubscriber(remapped_topic_, this);
 
 		node_->lock_.lock();
 		auto it = std::find(node_->subscribers_.begin(), node_->subscribers_.end(), this);
@@ -459,13 +524,12 @@ public:
 					// we got a message, now call a subscriber
 					for (size_t i = 0; i < node->subscribers_.size(); i++)
 					{
-						node->subscribers_[i]->CallOne();
+						// this doesnt ensure switching subs, but works
+						while (node->subscribers_[i]->CallOne()) {};
 					}
 					node->lock_.unlock();
 				}
 				list_mutex_.unlock();
-				//todo okay, this limits messaging rate to 100 per sub per second
-				//	need to rethink
 
 				ps_sleep(10);// make this configurable?
 			}
