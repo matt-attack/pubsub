@@ -381,11 +381,13 @@ int main(int num_args_real, char** args)
 				pubsub::ArgParser parser;
 				parser.AddMulti({ "i" }, "Print info about the publisher");
 				parser.AddMulti({ "n" }, "Number of messages to echo", "0");
+				parser.AddMulti({ "skip", "s" }, "Skip factor for the subscriber", "0");
 
 				parser.Parse(args, num_args, 3);
 
 				bool print_info = parser.GetBool("i");
 				long long int n = parser.GetDouble("n");
+				int skip = parser.GetDouble("s");
 				if (n <= 0)
 				{
 					n = LONG_MAX;
@@ -410,7 +412,16 @@ int main(int num_args_real, char** args)
 						//std::cout << info->first.c_str() << " " <<  info->second.type.c_str();
 						subscribed = true;
 
-						ps_node_create_subscriber(&node, info->first.c_str(), 0/*info->second.type.c_str()*/, &sub, 1, true, 0, false);
+						struct ps_subscriber_options options;
+						ps_subscriber_options_init(&options);
+
+						options.skip = skip;
+						options.queue_size = 10;
+						options.want_message_def = true;
+						options.allocator = 0;
+						options.ignore_local = false;
+
+						ps_node_create_subscriber_adv(&node, info->first.c_str(), 0, &sub, &options);
 					}
 
 					if (!subscribed)
