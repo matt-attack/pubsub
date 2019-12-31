@@ -151,6 +151,23 @@ void tokenize(const std::string& input, std::vector<Token>& tokens)
 			}
 			tokens.push_back(Token(str));
 		}
+		else if (c == '\'')
+		{
+			// quoted string
+			std::string str;
+			index++;
+			// start grabbing until close quote
+			for (; index < input.length(); index++)
+			{
+				if (input[index] == '\'')
+				{
+					index++;
+					break;
+				}
+				str += input[index];
+			}
+			tokens.push_back(Token(str));
+		}
 		else // grab one word
 		{
 			std::string str;

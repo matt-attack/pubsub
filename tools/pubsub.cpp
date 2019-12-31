@@ -632,6 +632,15 @@ int main(int num_args_real, char** args)
 			{
 				std::string data = num_args > 4 ? "" : args[4];
 
+				pubsub::ArgParser parser;
+				parser.AddMulti({ "r", "rate" }, "Publish rate in Hz", "1.0");
+				parser.AddMulti({ "l", "latch" }, "Should the topic be latched.", "true");
+
+				parser.Parse(args, num_args, 2);
+
+				double rate = parser.GetDouble("r");
+				bool latched = parser.GetBool("l");
+
 				//ok, lets get the topic type and publish at 1 Hz for the moment
 				ps_pub_t pub;
 				ps_msg_t msg;
@@ -673,7 +682,7 @@ int main(int num_args_real, char** args)
 					{
 						printf("Found message description, publishing...\n");
 						// encode the message according to the definition and create the publisher
-						ps_node_create_publisher(&node, info->first.c_str(), &definition, &pub, true);
+						ps_node_create_publisher(&node, info->first.c_str(), &definition, &pub, latched);
 
 						// then actually serialize the message
 						// build the input string from arguments
@@ -711,7 +720,7 @@ int main(int num_args_real, char** args)
 					// copy the message
 					ps_msg_t cpy = ps_msg_cpy(&msg);
 					ps_pub_publish(&pub, &cpy);
-					ps_sleep(1000);
+					ps_sleep(1000/rate);
 				}
 			}
 		}
