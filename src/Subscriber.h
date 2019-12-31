@@ -36,6 +36,8 @@ struct ps_sub_t
 	ps_subscriber_fn_cb_t cb;
 	void* cb_data;
 
+	unsigned int skip;
+
 	int queue_size;// maximum size of the queue
 	int queue_len;
 	void** queue;// pointers to each of the queue items
@@ -49,6 +51,7 @@ struct ps_sub_req_header_t
 	int addr;
 	short port;
 	int sub_id;
+	unsigned int skip;
 };
 #pragma pack(pop)
 
@@ -59,7 +62,7 @@ void* ps_sub_deque(struct ps_sub_t* sub);
 
 void ps_sub_destroy(struct ps_sub_t* sub);
 
-void ps_send_subscribe(struct ps_sub_t* sub, struct ps_endpoint_t* ep);
+void ps_send_subscribe(struct ps_sub_t* sub, const struct ps_endpoint_t* ep);
 
 #ifdef __cplusplus
 }

@@ -250,6 +250,8 @@ ps_msg_t serialize_value(const Value& value)
 
 std::map<std::string, Topic> _topics;
 
+#include "arg_parse.h"
+
 #include <deque>
 
 #include <Windows.h>
@@ -273,15 +275,18 @@ double GetCounter()
 	return double(li.QuadPart - CounterStart) / PCFreq;
 }
 
-int main(int num_args, char** args)
+int main(int num_args_real, char** args)
 {
 	StartCounter();
 	ps_node_t node;
 	ps_node_init(&node, "Query", "", false);
 
 	// for running tests
+	int num_args = num_args_real;
 	//num_args = 5;
-	//char* args[] = { "aaa", "topic", "pub", "/joy", "{buttons:32, axes: [1,2,3,4]}" };
+
+	//char* args[] = { "aaa", "topic", "echo", "/joy", "-n", "0" };
+	//num_args = (sizeof args / sizeof args[0]);
 
 	node.adv_cb = [](const char* topic, const char* type, const char* node, void* data)
 	{
@@ -373,11 +378,25 @@ int main(int num_args, char** args)
 
 			if (subverb == "echo")
 			{
+				pubsub::ArgParser parser;
+				parser.AddMulti({ "i" }, "Print info about the publisher");
+				parser.AddMulti({ "n" }, "Number of messages to echo", "0");
+
+				parser.Parse(args, num_args, 3);
+
+				bool print_info = parser.GetBool("i");
+				long long int n = parser.GetDouble("n");
+				if (n <= 0)
+				{
+					n = LONG_MAX;
+				}
+
 				// create a subscriber
 				ps_sub_t sub;
 				std::vector<void*> todo_msgs;
 
 				// subscribe to the topic and publish anything we get
+				unsigned long long int count = 0;
 				bool subscribed = false;
 				while (ps_okay())
 				{
@@ -406,6 +425,13 @@ int main(int num_args, char** args)
 						{
 							ps_deserialize_print(msg, &sub.received_message_def);
 							printf("-------------\n");
+
+							if (++count >= n)
+							{
+								// this destroys a node and everything inside of it
+								ps_node_destroy(&node);
+								return 0;
+							}
 						}
 						todo_msgs.clear();
 					}
@@ -422,21 +448,36 @@ int main(int num_args, char** args)
 						}
 						else
 						{
+							if (print_info)
+							{
+								printf("Extra info!");
+							}
 							ps_deserialize_print(data, &sub.received_message_def);
+							printf("-------------\n");
+
+							if (++count >= n)
+							{
+								// this destroys a node and everything inside of it
+								ps_node_destroy(&node);
+								return 0;
+							}
 						}
-						printf("-------------\n");
 					}
 				}
 			}
 			else if (subverb == "hz" || subverb == "bw")
 			{
+				pubsub::ArgParser parser;
+				parser.AddMulti({ "w", "window" }, "Window size for averaging", "100");
+
+				parser.Parse(args, num_args, 2);
+
 				// create a subscriber
 				ps_sub_t sub;
 				std::vector<void*> todo_msgs;
 
-				//int window = 100;
 				std::deque<std::pair<double, unsigned int>> message_times;
-				static int window = 100;
+				static int window = parser.GetDouble("w");
 				// subscribe to the topic
 				while (ps_okay())
 				{

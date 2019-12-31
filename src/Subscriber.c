@@ -10,7 +10,7 @@
 #include "Net.h"
 
 
-void ps_send_subscribe(struct ps_sub_t* sub, struct ps_endpoint_t* ep)
+void ps_send_subscribe(struct ps_sub_t* sub, const struct ps_endpoint_t* ep)
 {
 	// send da udp packet!
 	struct sockaddr_in address;
@@ -24,6 +24,7 @@ void ps_send_subscribe(struct ps_sub_t* sub, struct ps_endpoint_t* ep)
 	p->addr = sub->node->addr;
 	p->port = sub->node->port;
 	p->sub_id = sub->sub_id;
+	p->skip = sub->skip;
 
 	int off = sizeof(struct ps_sub_req_header_t);
 	off += serialize_string(&data[off], sub->topic);

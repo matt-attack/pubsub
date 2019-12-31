@@ -70,6 +70,14 @@ struct ps_msg_header
 };
 #pragma pack(pop)
 
+enum ps_transport_protocols
+{
+	PS_TRANSPORT_UDP = 0,
+	PS_TRANSPORT_TCP = 1,
+	PS_TRANSPORT_SHARED_MEMORY = 2,
+	PS_TRANSPORT_RESERVED = 1 << 5
+};
+
 #pragma pack(push)
 #pragma pack(1)
 struct ps_advertise_req_t
@@ -77,6 +85,8 @@ struct ps_advertise_req_t
 	char id;
 	int addr;
 	unsigned short port;
+	unsigned int transports;// bitmask showing supported protocols for this subscriber
+	unsigned int type_hash;// to see if the type is correct
 };
 #pragma pack(pop)
 
@@ -119,7 +129,25 @@ void ps_node_create_subscriber(struct ps_node_t* node, const char* topic, const 
 	bool ignore_local);// if ignore local is set, this node ignores publications from itself
 							 // this facilitiates passing messages through shared memory
 
+
 typedef void(*ps_subscriber_fn_cb_t)(void* message, unsigned int size, void* data);
+struct ps_subscriber_options
+{
+	unsigned int queue_size;
+	bool ignore_local;
+	struct ps_allocator_t* allocator;
+	bool want_message_def;
+	unsigned int skip;// skips to every nth message for throttling
+	ps_subscriber_fn_cb_t* cb;
+	void* cb_data;
+};
+
+void ps_subscriber_options_init(struct ps_subscriber_options* options);
+
+void ps_node_create_subscriber_adv(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,
+	struct ps_sub_t* sub,
+	const struct ps_subscriber_options* options);
+
 void ps_node_create_subscriber_cb(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,
 	struct ps_sub_t* sub,
 	ps_subscriber_fn_cb_t cb,
@@ -153,6 +181,13 @@ enum
 	PS_UDP_PROTOCOL_SUBSCRIBE_ACCEPT = 4,
 	PS_UDP_PROTOCOL_SUBSCRIBE_REQUEST = 1,
 	PS_UDP_PROTOCOL_MESSAGE_DEFINITION = 8,
+};
+
+enum
+{
+	PS_SHARED_PROTOCOL_SUBSCRIBE_REQUEST = 101,
+	PS_SHARED_PROTOCOL_SUBSCRIBE_ACCEPT = 102,
+	PS_SHARED_PROTOCOL_KEEP_ALIVE = 103,
 };
 
 enum

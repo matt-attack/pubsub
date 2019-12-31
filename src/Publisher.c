@@ -10,6 +10,14 @@
 
 void ps_pub_publish_client(struct ps_pub_t* pub, struct ps_client_t* client, struct ps_msg_t* msg)
 {
+	// handles skipping
+	if (client->modulo > 0)
+	{
+		if (pub->counter % client->modulo != 0)
+		{
+			return;
+		}
+	}
 	// send da udp packet!
 	struct sockaddr_in address;
 	address.sin_family = AF_INET;
@@ -50,6 +58,7 @@ void ps_pub_add_client(struct ps_pub_t* pub, const struct ps_client_t* client)
 	}
 	pub->clients[pub->num_clients - 1] = *client;
 
+	// todo this is probably the wrong spot for this
 	//okay, if we are latched, send it our last message
 	if (pub->last_message.data && pub->latched)
 	{
@@ -98,9 +107,12 @@ void ps_pub_remove_client(struct ps_pub_t* pub, const struct ps_client_t* client
 
 void ps_pub_publish_ez(struct ps_pub_t* pub, void* msg)
 {
-	struct ps_msg_t data = pub->message_definition->encode(0, msg);
+	if (pub->num_clients > 0 || pub->latched)
+	{
+		struct ps_msg_t data = pub->message_definition->encode(0, msg);
 
-	ps_pub_publish(pub, &data);
+		ps_pub_publish(pub, &data);
+	}
 }
 
 void ps_pub_publish(struct ps_pub_t* pub, struct ps_msg_t* msg)
@@ -111,6 +123,7 @@ void ps_pub_publish(struct ps_pub_t* pub, struct ps_msg_t* msg)
         
 		ps_pub_publish_client(pub, client, msg);
 	}
+	pub->counter++;
 
 	if (pub->latched)
 	{

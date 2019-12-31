@@ -100,6 +100,8 @@ void ps_node_advertise(struct ps_pub_t* pub)
 	p->id = PS_DISCOVERY_PROTOCOL_ADVERTISE;
 	p->addr = pub->node->addr;
 	p->port = pub->node->port;
+	p->type_hash = pub->message_definition->hash;
+	p->transports = PS_TRANSPORT_UDP;
 
 	int off = sizeof(struct ps_advertise_req_t);
 	off += serialize_string(&data[off], pub->topic);
@@ -433,12 +435,20 @@ void ps_malloc_free(void* data)
 
 struct ps_allocator_t ps_default_allocator = { ps_malloc_alloc, ps_malloc_free, 0 };
 
-void ps_node_create_subscriber(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,
+void ps_subscriber_options_init(struct ps_subscriber_options* options)
+{
+	options->queue_size = 1;
+	options->ignore_local = true;
+	options->allocator = 0;
+	options->skip = 0;
+	options->want_message_def = false;
+	options->cb = 0;
+	options->cb_data = 0;
+}
+
+void ps_node_create_subscriber_adv(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,
 	struct ps_sub_t* sub,
-	unsigned int queue_size,
-	bool want_message_def,
-	struct ps_allocator_t* allocator,
-	bool ignore_local)
+	const struct ps_subscriber_options* options)
 {
 	node->num_subs++;
 	struct ps_sub_t** old_subs = node->subs;
@@ -450,6 +460,7 @@ void ps_node_create_subscriber(struct ps_node_t* node, const char* topic, const 
 	node->subs[node->num_subs - 1] = sub;
 	free(old_subs);
 
+	struct ps_allocator_t* allocator = options->allocator;
 	if (allocator == 0)
 	{
 		allocator = &ps_default_allocator;
@@ -460,31 +471,59 @@ void ps_node_create_subscriber(struct ps_node_t* node, const char* topic, const 
 	sub->type = type;
 	sub->sub_id = node->sub_index++;
 	sub->allocator = allocator;
-	sub->ignore_local = ignore_local;
+	sub->ignore_local = options->ignore_local;
+	sub->skip = options->skip;
 
-	sub->want_message_definition = type ? want_message_def : true;
+	sub->want_message_definition = type ? options->want_message_def : true;
 	sub->received_message_def.fields = 0;
 	sub->received_message_def.hash = 0;
 	sub->received_message_def.num_fields = 0;
 
 	// force queue size to be > 0
-	if (queue_size <= 0)
+	unsigned int queue_size = options->queue_size;
+	if (options->cb)
 	{
-		queue_size = 1;
+		sub->cb = options->cb;
+		sub->cb_data = options->cb_data;
 	}
-
-	// allocate queue data
-	sub->queue_len = 0;
-	sub->queue_size = queue_size;
-	sub->queue = (void**)malloc(sizeof(void*)*queue_size);
-
-	for (unsigned int i = 0; i < queue_size; i++)
+	else
 	{
-		sub->queue[i] = 0;
+		if (queue_size <= 0)
+		{
+			queue_size = 1;
+		}
+
+		// allocate queue data
+		sub->queue_len = 0;
+		sub->queue_size = queue_size;
+		sub->queue = (void**)malloc(sizeof(void*)*queue_size);
+
+		for (unsigned int i = 0; i < queue_size; i++)
+		{
+			sub->queue[i] = 0;
+		}
 	}
 
 	// send out the subscription query while we are at it
 	ps_node_subscribe_query(sub);
+}
+
+void ps_node_create_subscriber(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,
+	struct ps_sub_t* sub,
+	unsigned int queue_size,
+	bool want_message_def,
+	struct ps_allocator_t* allocator,
+	bool ignore_local)
+{
+	struct ps_subscriber_options options;
+	ps_subscriber_options_init(&options);
+
+	options.queue_size = queue_size;
+	options.want_message_def = want_message_def;
+	options.allocator = allocator;
+	options.ignore_local = ignore_local;
+
+	ps_node_create_subscriber_adv(node, topic, type, sub, &options);
 }
 
 void ps_node_create_subscriber_cb(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,
@@ -496,43 +535,17 @@ void ps_node_create_subscriber_cb(struct ps_node_t* node, const char* topic, con
 	bool ignore_local
 )
 {
-	node->num_subs++;
-	struct ps_sub_t** old_subs = node->subs;
-	node->subs = (struct ps_sub_t**)malloc(sizeof(struct ps_sub_t*)*node->num_subs);
-	for (unsigned int i = 0; i < node->num_subs - 1; i++)
-	{
-		node->subs[i] = old_subs[i];
-	}
-	node->subs[node->num_subs - 1] = sub;
-	free(old_subs);
+	struct ps_subscriber_options options;
+	ps_subscriber_options_init(&options);
 
-	if (allocator == 0)
-	{
-		allocator = &ps_default_allocator;
-	}
+	options.queue_size = 0;
+	options.cb = cb;
+	options.cb_data = cb_data;
+	options.want_message_def = want_message_def;
+	options.allocator = allocator;
+	options.ignore_local = ignore_local;
 
-	sub->node = node;
-	sub->topic = topic;
-	sub->type = type;
-	sub->sub_id = node->sub_index++;
-	sub->allocator = allocator;
-	sub->ignore_local = ignore_local;
-
-	sub->want_message_definition = type ? want_message_def : true;
-	sub->received_message_def.fields = 0;
-	sub->received_message_def.hash = 0;
-	sub->received_message_def.num_fields = 0;
-
-	sub->cb = cb;
-	sub->cb_data = cb_data;
-
-	// we dont need a queue
-	sub->queue_len = 0;
-	sub->queue_size = 0;
-	sub->queue = 0;
-
-	// send out the subscription query while we are at it
-	ps_node_subscribe_query(sub);
+	ps_node_create_subscriber_adv(node, topic, type, sub, &options);
 }
 
 void ps_pub_publish_accept(struct ps_pub_t* pub, struct ps_client_t* client, const struct ps_message_definition_t* msg)
@@ -612,6 +625,8 @@ int ps_node_spin(struct ps_node_t* node)
 		}
 	}
 
+	// this block holds the update for one protocol
+	// other protocols can add to this
 	int packet_count = 0;
 	while (true)
 	{
@@ -656,9 +671,6 @@ int ps_node_spin(struct ps_node_t* node)
 
 			// queue up the data, and copy :/ (can make zero copy for arduino version)
 			int data_size = received_bytes - sizeof(struct ps_msg_header);
-
-			// todo also allow queueless operation and just call callbacks here
-
 
 			// also todo fastpath for PoD message types
 			
@@ -779,6 +791,7 @@ int ps_node_spin(struct ps_node_t* node)
 			client.last_keepalive = GetTickCount64();// use the current time stamp
 			client.sequence_number = 0;
 			client.stream_id = p->sub_id;
+			client.modulo = p->skip > 0 ? p->skip+1 : 0;
 
 			printf("Got subscribe request, adding client if we haven't already\n");
 			ps_pub_add_client(pub, &client);
@@ -788,7 +801,7 @@ int ps_node_spin(struct ps_node_t* node)
 
 			//todo if it is a latched topic, need to publish our last value
 		}
-		else if (data[0] == PS_UDP_PROTOCOL_MESSAGE_DEFINITION/*8*/)
+		else if (data[0] == PS_UDP_PROTOCOL_MESSAGE_DEFINITION)
 		{
 			//printf("got message definition");
 			if (node->def_cb)
@@ -803,6 +816,59 @@ int ps_node_spin(struct ps_node_t* node)
 				node->def_cb(&def);
 			}
 		}
+#ifndef PUBSUB_NO_ALT_PROTOCOLS
+		else if (data[0] == PS_SHARED_PROTOCOL_SUBSCRIBE_REQUEST)
+		{
+			//received subscribe request
+			struct ps_sub_req_header_t* p = (struct ps_sub_req_header_t*)data;
+
+			char* topic = (char*)&data[sizeof(struct ps_sub_req_header_t)];
+
+			printf("Got subscribe request for %s\n", topic);
+
+			//check if we have a sub matching that topic
+			struct ps_pub_t* pub = 0;
+			for (unsigned int i = 0; i < node->num_pubs; i++)
+			{
+				if (strcmp(node->pubs[i]->topic, topic) == 0)
+				{
+					pub = node->pubs[i];
+					break;
+				}
+			}
+			if (pub == 0)
+			{
+				printf("Got subscribe request, but it was for a topic we don't have\n");
+				continue;
+			}
+
+			// now check that the type matches or none is given...
+			char* type = (char*)&data[strlen(topic) + sizeof(struct ps_sub_req_header_t) + 1];
+			if (strlen(type) != 0 && strcmp(type, pub->message_definition->name) != 0)
+			{
+				printf("The types didnt match! Ignoring\n");
+				continue;
+			}
+			// todo wrap these checks in a function
+
+			// send response and start publishing
+			struct ps_client_t client;
+			client.endpoint.address = p->addr;
+			client.endpoint.port = p->port;
+			client.last_keepalive = GetTickCount64();// use the current time stamp
+			client.sequence_number = 0;
+			client.stream_id = p->sub_id;
+			client.modulo = p->skip > 0 ? p->skip + 1 : 0;
+
+			printf("Got subscribe request, adding client if we haven't already\n");
+			ps_pub_add_client(pub, &client);
+
+			//send out the data format to the client
+			ps_pub_publish_accept(pub, &client, pub->message_definition);
+
+			//todo if it is a latched topic, need to publish our last value
+		}
+#endif
 	}
 
 	// now receive multicast data and process it
@@ -932,6 +998,16 @@ int ps_node_spin(struct ps_node_t* node)
 				continue;
 			}
 
+			//check hashes
+			if (sub->type != 0 && p->type_hash != sub->type->hash)
+			{
+				// its an error for type mistmatch
+				printf("ERROR: Type hash mismatch on %s", type);
+				return;
+			}
+
+
+			// todo subscribe to the most relevant protocol
 			// check if we are already getting data from this person, if so lets not send another request to their advertise
 
 			//printf("Got advertise notice for a topic we need\n");

@@ -26,6 +26,7 @@ struct ps_client_t
 	unsigned short sequence_number;// sequence of the networked packets, incremented with each one
 	unsigned long long last_keepalive;//timestamp of the last keepalive message, used to know when to deactiveate this connection
 	unsigned int stream_id;
+	unsigned int modulo;
 };
 
 struct ps_pub_t
@@ -39,6 +40,7 @@ struct ps_pub_t
 	struct ps_client_t* clients;
 	bool latched;// todo make this an enum of options if we add more
 	struct ps_msg_t last_message;//only used if latched
+	unsigned int counter;
 };
 
 // adds a client to a publisher

@@ -135,8 +135,10 @@ class Node
 	friend class Spinner;
 	friend class SubscriberBase;
 	std::string original_name_;
+
 	std::string real_name_;
 	std::string namespace_;
+	std::string qualified_name_;// necessary to hold the pointer to the name for C
 
 	ps_node_t node_;
 public:
@@ -160,8 +162,8 @@ public:
 		real_name_ = validate_name(arg_name, true);
 		namespace_ = validate_name(ns, true);
 
-		std::string underlying_name = getQualifiedName();
-		ps_node_init(&node_, underlying_name.c_str(), "", use_broadcast);
+		qualified_name_ = getQualifiedName();
+		ps_node_init(&node_, qualified_name_.c_str(), "", use_broadcast);
 	}
 
 	~Node()
@@ -238,7 +240,7 @@ public:
 		std::string real_topic = validate_name(topic_);
 
 		// look up remapping
-		remapped_topic_ = handle_remap(real_topic, "/" + node.getNamespace());
+		remapped_topic_ = handle_remap(real_topic, node.getNamespace());
 
 		node.lock_.lock();
 		ps_node_create_publisher(node.getNode(), remapped_topic_.c_str(), T::GetDefinition(), &publisher_, latched);
@@ -271,6 +273,7 @@ public:
 		node_->lock_.unlock();
 	}
 
+	// note due to locking only one publish can happen on a node at a time
 	// this does not copy the message for intraprocess
 	void publish(const std::shared_ptr<T>& msg)
 	{
@@ -283,7 +286,6 @@ public:
 
 			//printf("Publishing locally with no copy..\n");
 
-			// help this isnt thread safe
 			auto specific_sub = (Subscriber<T>*)sub;
 			specific_sub->queue_mutex_.lock();
 			specific_sub->queue_.push_front(msg);
@@ -299,6 +301,7 @@ public:
 		node_->lock_.unlock();
 	}
 
+	// note due to locking only one publish can happen on a node at a time
 	// this publish type copies the message for intraprocess
 	void publish(const T& msg)
 	{
@@ -329,6 +332,8 @@ public:
 			specific_sub->queue_mutex_.unlock();
 			//specific_sub->cb_(copy);
 		}
+
+		// note this still copies unnecessarily if the topic is latched
 		// todo make this only copy/encode if necessary
 		ps_pub_publish_ez(&publisher_, (void*)&msg);
 
@@ -426,7 +431,7 @@ public:
 		// clean up the topic
 		std::string validated_topic = validate_name(topic);
 
-		remapped_topic_ = handle_remap(validated_topic, "/" + node.getNamespace());
+		remapped_topic_ = handle_remap(validated_topic, node.getNamespace());
 
 		auto cb2 = [](void* msg, unsigned int size, void* th)
 		{
