@@ -241,6 +241,7 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 	node->def_cb = 0;
 
 	node->_last_advertise = 0;
+	node->_last_check = 0;
 
 	node->advertise_port = 11311;// todo make this configurable
 
@@ -485,6 +486,7 @@ void ps_node_create_subscriber_adv(struct ps_node_t* node, const char* topic, co
 	{
 		sub->cb = options->cb;
 		sub->cb_data = options->cb_data;
+		sub->queue_size = 0;
 	}
 	else
 	{
@@ -602,15 +604,13 @@ int ps_node_spin(struct ps_node_t* node)
 	//also send out keepalives which are still todo
 #ifndef ARDUINO
 	unsigned long long now = GetTickCount64();
-	if (node->_last_advertise + 25 * 1000 < GetTickCount64())
-	{
-		node->_last_advertise = GetTickCount64();
 #else
-	if (node->_last_advertise + 5 * 1000 < millis())
-	{
-		node->_last_advertise = millis();
+	unsigned long now = millis();
 #endif
-        //printf("Advertising\n");
+	if (node->_last_advertise + 25 * 1000 < now)
+	{
+		node->_last_advertise = now;
+		//printf("Advertising\n");
 
 		// send out an advertisement for each publisher we have
 		for (unsigned int i = 0; i < node->num_pubs; i++)
@@ -638,8 +638,9 @@ int ps_node_spin(struct ps_node_t* node)
 		if (received_bytes <= 0)
 			break;
 
-		unsigned int address = ntohl(from.sin_addr.s_addr);
-		unsigned int port = ntohs(from.sin_port);
+		struct ps_msg_info_t message_info;
+		message_info.address = ntohl(from.sin_addr.s_addr);
+		message_info.port = ntohs(from.sin_port);
 
 		// look at the header for the id to see if we should do something with it
 		// then keep doing this until we run out of packets or hit a max
@@ -647,7 +648,7 @@ int ps_node_spin(struct ps_node_t* node)
 		//we got message data or a specific request
 		if (data[0] == PS_UDP_PROTOCOL_DATA)// actual message
 		{
-			struct ps_msg_header* hdr = (struct ps_msg_header*)data;
+			const struct ps_msg_header* hdr = (struct ps_msg_header*)data;
 
 			//printf("Got message packet seq %i\n", hdr->seq);
 
@@ -673,7 +674,7 @@ int ps_node_spin(struct ps_node_t* node)
 			int data_size = received_bytes - sizeof(struct ps_msg_header);
 
 			// also todo fastpath for PoD message types
-			
+
 			// okay, if we have the message definition, deserialize and output in a message
 			void* out_data;
 			if (sub->type)
@@ -693,7 +694,7 @@ int ps_node_spin(struct ps_node_t* node)
 			//so lets push to the front (highest open index or highest if full)
 			if (sub->queue_size == 0)
 			{
-				sub->cb(out_data, data_size, sub->cb_data);
+				sub->cb(out_data, data_size, sub->cb_data, &message_info);
 			}
 			else if (sub->queue_size == sub->queue_len)
 			{
@@ -717,7 +718,7 @@ int ps_node_spin(struct ps_node_t* node)
 			{
 				for (unsigned int c = 0; c < node->pubs[i]->num_clients; i++)
 				{
-					if (node->pubs[i]->clients[c].stream_id == stream_id && node->pubs[i]->clients[c].endpoint.port == port)
+					if (node->pubs[i]->clients[c].stream_id == stream_id && node->pubs[i]->clients[c].endpoint.port == message_info.port)
 					{
 						node->pubs[i]->clients[c].last_keepalive = GetTickCount64();
 						break;
@@ -791,7 +792,7 @@ int ps_node_spin(struct ps_node_t* node)
 			client.last_keepalive = GetTickCount64();// use the current time stamp
 			client.sequence_number = 0;
 			client.stream_id = p->sub_id;
-			client.modulo = p->skip > 0 ? p->skip+1 : 0;
+			client.modulo = p->skip > 0 ? p->skip + 1 : 0;
 
 			printf("Got subscribe request, adding client if we haven't already\n");
 			ps_pub_add_client(pub, &client);
@@ -963,7 +964,7 @@ int ps_node_spin(struct ps_node_t* node)
 			{
 				char* type = (char*)&data[strlen(topic) + sizeof(struct ps_advertise_req_t) + 1];
 				char* node_name = type + 1 + strlen(type);
-				node->adv_cb(topic, type, node_name, 0);
+				node->adv_cb(topic, type, node_name, p);
 			}
 
 			//printf("Got advertise notice\n");
@@ -1050,7 +1051,7 @@ int ps_node_spin(struct ps_node_t* node)
 		}
 		else if (data[0] == PS_DISCOVERY_PROTOCOL_QUERY_ALL)
 		{
-			printf("Got query request\n");
+			//printf("Got query request\n");
 			//overall query, maybe put this into fewer packets?
 			// also todo maybe make this use unicast instead
 
@@ -1119,17 +1120,22 @@ int ps_node_spin(struct ps_node_t* node)
 	}
 
 	// perform time out checks on publishers
-	for (unsigned int i = 0; i < node->num_pubs; i++)
+	if (node->_last_check + 2 * 1000 < now)
 	{
-		for (unsigned int c = 0; c < node->pubs[i]->num_clients; c++)
+		node->_last_check = now;
+
+		for (unsigned int i = 0; i < node->num_pubs; i++)
 		{
-			struct ps_client_t* client = &node->pubs[i]->clients[c];
-			if (client->last_keepalive < now - 120 * 1000)
+			for (unsigned int c = 0; c < node->pubs[i]->num_clients; c++)
 			{
-				printf("Client has timed out, unsubscribing...");
-				// remove the client
-				struct ps_client_t cl = *client;
-				ps_pub_remove_client(node->pubs[i], &cl);
+				struct ps_client_t* client = &node->pubs[i]->clients[c];
+				if (client->last_keepalive < now - 120 * 1000)
+				{
+					printf("Client has timed out, unsubscribing...");
+					// remove the client
+					struct ps_client_t cl = *client;
+					ps_pub_remove_client(node->pubs[i], &cl);
+				}
 			}
 		}
 	}

@@ -13,7 +13,7 @@ void ps_pub_publish_client(struct ps_pub_t* pub, struct ps_client_t* client, str
 	// handles skipping
 	if (client->modulo > 0)
 	{
-		if (pub->counter % client->modulo != 0)
+		if (client->sequence_number % client->modulo != 0)
 		{
 			return;
 		}
@@ -123,7 +123,6 @@ void ps_pub_publish(struct ps_pub_t* pub, struct ps_msg_t* msg)
         
 		ps_pub_publish_client(pub, client, msg);
 	}
-	pub->counter++;
 
 	if (pub->latched)
 	{

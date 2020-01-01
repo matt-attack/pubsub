@@ -40,7 +40,6 @@ struct ps_pub_t
 	struct ps_client_t* clients;
 	bool latched;// todo make this an enum of options if we add more
 	struct ps_msg_t last_message;//only used if latched
-	unsigned int counter;
 };
 
 // adds a client to a publisher

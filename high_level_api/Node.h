@@ -433,7 +433,7 @@ public:
 
 		remapped_topic_ = handle_remap(validated_topic, node.getNamespace());
 
-		auto cb2 = [](void* msg, unsigned int size, void* th)
+		auto cb2 = [](void* msg, unsigned int size, void* th, const ps_msg_info_t* info)
 		{
 			// convert to shared ptr
 			std::shared_ptr<T> msg_ptr((T*)msg);

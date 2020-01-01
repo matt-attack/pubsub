@@ -275,6 +275,14 @@ double GetCounter()
 	return double(li.QuadPart - CounterStart) / PCFreq;
 }
 
+struct NodeInfo
+{
+	int port;
+	int address;
+};
+
+std::map<std::string, NodeInfo> _nodes;
+
 int main(int num_args_real, char** args)
 {
 	StartCounter();
@@ -285,11 +293,16 @@ int main(int num_args_real, char** args)
 	int num_args = num_args_real;
 	//num_args = 5;
 
-	//char* args[] = { "aaa", "topic", "echo", "/joy", "-n", "0" };
+	//char* args[] = { "aaa", "topic", "echo", "/data", "-n", "0" };
 	//num_args = (sizeof args / sizeof args[0]);
 
-	node.adv_cb = [](const char* topic, const char* type, const char* node, void* data)
+	node.adv_cb = [](const char* topic, const char* type, const char* node, const ps_advertise_req_t* data)
 	{
+		NodeInfo info;
+		info.address = data->addr;
+		info.port = data->port;
+		_nodes[node] = info;
+
 		auto t = _topics.find(topic);
 		if (t == _topics.end())
 		{
@@ -385,8 +398,8 @@ int main(int num_args_real, char** args)
 
 				parser.Parse(args, num_args, 3);
 
-				bool print_info = parser.GetBool("i");
-				long long int n = parser.GetDouble("n");
+				static bool print_info = parser.GetBool("i");
+				static long long int n = parser.GetDouble("n");
 				int skip = parser.GetDouble("s");
 				if (n <= 0)
 				{
@@ -394,11 +407,11 @@ int main(int num_args_real, char** args)
 				}
 
 				// create a subscriber
-				ps_sub_t sub;
-				std::vector<void*> todo_msgs;
+				static ps_sub_t sub;
+				static std::vector<void*> todo_msgs;
 
 				// subscribe to the topic and publish anything we get
-				unsigned long long int count = 0;
+				static unsigned long long int count = 0;
 				bool subscribed = false;
 				while (ps_okay())
 				{
@@ -416,63 +429,72 @@ int main(int num_args_real, char** args)
 						ps_subscriber_options_init(&options);
 
 						options.skip = skip;
-						options.queue_size = 10;
+						options.queue_size = 0;
 						options.want_message_def = true;
 						options.allocator = 0;
 						options.ignore_local = false;
+						options.cb = [](void* message, unsigned int size, void* data, const ps_msg_info_t* info)
+						{
+							if (todo_msgs.size() && sub.received_message_def.fields != 0)
+							{
+								for (auto msg : todo_msgs)
+								{
+									ps_deserialize_print(msg, &sub.received_message_def);
+									printf("-------------\n");
+									free(msg);
+									if (++count >= n)
+									{
+										//need to commit sodoku here..
+										// this destroys a node and everything inside of it
+										//ps_node_destroy(&node);
+										//return 0;
+									}
+								}
+								todo_msgs.clear();
+							}
+
+							// get and deserialize the messages
+							if (sub.received_message_def.fields == 0)
+							{
+								//printf("WARN: got message but no message definition yet...\n");
+								// queue it up, then print them out once I get it
+								todo_msgs.push_back(message);
+							}
+							else
+							{
+								if (print_info)
+								{
+									for (auto& n : _nodes)
+									{
+										if (info->address == n.second.address
+											&& info->port == n.second.port)
+										{
+											std::cout << "Node: " << n.first << "\n";
+										}
+									}
+									// map the id to the node
+									std::cout << "From: "
+										<< ((info->address & 0xFF000000) >> 24) << "."
+										<< ((info->address & 0xFF0000) >> 16) << "."
+										<< ((info->address & 0xFF00) >> 8) << "."
+										<< ((info->address & 0xFF)) << ":" << info->port << "\n";
+									printf("-------------\n");
+								}
+								ps_deserialize_print(message, &sub.received_message_def);
+								printf("-------------\n");
+								
+								free(message);
+								if (++count >= n)
+								{
+									// need to commit sodoku here..
+									// this destroys a node and everything inside of it
+									//ps_node_destroy(&node);
+									//return 0;
+								}
+							}
+						};
 
 						ps_node_create_subscriber_adv(&node, info->first.c_str(), 0, &sub, &options);
-					}
-
-					if (!subscribed)
-					{
-						//printf("Waiting for topic...\n");
-						continue;
-					}
-
-					if (todo_msgs.size() && sub.received_message_def.fields != 0)
-					{
-						for (auto msg : todo_msgs)
-						{
-							ps_deserialize_print(msg, &sub.received_message_def);
-							printf("-------------\n");
-
-							if (++count >= n)
-							{
-								// this destroys a node and everything inside of it
-								ps_node_destroy(&node);
-								return 0;
-							}
-						}
-						todo_msgs.clear();
-					}
-
-					// get and deserialize the messages
-					void* data;
-					while ((data = ps_sub_deque(&sub)) && ps_okay())
-					{
-						if (sub.received_message_def.fields == 0)
-						{
-							//printf("WARN: got message but no message definition yet...\n");
-							// queue it up, then print them out once I get it
-							todo_msgs.push_back(data);
-						}
-						else
-						{
-							if (print_info)
-							{
-								printf("Extra info!");
-							}
-							ps_deserialize_print(data, &sub.received_message_def);
-							printf("-------------\n");
-
-							if (++count >= n)
-							{
-								// this destroys a node and everything inside of it
-								ps_node_destroy(&node);
-								return 0;
-							}
-						}
 					}
 				}
 			}
@@ -500,7 +522,7 @@ int main(int num_args_real, char** args)
 					{
 						std::cout << "Topic " << topic << " found!\n";
 
-						auto cb = [](void* message, unsigned int size, void* data)
+						auto cb = [](void* message, unsigned int size, void* data, const ps_msg_info_t* info)
 						{
 							std::deque<std::pair<double, unsigned int>>* message_times = (std::deque<std::pair<double, unsigned int>>*)data;
 							message_times->push_back({ GetCounter(), size });
@@ -659,7 +681,7 @@ int main(int num_args_real, char** args)
 					if (!got_data && info != _topics.end())
 					{
 						std::cout << "Topic " << topic << " found!\n";
-						std::cout << info->first.c_str() << " " << info->second.type.c_str();
+						std::cout << "Type: " << " " << info->second.type.c_str() << "\n";
 						got_data = true;
 
 						//get the message definition from it
@@ -716,7 +738,6 @@ int main(int num_args_real, char** args)
 					}
 
 					//publish
-					printf("publishing\n");
 					// copy the message
 					ps_msg_t cpy = ps_msg_cpy(&msg);
 					ps_pub_publish(&pub, &cpy);
@@ -774,7 +795,18 @@ int main(int num_args_real, char** args)
 								pubs.push_back(topic.first);
 					}
 
-					std::cout << "Node: " << node_name;
+					std::cout << "Node: " << node_name << "\n";
+
+					// print port info if we got it
+					if (_nodes.find(node_name) != _nodes.end())
+					{
+						NodeInfo info = _nodes[node_name];
+						std::cout << " Address: " 
+							<< ((info.address & 0xFF000000) >> 24) << "." 
+							<< ((info.address & 0xFF0000) >> 16) << "." 
+							<< ((info.address & 0xFF00) >> 8) << "."
+							<< ((info.address & 0xFF)) << ":" << info.port << "\n";
+					}
 
 					if (subs.size() == 0 && pubs.size() == 0)
 					{
