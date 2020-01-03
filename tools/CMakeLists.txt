@@ -48,6 +48,7 @@ endmacro()
 generate_messages(FILES 
   std_msgs__Joy.msg
   std_msgs__String.msg 
+  std_msgs__Float.msg
 )
 
 
