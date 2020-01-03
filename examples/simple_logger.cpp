@@ -2,6 +2,7 @@
 #include <stdio.h>
 
 #include "../high_level_api/Node.h"
+#include "../high_level_api/Logging.h"
 #include "../src/System.h"
 
 #include "../msg/std_msgs__String.msg.h"
@@ -12,12 +13,15 @@ int main()
 
 	pubsub::Publisher<std_msgs::String> string_pub(node, "/data");
 
+	pubsub::Logger logger(node);
+
 	pubsub::Spinner spinner;
 	spinner.addNode(node);
 
 	int i = 0;
 	while (ps_okay())
 	{
+		PUBSUB_INFO(logger, "Publishing...");
 		std_msgs::String msg;
 		char value[20];
 		sprintf(value, "Hello %i", i++);
@@ -32,7 +36,7 @@ int main()
 
 		msg.value = 0;// so it doesnt get freed by the destructor since we allocated it ourself
 
-		ps_sleep(333);
+		ps_sleep(1000);
 	}
 
     return 0;

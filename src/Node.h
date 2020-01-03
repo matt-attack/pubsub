@@ -1,8 +1,16 @@
 #pragma once
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+#include <stdbool.h>
+
 struct ps_sub_t;
 struct ps_pub_t;
 struct ps_message_definition_t;
+struct ps_advertise_req_t;
 
 #ifndef _WIN32
 typedef unsigned int ps_socket_t;
@@ -10,16 +18,16 @@ typedef unsigned int ps_socket_t;
 typedef int ps_socket_t;
 #endif
 
-typedef void(*ps_adv_cb_t)(const char* topic, const char* type, const char* node, void* data);
+typedef void(*ps_adv_cb_t)(const char* topic, const char* type, const char* node, const struct ps_advertise_req_t* data);
 typedef void(*ps_sub_cb_t)(const char* topic, const char* type, const char* node, void* data);
-typedef void(*ps_msg_def_cb_t)(const ps_message_definition_t* definition);
+typedef void(*ps_msg_def_cb_t)(const struct ps_message_definition_t* definition);
 struct ps_node_t
 {
 	const char* name;
 	unsigned int num_pubs;
-	ps_pub_t** pubs;
+	struct ps_pub_t** pubs;
 	unsigned int num_subs;
-	ps_sub_t** subs;
+	struct ps_sub_t** subs;
 
 	//lets just have one big socket for everything I guess for the moment
 	ps_socket_t socket;
@@ -40,6 +48,14 @@ struct ps_node_t
 
 	//implementation data
 	unsigned long long _last_advertise;
+	unsigned long long _last_check;
+};
+
+// describes where a message came from
+struct ps_msg_info_t
+{
+	unsigned int address;
+	unsigned int port;
 };
 
 //todo move elsewhere probably
@@ -63,6 +79,14 @@ struct ps_msg_header
 };
 #pragma pack(pop)
 
+enum ps_transport_protocols
+{
+	PS_TRANSPORT_UDP = 0,
+	PS_TRANSPORT_TCP = 1,
+	PS_TRANSPORT_SHARED_MEMORY = 2,
+	PS_TRANSPORT_RESERVED = 1 << 5
+};
+
 #pragma pack(push)
 #pragma pack(1)
 struct ps_advertise_req_t
@@ -70,6 +94,8 @@ struct ps_advertise_req_t
 	char id;
 	int addr;
 	unsigned short port;
+	unsigned int transports;// bitmask showing supported protocols for this subscriber
+	unsigned int type_hash;// to see if the type is correct
 };
 #pragma pack(pop)
 
@@ -98,29 +124,61 @@ struct ps_transport_t
 
 //not threadsafe, but thats obvious isnt it
 // set broadcast to true to use that for advertising instead of multicast
-void ps_node_init(ps_node_t* node, const char* name, const char* ip = "", bool broadcast = false);
+// give null ip to autodetect
+// set 
+void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool broadcast);
 
-void ps_node_create_publisher(ps_node_t* node, const char* topic, const ps_message_definition_t* type, ps_pub_t* pub, bool latched = false);
+void ps_node_create_publisher(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type, struct ps_pub_t* pub, bool latched);
 
-void ps_node_create_subscriber(ps_node_t* node, const char* topic, const ps_message_definition_t* type,
-	ps_sub_t* sub,
-	unsigned int queue_size = 1,
-	bool want_message_def = false,
-	ps_allocator_t* allocator = 0);
+void ps_node_create_subscriber(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,
+	struct ps_sub_t* sub,
+	unsigned int queue_size,//make >= 1
+	bool want_message_def,//usually want false
+	struct ps_allocator_t* allocator,//give null to use default
+	bool ignore_local);// if ignore local is set, this node ignores publications from itself
+							 // this facilitiates passing messages through shared memory
 
-int ps_node_spin(ps_node_t* node);
+
+typedef void(*ps_subscriber_fn_cb_t)(void* message, unsigned int size, void* data, const struct ps_msg_info_t* info);
+struct ps_subscriber_options
+{
+	unsigned int queue_size;
+	bool ignore_local;
+	struct ps_allocator_t* allocator;
+	bool want_message_def;
+	unsigned int skip;// skips to every nth message for throttling
+	ps_subscriber_fn_cb_t cb;
+	void* cb_data;
+};
+
+void ps_subscriber_options_init(struct ps_subscriber_options* options);
+
+void ps_node_create_subscriber_adv(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,
+	struct ps_sub_t* sub,
+	const struct ps_subscriber_options* options);
+
+void ps_node_create_subscriber_cb(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,
+	struct ps_sub_t* sub,
+	ps_subscriber_fn_cb_t cb,
+	void* cb_data,
+	bool want_message_def,
+	struct ps_allocator_t* allocator,
+	bool ignore_local
+);
+
+int ps_node_spin(struct ps_node_t* node);
 
 int serialize_string(char* data, const char* str);
 
 // sends out a system query message for all nodes to advertise
-void ps_node_system_query(ps_node_t* node);
+void ps_node_system_query(struct ps_node_t* node);
 
-void ps_node_query_message_definition(ps_node_t* node, const char* message);
+void ps_node_query_message_definition(struct ps_node_t* node, const char* message);
 
 
 int ps_okay();
 
-void ps_node_destroy(ps_node_t* node);
+void ps_node_destroy(struct ps_node_t* node);
 
 
 // implementation types
@@ -136,9 +194,20 @@ enum
 
 enum
 {
+	PS_SHARED_PROTOCOL_SUBSCRIBE_REQUEST = 101,
+	PS_SHARED_PROTOCOL_SUBSCRIBE_ACCEPT = 102,
+	PS_SHARED_PROTOCOL_KEEP_ALIVE = 103,
+};
+
+enum
+{
 	PS_DISCOVERY_PROTOCOL_SUBSCRIBE_QUERY = 1,
 	PS_DISCOVERY_PROTOCOL_ADVERTISE = 2,
 	PS_DISCOVERY_PROTOCOL_UNSUBSCRIBE = 3,
 	PS_DISCOVERY_PROTOCOL_QUERY_ALL = 4,
 	PS_DISCOVERY_PROTOCOL_QUERY_MSG_DEFINITION = 5// used for getting message formats
 };
+
+#ifdef __cplusplus
+}
+#endif

@@ -220,7 +220,7 @@ std::string generate(const char* definition, const char* name)
 	//ps_message_definition_t std_msgs_String_def = { 123456789, "std_msgs/String", 1, std_msgs_String_fields };
 
 	// generate the fields
-	output += "ps_field_t " + type_name + "_fields[] = {\n";
+	output += "struct ps_field_t " + type_name + "_fields[] = {\n";
 	for (auto& field : fields)
 	{
 		output += "  { " + field.getTypeEnum() + ", \"" + field.name + "\", ";
@@ -261,16 +261,16 @@ std::string generate(const char* definition, const char* name)
 	if (is_pure)
 	{
 		//generate simple de/serializaton
-		output += "void* " + type_name + "_decode(const void* data, ps_allocator_t* allocator)\n{\n";
-		output += "  " + type_name + "* out = (" + type_name + "*)allocator->alloc(sizeof(" + type_name + "), allocator->context);\n";
+		output += "void* " + type_name + "_decode(const void* data, struct ps_allocator_t* allocator)\n{\n";
+		output += "  struct " + type_name + "* out = (struct " + type_name + "*)allocator->alloc(sizeof(" + type_name + "), allocator->context);\n";
 		output += "  *out = *(" + type_name + "*)data;\n";
 		output += "  return out;\n";
 		output += "\n}\n\n";
 
 		// now for encode
-		output += "ps_msg_t " + type_name + "_encode(ps_allocator_t* allocator, const void* msg)\n{\n";
-		output += "  int len = sizeof(" + type_name + ");\n";
-		output += "  ps_msg_t omsg;\n";
+		output += "struct ps_msg_t " + type_name + "_encode(struct ps_allocator_t* allocator, const void* msg)\n{\n";
+		output += "  int len = sizeof(struct " + type_name + ");\n";
+		output += "  struct ps_msg_t omsg;\n";
 		output += "  ps_msg_alloc(len, &omsg);\n";
 		output += "  memcpy(ps_get_msg_start(omsg.data), msg, len);\n";
 		output += "  return omsg;\n}\n";
@@ -278,16 +278,14 @@ std::string generate(const char* definition, const char* name)
 	else
 	{
 		//need to split it in sections between the strings
-		output += "void* " + type_name + "_decode(const void* data, ps_allocator_t* allocator)\n{\n";
+		output += "void* " + type_name + "_decode(const void* data, struct ps_allocator_t* allocator)\n{\n";
 		output += "  char* p = (char*)data;\n";
-		output += "  int len = sizeof("+type_name+");\n";
+		output += "  int len = sizeof(struct "+type_name+");\n";
 		for (size_t i = 0; i < fields.size(); i++)
 		{
 			if (fields[i].type == "string")
 			{
-				output += "  len -= sizeof(char*);\n";
 				output += "  int len_" + fields[i].name + " = strlen(p) + 1; \n";
-				output += "  len += len_" + fields[i].name + ";\n";
 				output += "  p += len_" + fields[i].name + ";\n";
 			}
 			else
@@ -296,7 +294,7 @@ std::string generate(const char* definition, const char* name)
 			}
 		}
 		output += "  p = (char*)data;\n";// start from beginning again
-		output += "  "+type_name+"* out = (" + type_name + "*)allocator->alloc(len, allocator->context);\n";
+		output += "  struct "+type_name+"* out = (struct " + type_name + "*)allocator->alloc(len, allocator->context);\n";
 		// for now lets just decode non strings
 		for (size_t i = 0; i < fields.size(); i++)
 		{
@@ -317,9 +315,9 @@ std::string generate(const char* definition, const char* name)
 		output += "}\n\n";
 
 		//typedef ps_msg_t(*ps_fn_encode_t)(ps_allocator_t* allocator, const void* msg);
-		output += "ps_msg_t " + type_name + "_encode(ps_allocator_t* allocator, const void* data)\n{\n";
-		output += "  const " + type_name + "* msg = (const " + type_name + "*)data;\n";
-		output += "  int len = sizeof(" + type_name + ");\n";
+		output += "struct ps_msg_t " + type_name + "_encode(struct ps_allocator_t* allocator, const void* data)\n{\n";
+		output += "  const struct " + type_name + "* msg = (const struct " + type_name + "*)data;\n";
+		output += "  int len = sizeof(struct " + type_name + ");\n";
 		output += "  // for each string, add their length\n";
 		int n_str = 0;
 		for (size_t i = 0; i < fields.size(); i++)
@@ -332,7 +330,7 @@ std::string generate(const char* definition, const char* name)
 			}
 		}
 		output += "  len -= " + std::to_string(n_str) + "*sizeof(char*);\n";
-		output += "  ps_msg_t omsg;\n";
+		output += "  struct ps_msg_t omsg;\n";
 		output += "  ps_msg_alloc(len, &omsg);\n";
 		output += "  char* start = (char*)ps_get_msg_start(omsg.data);\n";
 		for (size_t i = 0; i < fields.size(); i++)
@@ -355,14 +353,79 @@ std::string generate(const char* definition, const char* name)
 
 	// generate the actual message definition
 	int field_count = fields.size();
-	output += "ps_message_definition_t " + type_name + "_def = { ";
+	output += "struct ps_message_definition_t " + type_name + "_def = { ";
 	output += std::to_string(hash) + ", \"" + name + "\", " + std::to_string(field_count) + ", " + type_name + "_fields, " + type_name + "_encode, " + type_name + "_decode };\n";
 
+	std::string ns = "std_msgs";//todo parse me out
+	std::string raw_name = split(name, '_').back();
+	output += "\n#ifdef __cplusplus\n";
+	output += "#include <memory>\n";
+	output += "namespace " + ns + "\n{\n";
+	output += "struct " + raw_name + ": public " + type_name + "\n{\n";
+	// create destructor
+	bool added_destructor = false;
+	for (size_t i = 0; i < fields.size(); i++)
+	{
+		if (fields[i].type == "string")
+		{
+			if (added_destructor == false)
+			{
+				added_destructor = true;
+				output += "  ~" + raw_name + "()\n  {\n";
+			}
+			output += "    if (this->" + fields[i].name + ")\n";
+			output += "      free(this->" + fields[i].name + ");\n";
+		}
+	}
+	if (added_destructor)
+	{
+		output += "  }\n";
+
+		// add a copy constructor and constructor now...
+		output += "  " + raw_name + "(const " + raw_name + "& obj)\n  {\n";
+		for (size_t i = 0; i < fields.size(); i++)
+		{
+			if (fields[i].type == "string")
+			{
+				output += "    " + fields[i].name + " = new char[strlen(obj." + fields[i].name + ") + 1];\n";
+				output += "    strcpy(" + fields[i].name + ", obj." + fields[i].name + ");\n";
+			}
+		}
+		output += "  }\n";
+		// todo maybe just use stl types for strings/arrays?
+
+		output += "  " + raw_name + "& operator=(const " + raw_name + "& obj)\n  {\n";
+		for (size_t i = 0; i < fields.size(); i++)
+		{
+			if (fields[i].type == "string")
+			{
+				output += "    " + fields[i].name + " = new char[strlen(obj." + fields[i].name + ") + 1];\n";
+				output += "    strcpy(" + fields[i].name + ", obj." + fields[i].name + ");\n";
+			}
+		}
+		output += "    return *this;\n  }\n";
+
+		// mark all pointers as null to avoid crashes
+		output += "  " + raw_name + "()\n  {\n";
+		for (size_t i = 0; i < fields.size(); i++)
+		{
+			if (fields[i].type == "string")
+			{
+				output += "    " + fields[i].name + " = 0;\n";
+			}
+		}
+		output += "  }\n";
+	}
+	output += "  static const ps_message_definition_t* GetDefinition()\n  {\n";
+	output += "    return &" + type_name + "_def;\n  }\n";
+	output += "};\n";
+	output += "typedef std::shared_ptr<" + raw_name + "> " + raw_name + "SharedPtr;\n";
+	output += "}\n";
+	output += "#endif\n";
 	//printf("Output:\n%s", output.c_str());
 
 	return output;
 }
-
 
 #include <string>
 #include <fstream>

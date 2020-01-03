@@ -25,26 +25,29 @@ As a bonus, this architecture can come in handy for debugging and visualization 
 ## Features
 
 * Multicast or broadcast Publisher/Subscriber discovery
+* Code generation for message serialization/deserialization
 * UDP based best-effort networking (up to network MTU)
+  * Optional publisher side per subscriber downsampling to conserve CPU/Network resources
 * Message introspection tools to publish and subscribe to messages without having their definitions locally
-  * "rostopic"
+  * A la "rostopic"
 * System introspection tools to view connections between "nodes"
-  * "rosnode"
+  * A la "rosnode"
 * Simple C API
   * Easy to import into other languages
-* Publisher "latching"
-  * Gives you the last published value when you subscribe
+  * Lightweight enough for true embedded systems
+* Higher Level C++ API
+  * Provides zero-copy intraprocess message passing
+  * Adds Thread-safety
 
 ## Features to Come
 
 * Large message support (> MTU size)
 * Master based discovery (better scalable than multicast)
 * TCP based networking
-* Zero-copy intraprocess message passing (likely via a language specific wrapper)
-* Higher level wrapper enabling topic remapping
+* Topic remapping in C++
 * Documentation
-* A real name
 * Data recording tools (a la rosbag)
+* A real name
 
 ## Supported Platforms
 
@@ -55,4 +58,4 @@ Anything with POSIX sockets
 
 ## Dependencies
 
-Your operating system.
+A POSIX networking stack and the C or C++ standard library.

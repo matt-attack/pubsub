@@ -1,6 +1,14 @@
 #pragma once
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
+#include <stdbool.h>
+
 #include "Serialization.h"
+#include "Node.h"
 
 struct ps_endpoint_t;
 struct ps_node_t;
@@ -8,19 +16,28 @@ struct ps_allocator_t;
 struct ps_message_definition_t;
 struct ps_sub_t
 {
-	ps_node_t* node;
+	struct ps_node_t* node;
 
 	const char* topic;
-	const ps_message_definition_t* type;
+	const struct ps_message_definition_t* type;
 
 	// for dynamic subscribers
 	bool want_message_definition;
-	ps_message_definition_t received_message_def;
+	struct ps_message_definition_t received_message_def;
 
+	// ignores local publications
+	bool ignore_local;
 
 	int sub_id;
 
-	ps_allocator_t* allocator;
+	struct ps_allocator_t* allocator;
+
+	// used instead of a queue optionally
+	ps_subscriber_fn_cb_t cb;
+	void* cb_data;
+
+	unsigned int skip;
+
 	int queue_size;// maximum size of the queue
 	int queue_len;
 	void** queue;// pointers to each of the queue items
@@ -34,12 +51,19 @@ struct ps_sub_req_header_t
 	int addr;
 	short port;
 	int sub_id;
+	unsigned int skip;
 };
 #pragma pack(pop)
 
+void ps_sub_enqueue(struct ps_sub_t* sub, void* message);
+
 // if the subscriber was initialized with a type this returns decoded messages
-void* ps_sub_deque(ps_sub_t* sub);
+void* ps_sub_deque(struct ps_sub_t* sub);
 
-void ps_sub_destroy(ps_sub_t* sub);
+void ps_sub_destroy(struct ps_sub_t* sub);
 
-void ps_send_subscribe(ps_sub_t* sub, ps_endpoint_t* ep);
+void ps_send_subscribe(struct ps_sub_t* sub, const struct ps_endpoint_t* ep);
+
+#ifdef __cplusplus
+}
+#endif

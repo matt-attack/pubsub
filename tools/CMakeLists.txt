@@ -4,19 +4,13 @@ cmake_minimum_required (VERSION 3.8)
 # Add source to this project's executable.
 include_directories("../")
 
+# Build the debugging tool
 add_executable (info "pubsub.cpp")
 target_link_libraries(info pubsub)
 add_dependencies(info pubsub)
 
+# Build the serialization generator
 add_executable(pubsub_msg_gen "generator.cpp")
-
-if ( MSVC )
-if ( DEFINED CMAKE_NINJA_DEPTYPE_C )
-else ()
-set( bin_directory "Debug/")
-endif ()
-set( bin_extension ".exe")
-endif ( MSVC )
 
 # This is used to generate messages for a package
 macro(generate_messages)
@@ -37,7 +31,7 @@ macro(generate_messages)
   set(MESSAGE_DEPS)
   foreach (_file ${ARG_FILES})
     add_custom_command(
-      COMMAND ${CMAKE_CURRENT_BINARY_DIR}/${bin_directory}pubsub_msg_gen${bin_extension} ${_file}
+	  COMMAND $<TARGET_FILE:pubsub_msg_gen> ${_file}
       WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/${ARG_DIRECTORY}/
       DEPENDS ${CMAKE_SOURCE_DIR}/${ARG_DIRECTORY}/${_file} pubsub_msg_gen
       OUTPUT ${CMAKE_SOURCE_DIR}/${ARG_DIRECTORY}/${_file}.h
@@ -54,13 +48,18 @@ endmacro()
 generate_messages(FILES 
   std_msgs__Joy.msg
   std_msgs__String.msg 
+  std_msgs__Float.msg
 )
 
 
-
+# Build the test program
 add_executable(pubsubtest "PubSubTest.cpp")
 target_link_libraries(pubsubtest pubsub)
 add_dependencies(pubsubtest pubsub pubsub_msgs)
+
+add_executable(throughput_test "throughput_test.cpp")
+target_link_libraries(throughput_test pubsub pubsub_cpp)
+add_dependencies(throughput_test pubsub pubsub_cpp pubsub_msgs)
 
 # TODO: Add tests and install targets if needed.
 

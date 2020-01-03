@@ -19,6 +19,7 @@ enum ps_field_types
 	FT_Array, //indicates the number of fields following contained in it
 	          // recurses down if we hit another array type without advancing
 };
+typedef enum ps_field_types ps_field_types;
 
 
 
@@ -39,28 +40,30 @@ struct ps_msg_t
 };
 
 struct ps_allocator_t;
-typedef ps_msg_t(*ps_fn_encode_t)(ps_allocator_t* allocator, const void* msg);
-typedef void*(*ps_fn_decode_t)(const void* data, ps_allocator_t* allocator);// allocates the message
+typedef struct ps_msg_t(*ps_fn_encode_t)(struct ps_allocator_t* allocator, const void* msg);
+typedef void*(*ps_fn_decode_t)(const void* data, struct ps_allocator_t* allocator);// allocates the message
 struct ps_message_definition_t
 {
 	unsigned int hash;
 	char* name;
 	unsigned int num_fields;
-	ps_field_t* fields;
+	struct ps_field_t* fields;
 	ps_fn_encode_t encode;
 	ps_fn_decode_t decode;
 };
 
-int ps_serialize_message_definition(void* start, const ps_message_definition_t* definition);
+int ps_serialize_message_definition(void* start, const struct ps_message_definition_t* definition);
 
-void ps_deserialize_message_definition(const void* start, ps_message_definition_t* definition);
+void ps_deserialize_message_definition(const void* start, struct ps_message_definition_t* definition);
 
 // print out the deserialized contents of the message to console, for rostopic echo like implementations
 // in yaml format
-void ps_deserialize_print(const void* data, const ps_message_definition_t* definition);
+void ps_deserialize_print(const void* data, const struct ps_message_definition_t* definition);
 
-void ps_print_definition(const ps_message_definition_t* definition);
+void ps_print_definition(const struct ps_message_definition_t* definition);
 
-void ps_msg_alloc(unsigned int size, ps_msg_t* out_msg);
+void ps_msg_alloc(unsigned int size, struct ps_msg_t* out_msg);
 
 void* ps_get_msg_start(void* data);
+
+struct ps_msg_t ps_msg_cpy(const struct ps_msg_t* msg);

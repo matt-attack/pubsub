@@ -8,26 +8,35 @@
 
 #include "Net.h"
 
-inline void ps_pub_publish_client(ps_pub_t* pub, ps_client_t* client, ps_msg_t* msg)
+void ps_pub_publish_client(struct ps_pub_t* pub, struct ps_client_t* client, struct ps_msg_t* msg)
 {
+	// handles skipping
+	if (client->modulo > 0)
+	{
+		if (pub->sequence_number % client->modulo != 0)
+		{
+			return;
+		}
+	}
 	// send da udp packet!
-	sockaddr_in address;
+	struct sockaddr_in address;
 	address.sin_family = AF_INET;
 	address.sin_addr.s_addr = htonl(client->endpoint.address);
 	address.sin_port = htons(client->endpoint.port);
 
 	//need to add in the topic id
-	ps_msg_header* hdr = (ps_msg_header*)msg->data;
+	struct ps_msg_header* hdr = (struct ps_msg_header*)msg->data;
 	hdr->pid = PS_UDP_PROTOCOL_DATA;// todo use enums
 	hdr->id = client->stream_id;
 	hdr->seq = client->sequence_number++;
 	hdr->index = 0;
 	hdr->count = 1;// todo use me for larger packets
 
-	int sent_bytes = sendto(pub->node->socket, (const char*)msg->data, msg->len + sizeof(ps_msg_header), 0, (sockaddr*)&address, sizeof(sockaddr_in));
+	int sent_bytes = sendto(pub->node->socket, (const char*)msg->data, msg->len + sizeof(struct ps_msg_header),
+		0, (struct sockaddr*)&address, sizeof(struct sockaddr_in));
 }
 
-void ps_pub_add_client(ps_pub_t* pub, const ps_client_t* client)
+void ps_pub_add_client(struct ps_pub_t* pub, const struct ps_client_t* client)
 {
 	// first make sure we dont add any duplicate clients
 	for (unsigned int i = 0; i < pub->num_clients; i++)
@@ -41,14 +50,15 @@ void ps_pub_add_client(ps_pub_t* pub, const ps_client_t* client)
 	}
 	pub->num_clients++;
 
-	ps_client_t* old_clients = pub->clients;
-	pub->clients = (ps_client_t*)malloc(sizeof(ps_client_t)*pub->num_clients);
+	struct ps_client_t* old_clients = pub->clients;
+	pub->clients = (struct ps_client_t*)malloc(sizeof(struct ps_client_t)*pub->num_clients);
 	for (unsigned int i = 0; i < pub->num_clients - 1; i++)
 	{
 		pub->clients[i] = old_clients[i];
 	}
 	pub->clients[pub->num_clients - 1] = *client;
 
+	// todo this is probably the wrong spot for this
 	//okay, if we are latched, send it our last message
 	if (pub->last_message.data && pub->latched)
 	{
@@ -56,7 +66,7 @@ void ps_pub_add_client(ps_pub_t* pub, const ps_client_t* client)
 	}
 }
 
-void ps_pub_remove_client(ps_pub_t* pub, const ps_client_t* client)
+void ps_pub_remove_client(struct ps_pub_t* pub, const struct ps_client_t* client)
 {
 	// first make sure we dont add any duplicate clients
 	bool found = false;
@@ -78,8 +88,8 @@ void ps_pub_remove_client(ps_pub_t* pub, const ps_client_t* client)
 	}
 	pub->num_clients--;
 
-	ps_client_t* old_clients = pub->clients;
-	pub->clients = (ps_client_t*)malloc(sizeof(ps_client_t)*pub->num_clients);
+	struct ps_client_t* old_clients = pub->clients;
+	pub->clients = (struct ps_client_t*)malloc(sizeof(struct ps_client_t)*pub->num_clients);
 	int pos = 0;
 	for (unsigned int i = 0; i < pub->num_clients+1; i++)
 	{
@@ -95,18 +105,23 @@ void ps_pub_remove_client(ps_pub_t* pub, const ps_client_t* client)
 	}
 }
 
-void ps_pub_publish_ez(ps_pub_t* pub, void* msg)
+void ps_pub_publish_ez(struct ps_pub_t* pub, void* msg)
 {
-	ps_msg_t data = pub->message_definition->encode(0, msg);
+	if (pub->num_clients > 0 || pub->latched)
+	{
+		struct ps_msg_t data = pub->message_definition->encode(0, msg);
 
-	ps_pub_publish(pub, &data);
+		ps_pub_publish(pub, &data);
+	}
 }
 
-void ps_pub_publish(ps_pub_t* pub, ps_msg_t* msg)
+void ps_pub_publish(struct ps_pub_t* pub, struct ps_msg_t* msg)
 {
+	pub->sequence_number++;
+
 	for (unsigned int i = 0; i < pub->num_clients; i++)
 	{
-		ps_client_t* client = &pub->clients[i];
+		struct ps_client_t* client = &pub->clients[i];
         
 		ps_pub_publish_client(pub, client, msg);
 	}
@@ -126,19 +141,19 @@ void ps_pub_publish(ps_pub_t* pub, ps_msg_t* msg)
 	}
 }
 
-int ps_pub_get_subscriber_count(const ps_pub_t* pub)
+unsigned int ps_pub_get_subscriber_count(const struct ps_pub_t* pub)
 {
 	return pub->num_clients;
 }
 
-void ps_pub_destroy(ps_pub_t* pub)
+void ps_pub_destroy(struct ps_pub_t* pub)
 {
 	free(pub->clients);
 
 	//remove it from my list of subs
 	pub->node->num_pubs--;
-	ps_pub_t** old_pubs = pub->node->pubs;
-	pub->node->pubs = (ps_pub_t**)malloc(sizeof(ps_pub_t*)*pub->node->num_pubs);
+	struct ps_pub_t** old_pubs = pub->node->pubs;
+	pub->node->pubs = (struct ps_pub_t**)malloc(sizeof(struct ps_pub_t*)*pub->node->num_pubs);
 	int ind = 0;
 	for (unsigned int i = 0; i < pub->node->num_pubs+1; i++)
 	{
