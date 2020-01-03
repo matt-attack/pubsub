@@ -8,7 +8,9 @@ include_directories("../")
 
 add_library (pubsub_cpp
   "Node.cpp"
-  )
+ )
+target_link_libraries(pubsub_cpp pubsub)
+add_dependencies(pubsub_cpp pubsub)
 
 find_package( Threads )
 target_link_libraries( pubsub_cpp ${CMAKE_THREAD_LIBS_INIT} )

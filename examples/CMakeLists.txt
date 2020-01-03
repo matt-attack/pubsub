@@ -15,15 +15,15 @@ target_link_libraries(simple_sub pubsub)
 add_dependencies(simple_sub pubsub pubsub_msgs)
 
 add_executable(simple_pub_cpp "simple_pub.cpp")
-target_link_libraries(simple_pub_cpp pubsub)
+target_link_libraries(simple_pub_cpp pubsub_cpp)
 add_dependencies(simple_pub_cpp pubsub_cpp pubsub_msgs)
 
 add_executable(simple_logger_cpp "simple_logger.cpp")
-target_link_libraries(simple_logger_cpp pubsub)
+target_link_libraries(simple_logger_cpp pubsub_cpp)
 add_dependencies(simple_logger_cpp pubsub_cpp pubsub_msgs)
 
 add_executable(simple_sub_cpp "simple_sub.cpp")
-target_link_libraries(simple_sub_cpp pubsub)
+target_link_libraries(simple_sub_cpp pubsub_cpp)
 add_dependencies(simple_sub_cpp pubsub_cpp pubsub_msgs)
 
 #install(TARGETS pubsubtest
