@@ -134,6 +134,7 @@ void ps_node_create_publisher(struct ps_node_t* node, const char* topic, const s
 	pub->latched = latched;
 	pub->last_message.data = 0;
 	pub->last_message.len = 0;
+	pub->sequence_number = 0;
 
 	ps_node_advertise(pub);
 }
@@ -588,7 +589,7 @@ static uint64_t GetTickCount64()
 #endif
 
 #ifdef ARDUINO
-static uint64_t GetTickCount64()
+static unsigned long GetTickCount64()
 {
 	return millis();
 }
@@ -1136,7 +1137,7 @@ int ps_node_spin(struct ps_node_t* node)
 			for (unsigned int c = 0; c < node->pubs[i]->num_clients; c++)
 			{
 				struct ps_client_t* client = &node->pubs[i]->clients[c];
-				if (client->last_keepalive < now - 120 * 1000)
+				if (client->last_keepalive + 120 * 1000 < now)
 				{
 					printf("Client has timed out, unsubscribing...");
 					// remove the client

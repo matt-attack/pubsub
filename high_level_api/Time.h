@@ -8,11 +8,33 @@
 
 namespace pubsub
 {
-class Time
+class Duration
 {
+public:
 	unsigned int sec;
 	unsigned int usec;
+
+	Duration()
+	{
+
+	}
+
+	Duration(unsigned int sec, unsigned int usec)
+		: usec(sec * 1000000 + usec)
+	{
+
+	}
+
+	double toSec()
+	{
+		return usec / 1000000.0;
+	}
+};
+
+class Time
+{
 public:
+	unsigned long long usec;
 
 	Time()
 	{
@@ -20,15 +42,14 @@ public:
 	}
 
 	Time(unsigned int sec, unsigned int usec)
-		: sec(sec), usec(usec)
+		: usec(sec*1000000 + usec)
 	{
 
 	}
 
-	Time operator-(const Time& rhs) // otherwise, both parameters may be const references
+	Duration operator-(const Time& rhs) // otherwise, both parameters may be const references
 	{
-		Time out;
-		out.sec = this->sec - rhs.sec;
+		Duration out;
 		out.usec = this->usec - rhs.usec;
 		return out; // return the result by value (uses move constructor)
 	}
@@ -46,11 +67,9 @@ public:
 #endif
 	}
 
-	
-
 	double toSec()
 	{
-		return sec + usec / 1000000.0;
+		return usec / 1000000.0;
 	}
 };
 }

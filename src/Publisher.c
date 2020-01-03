@@ -13,7 +13,7 @@ void ps_pub_publish_client(struct ps_pub_t* pub, struct ps_client_t* client, str
 	// handles skipping
 	if (client->modulo > 0)
 	{
-		if (client->sequence_number % client->modulo != 0)
+		if (pub->sequence_number % client->modulo != 0)
 		{
 			return;
 		}
@@ -117,6 +117,8 @@ void ps_pub_publish_ez(struct ps_pub_t* pub, void* msg)
 
 void ps_pub_publish(struct ps_pub_t* pub, struct ps_msg_t* msg)
 {
+	pub->sequence_number++;
+
 	for (unsigned int i = 0; i < pub->num_clients; i++)
 	{
 		struct ps_client_t* client = &pub->clients[i];
