@@ -25,6 +25,14 @@ public:
 
 	}
 
+	Time operator-(const Time& rhs) // otherwise, both parameters may be const references
+	{
+		Time out;
+		out.sec = this->sec - rhs.sec;
+		out.usec = this->usec - rhs.usec;
+		return out; // return the result by value (uses move constructor)
+	}
+
 	static Time now()
 	{
 #ifdef _WIN32
@@ -37,6 +45,8 @@ public:
 		return Time(tv.tv_sec, tv.tv_usec);
 #endif
 	}
+
+	
 
 	double toSec()
 	{

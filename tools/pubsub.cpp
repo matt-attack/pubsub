@@ -203,7 +203,7 @@ int main(int num_args_real, char** args)
 
 			// create a subscriber
 			static ps_sub_t sub;
-			static std::vector<void*> todo_msgs;
+			static std::vector<std::pair<void*, ps_msg_info_t>> todo_msgs;
 
 			// subscribe to the topic and publish anything we get
 			static unsigned long long int count = 0;
@@ -234,9 +234,28 @@ int main(int num_args_real, char** args)
 						{
 							for (auto msg : todo_msgs)
 							{
-								ps_deserialize_print(msg, &sub.received_message_def);
+								if (print_info)
+								{
+									const auto info = &msg.second;
+									for (auto& n : _nodes)
+									{
+										if (info->address == n.second.address
+											&& info->port == n.second.port)
+										{
+											std::cout << "Node: " << n.first << "\n";
+										}
+									}
+									// map the id to the node
+									std::cout << "From: "
+										<< ((info->address & 0xFF000000) >> 24) << "."
+										<< ((info->address & 0xFF0000) >> 16) << "."
+										<< ((info->address & 0xFF00) >> 8) << "."
+										<< ((info->address & 0xFF)) << ":" << info->port << "\n";
+									printf("-------------\n");
+								}
+								ps_deserialize_print(msg.first, &sub.received_message_def);
 								printf("-------------\n");
-								free(msg);
+								free(msg.first);
 								if (++count >= n)
 								{
 									//need to commit sodoku here..
@@ -254,7 +273,7 @@ int main(int num_args_real, char** args)
 						{
 							//printf("WARN: got message but no message definition yet...\n");
 							// queue it up, then print them out once I get it
-							todo_msgs.push_back(message);
+							todo_msgs.push_back({ message, *info });
 						}
 						else
 						{
@@ -352,9 +371,8 @@ int main(int num_args_real, char** args)
 					{
 						if (subverb == "bw")
 						{
-							// in ms
-							double delta = pubsub::Time::now().toSec() - message_times.front().first.toSec();
-							delta /= 1000.0;// in sec
+							// in sec
+							double delta = (pubsub::Time::now() - message_times.front().first).toSec();
 							unsigned long long total = 0;
 							for (int i = 0; i < message_times.size(); i++)
 							{
@@ -376,9 +394,8 @@ int main(int num_args_real, char** args)
 						}
 						else
 						{
-							double delta = pubsub::Time::now().toSec() - message_times.front().first.toSec();
+							double delta = (pubsub::Time::now() - message_times.front().first).toSec();
 							double rate = ((double)(message_times.size() - 1)) / ((double)delta);
-							rate *= 1000.0;
 							printf("Rate: %lf Hz n=%i\n", rate, message_times.size());
 						}
 					}

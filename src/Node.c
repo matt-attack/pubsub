@@ -246,7 +246,7 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 	node->advertise_port = 11311;// todo make this configurable
 
 	// find an ip (lets just assume the externally facing one)
-	if (strlen(ip) == 0)
+	if (ip == 0 || strlen(ip) == 0)
 	{
 		ip = GetPrimaryIp();
 	}
@@ -585,6 +585,13 @@ static uint64_t GetTickCount64()
 	return (uint64_t)(ts.tv_nsec / 1000000) + ((uint64_t)ts.tv_sec * 1000ull);
 }
 #endif
+#endif
+
+#ifdef ARDUINO
+static uint64_t GetTickCount64()
+{
+	return millis();
+}
 #endif
 
 //returns nonzero if we got a message
@@ -1004,7 +1011,7 @@ int ps_node_spin(struct ps_node_t* node)
 			{
 				// its an error for type mistmatch
 				printf("ERROR: Type hash mismatch on %s", type);
-				return;
+				continue;
 			}
 
 
