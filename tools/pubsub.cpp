@@ -77,7 +77,7 @@ int main(int num_args_real, char** args)
 	int num_args = num_args_real;
 	//num_args = 5;
 
-	//char* args[] = { "aaa", "topic", "echo", "/data", "-n", "0" };
+	//char* args[] = { "aaa", "topic", "hz", "/data", "-w", "10" };
 	//num_args = (sizeof args / sizeof args[0]);
 
 	if (num_args <= 1)
@@ -88,7 +88,7 @@ int main(int num_args_real, char** args)
 
 	// Setup the node with a random name
 	static ps_node_t node;
-	ps_node_init(&node, "Query", "", false);
+	ps_node_init(&node, "Query", "", true);
 
 	// Setup introspection callbacks
 	node.adv_cb = [](const char* topic, const char* type, const char* node, const ps_advertise_req_t* data)

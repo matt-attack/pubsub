@@ -12,6 +12,9 @@ int main()
 
 	pubsub::Publisher<std_msgs::String> string_pub(node, "/data");
 
+	pubsub::Spinner spinner;
+	spinner.addNode(node);
+
 	int i = 0;
 	while (ps_okay())
 	{
@@ -20,8 +23,14 @@ int main()
 		sprintf(value, "Hello %i", i++);
 		msg.value = value;
 		string_pub.publish(msg);
+		
+		// okay, since we are publishing with shared pointer we actually need to allocate the string properly
+		auto shared = std_msgs::StringSharedPtr(new std_msgs::String);
+		shared->value = new char[strlen(msg.value) + 1];
+		strcpy(shared->value, msg.value);
+		string_pub.publish(shared);
 
-		node.spin();
+		msg.value = 0;// so it doesnt get freed by the destructor since we allocated it ourself
 
 		ps_sleep(333);
 	}
