@@ -58,8 +58,8 @@ target_link_libraries(pubsubtest pubsub)
 add_dependencies(pubsubtest pubsub pubsub_msgs)
 
 add_executable(throughput_test "throughput_test.cpp")
-target_link_libraries(throughput_test pubsub)
-add_dependencies(throughput_test pubsub pubsub_msgs)
+target_link_libraries(throughput_test pubsub pubsub_cpp)
+add_dependencies(throughput_test pubsub pubsub_cpp pubsub_msgs)
 
 # TODO: Add tests and install targets if needed.
 
