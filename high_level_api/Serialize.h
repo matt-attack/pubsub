@@ -2,6 +2,8 @@
 
 #include "Parse.h"
 
+#include <string.h>
+
 // handles serialization for values from Parse
 int ps_field_sizes[] = { 1,2,4,8,1,2,4,8,8,4,8,4,0,0,0 };
 ps_msg_t serialize_value(const Value& value, const ps_message_definition_t& definition)

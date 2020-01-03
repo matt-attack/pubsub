@@ -11,7 +11,7 @@ namespace pubsub
 struct Argument
 {
 	std::string value;
-	std::string default;
+	std::string default_value;
 	std::string description;
 	std::vector<std::string> names;
 	bool present;
@@ -30,10 +30,10 @@ public:
 		AddMulti(names, "Display this message.");
 	}
 
-	void AddMulti(std::vector<std::string> names, const std::string& description, const std::string& default = "")
+	void AddMulti(std::vector<std::string> names, const std::string& description, const std::string& default_value = "")
 	{
 		Argument* a = new Argument;
-		a->default = default;
+		a->default_value = default_value;
 		a->description = description;
 		a->names = names;
 		a->present = false;
@@ -46,11 +46,11 @@ public:
 		}
 	}
 
-	void Add(const std::string& name, const std::string& description, const std::string& default = "")
+	void Add(const std::string& name, const std::string& description, const std::string& default_value = "")
 	{
 		Argument* a = new Argument;
 		a->description = description;
-		a->default = default;
+		a->default_value = default_value;
 		a->present = false;
 		a->names.push_back(name);
 		args_[name] = a;
@@ -143,8 +143,8 @@ public:
 				line += ' ';
 			}
 			line += ii->description;
-			if (ii->default.length())
-				line += "  [" + ii->default + "]";
+			if (ii->default_value.length())
+				line += "  [" + ii->default_value + "]";
 			line += "\n";
 			for (size_t i = 1; i < ii->names.size(); i++)
 			{
@@ -171,7 +171,7 @@ public:
 		auto& ar = args_[arg];
 		return (ar->present && ar->value.length() == 0) 
 			|| (ar->present && (ar->value == "true" || ar->value == "1")) 
-			|| (ar->present == false && ar->default == "true");
+			|| (ar->present == false && ar->default_value == "true");
 	}
 
 	double GetDouble(const std::string& arg)
@@ -179,7 +179,7 @@ public:
 		auto& ar = args_[arg];
 		if (ar->present == false)
 		{
-			return std::atof(ar->default.c_str());
+			return std::atof(ar->default_value.c_str());
 		}
 		return std::atof(ar->value.c_str());
 	}

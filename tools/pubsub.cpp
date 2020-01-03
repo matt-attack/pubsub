@@ -198,7 +198,7 @@ int main(int num_args_real, char** args)
 			int skip = parser.GetDouble("s");
 			if (n <= 0)
 			{
-				n = LONG_MAX;
+				n = 2147483647L;
 			}
 
 			// create a subscriber
