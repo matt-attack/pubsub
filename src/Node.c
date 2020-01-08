@@ -102,6 +102,7 @@ void ps_node_advertise(struct ps_pub_t* pub)
 	p->port = pub->node->port;
 	p->type_hash = pub->message_definition->hash;
 	p->transports = PS_TRANSPORT_UDP;
+	p->group_id = pub->node->group_id;
 
 	int off = sizeof(struct ps_advertise_req_t);
 	off += serialize_string(&data[off], pub->topic);
@@ -215,6 +216,8 @@ char* GetPrimaryIp()
 	char* ip = inet_ntoa(name.sin_addr);
 	//assert(p);
 
+	printf("IP: %s\n", ip);
+
 #ifdef _WIN32
 	closesocket(sock);
 #else
@@ -251,6 +254,12 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 	{
 		ip = GetPrimaryIp();
 	}
+
+#ifdef _WIN32
+	node->group_id = GetCurrentProcessId() + (10000 * ((inet_addr(ip) >> 24) && 0xFF));
+#else
+	node->group_id = 0;// ignore the group
+#endif
 
 	unsigned int mc_addr = inet_addr("239.255.255.249");// todo make this configurable
 	if (broadcast)
@@ -321,7 +330,7 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 #ifdef ARDUINO
     fcntl(node->socket, F_SETFL, O_NONBLOCK);
 #endif
-#ifdef LINUX
+#ifdef __unix__
 	int flags = fcntl(node->socket, F_GETFL);
 	fcntl(node->socket, F_SETFL, flags | O_NONBLOCK);
 #endif
@@ -345,8 +354,14 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 
 	if (broadcast)
 	{
+		// Enable broadcast on all sockets just in case
 		int opt = 1;
 		if (setsockopt(node->mc_socket, SOL_SOCKET, SO_BROADCAST, (char *)&opt, sizeof(opt)) < 0)
+		{
+			perror("setsockopt");
+			exit(EXIT_FAILURE);
+		}
+		if (setsockopt(node->socket, SOL_SOCKET, SO_BROADCAST, (char *)&opt, sizeof(opt)) < 0)
 		{
 			perror("setsockopt");
 			exit(EXIT_FAILURE);
@@ -356,7 +371,7 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 	// bind to port
 	struct sockaddr_in mc_address;
 	mc_address.sin_family = AF_INET;
-	mc_address.sin_addr.s_addr = htonl(node->addr);//INADDR_ANY;
+	mc_address.sin_addr.s_addr = htonl(INADDR_ANY);// Linux seems to need to be bound to INADDR_ANY for broadcast or multicast
 	mc_address.sin_port = htons(node->advertise_port);
 
 	if (bind(node->mc_socket, (const struct sockaddr*)&mc_address, sizeof(struct sockaddr_in)) < 0)
@@ -385,14 +400,14 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 #ifdef ARDUINO
     fcntl(node->mc_socket, F_SETFL, O_NONBLOCK);
 #endif
-#ifdef LINUX
-	int flags2 = fcntl(socket, F_GETFL);
+#ifdef __unix__
+	int flags2 = fcntl(node->mc_socket, F_GETFL);
 	fcntl(node->mc_socket, F_SETFL, flags2 | O_NONBLOCK);
 #endif
 
 	struct ip_mreq mreq;
 	mreq.imr_multiaddr.s_addr = mc_addr;
-	mreq.imr_interface.s_addr = htonl(node->addr);// sets the interface to subscribe to multicast on
+	mreq.imr_interface.s_addr = htonl(INADDR_ANY);// Linux seems to require INADDR_ANY here
 	if (setsockopt(node->mc_socket, IPPROTO_IP, IP_ADD_MEMBERSHIP,
 		(char*)&mreq, sizeof(mreq)) < 0)
 	{
@@ -995,7 +1010,14 @@ int ps_node_spin(struct ps_node_t* node)
 
 			if (sub->ignore_local && sub->node->port == p->port && sub->node->addr == p->addr)
 			{
-				printf("Got advertise notice, but it was for a local pub which we are set to ignore\n");
+				//printf("Got advertise notice, but it was for a local pub which we are set to ignore\n");
+				continue;
+			}
+
+			// check group id
+			if (p->group_id != 0 && p->group_id == node->group_id)
+			{
+				//printf("We are a member of this group, ignoring advertise");
 				continue;
 			}
 
@@ -1014,7 +1036,6 @@ int ps_node_spin(struct ps_node_t* node)
 				printf("ERROR: Type hash mismatch on %s", type);
 				continue;
 			}
-
 
 			// todo subscribe to the most relevant protocol
 			// check if we are already getting data from this person, if so lets not send another request to their advertise

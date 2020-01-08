@@ -11,6 +11,7 @@ add_dependencies(info pubsub)
 
 # Build the serialization generator
 add_executable(pubsub_msg_gen "generator.cpp")
+set_property(TARGET pubsub_msg_gen PROPERTY CXX_STANDARD 11)
 
 # This is used to generate messages for a package
 macro(generate_messages)
@@ -56,10 +57,12 @@ generate_messages(FILES
 add_executable(pubsubtest "PubSubTest.cpp")
 target_link_libraries(pubsubtest pubsub)
 add_dependencies(pubsubtest pubsub pubsub_msgs)
+set_property(TARGET pubsubtest PROPERTY CXX_STANDARD 11)
 
 add_executable(throughput_test "throughput_test.cpp")
 target_link_libraries(throughput_test pubsub pubsub_cpp)
 add_dependencies(throughput_test pubsub pubsub_cpp pubsub_msgs)
+set_property(TARGET throughput_test PROPERTY CXX_STANDARD 11)
 
 # TODO: Add tests and install targets if needed.
 

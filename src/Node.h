@@ -39,6 +39,8 @@ struct ps_node_t
 	unsigned int addr;
 	unsigned int advertise_addr;// in network layout because we dont need it in host
 
+	unsigned int group_id; // indicates which group this node is a part of
+
 	int sub_index;
 
 	//optional callbacks
@@ -96,6 +98,7 @@ struct ps_advertise_req_t
 	unsigned short port;
 	unsigned int transports;// bitmask showing supported protocols for this subscriber
 	unsigned int type_hash;// to see if the type is correct
+	unsigned int group_id;// unique (hopefully) id that indicates which process this node is a part of
 };
 #pragma pack(pop)
 
