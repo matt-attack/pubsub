@@ -498,6 +498,86 @@ public:
 };
 
 // todo use smart pointers for nodes
+class BlockingSpinner
+{
+	std::vector<Node*> nodes_;
+
+	bool running_;
+
+	std::thread thread_;
+	std::mutex list_mutex_;
+public:
+
+	// todo make it work with more than one thread
+	BlockingSpinner(int num_threads = 1) : running_(true)
+	{
+		thread_ = std::thread([this]()
+		{
+			while (running_ && ps_okay())
+			{
+				list_mutex_.lock();
+				for (auto node : nodes_)
+				{
+					// todo block for more nodes simultaneously
+					ps_node_wait(node->getNode(), 10000);
+
+					node->lock_.lock();
+					if (ps_node_spin(node->getNode()))
+					{
+
+					}
+					// todo how to make this not scale with subscriber count...
+					// though, it isnt very important here
+					// its probably worth more effort just make it not run any of this if we get no messages
+					// we got a message, now call a subscriber
+					for (size_t i = 0; i < node->subscribers_.size(); i++)
+					{
+						// this doesnt ensure switching subs, but works
+						while (node->subscribers_[i]->CallOne()) {};
+					}
+					node->lock_.unlock();
+				}
+				list_mutex_.unlock();
+
+				ps_sleep(10);// make this configurable?
+			}
+		});
+	}
+
+	~BlockingSpinner()
+	{
+		if (running_)
+		{
+			stop();
+		}
+	}
+
+	void addNode(Node& node)
+	{
+		list_mutex_.lock();
+		nodes_.push_back(&node);
+		list_mutex_.unlock();
+	}
+
+	void wait()
+	{
+		thread_.join();
+	}
+
+	void stop()
+	{
+		// kill everything
+		if (!running_)
+		{
+			return;
+		}
+
+		running_ = false;
+		thread_.join();// wait for it to stop
+	}
+};
+
+// todo use smart pointers for nodes
 class Spinner
 {
 	std::vector<Node*> nodes_;

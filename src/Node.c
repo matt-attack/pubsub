@@ -173,6 +173,8 @@ BOOL WINAPI CtrlHandler(DWORD fdwCtrlType)
 	case CTRL_C_EVENT:
 		//printf("Ctrl-C event\n\n");
 		ps_shutdown = 1;
+
+		// trigger an event to break out 
 		return TRUE;
 	default:
 		return FALSE;
@@ -610,6 +612,49 @@ static unsigned long GetTickCount64()
 }
 #endif
 
+#ifndef PUBSUB_REAL_TIME
+#include "Events.h"
+int ps_node_wait(struct ps_node_t* node, unsigned int timeout_ms)
+{
+#ifdef WIN32
+	// wait on the sockets or the passed event
+	HANDLE events[3];
+	events[0] = WSACreateEvent();
+	events[1] = WSACreateEvent();
+	//events[2] = WSACreateEvent();
+	WSAEventSelect(node->socket, events[0], FD_READ);
+	WSAEventSelect(node->mc_socket, events[1], FD_READ);
+	
+	WSAWaitForMultipleEvents(2, &events, false, timeout_ms, false);
+
+	//int res = ps_node_spin(node);
+	// todo cache these
+
+	WSACloseEvent(events[0]);
+	WSACloseEvent(events[1]);
+	//WSACloseEvent(events[2]);
+#endif
+	return 0;
+}
+
+int ps_node_get_num_events(const struct ps_node_t* node)
+{
+	return 2;
+}
+
+// returns the number added
+int ps_node_create_events(struct ps_node_t* node, struct ps_event_t* events)
+{
+	events[0] = ps_create_event();
+	events[1] = ps_create_event();
+
+	WSAEventSelect(node->socket, events[0].handle, FD_READ);
+	WSAEventSelect(node->mc_socket, events[1].handle, FD_READ);
+
+	return 2;
+}
+#endif
+
 //returns nonzero if we got a message
 int ps_node_spin(struct ps_node_t* node)
 {
@@ -1015,7 +1060,7 @@ int ps_node_spin(struct ps_node_t* node)
 			}
 
 			// check group id
-			if (p->group_id != 0 && p->group_id == node->group_id)
+			if (sub->ignore_local && p->group_id != 0 && p->group_id == node->group_id)
 			{
 				//printf("We are a member of this group, ignoring advertise");
 				continue;

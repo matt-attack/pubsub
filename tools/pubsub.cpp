@@ -46,6 +46,7 @@ void wait(ps_node_t* node)
 	unsigned int start = GetTimeMs();
 	while (ps_okay() && start + 3000 > GetTimeMs())
 	{
+		ps_node_wait(node, 100);
 		ps_node_spin(node);
 	}
 }
@@ -210,6 +211,7 @@ int main(int num_args_real, char** args)
 			bool subscribed = false;
 			while (ps_okay())
 			{
+				ps_node_wait(&node, 1000);
 				ps_node_spin(&node);
 
 				// spin until we get the topic
@@ -330,6 +332,7 @@ int main(int num_args_real, char** args)
 			// subscribe to the topic
 			while (ps_okay())
 			{
+				ps_node_wait(&node, 1000);
 				ps_node_spin(&node);
 
 				// spin until we get the topic
@@ -356,6 +359,7 @@ int main(int num_args_real, char** args)
 			unsigned int last_print = GetTimeMs();
 			while (ps_okay())
 			{
+				ps_node_wait(&node, 100);
 				ps_node_spin(&node);
 
 				if (last_print + 1000 < GetTimeMs())
@@ -429,8 +433,8 @@ int main(int num_args_real, char** args)
 			bool got_data = false;
 			while (ps_okay())
 			{
+				ps_node_wait(&node, 1000);
 				ps_node_spin(&node);
-				ps_sleep(1);
 
 				// spin until we get the topic
 				auto info = _topics.find(topic);
@@ -488,7 +492,6 @@ int main(int num_args_real, char** args)
 			while (ps_okay())
 			{
 				ps_node_spin(&node);
-				ps_sleep(1);
 
 				// spin until we get the topic
 				auto info = _topics.find(topic);
