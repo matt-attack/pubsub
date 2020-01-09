@@ -12,7 +12,7 @@ int main()
 
 	pubsub::Publisher<std_msgs::String> string_pub(node, "/data");
 
-	pubsub::Spinner spinner;
+	pubsub::BlockingSpinner spinner;
 	spinner.addNode(node);
 
 	int i = 0;

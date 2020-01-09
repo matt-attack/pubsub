@@ -14,7 +14,7 @@ int main()
 		printf("Got message %s\n", msg->value);
 	}, 10);
 
-	pubsub::Spinner spinner;
+	pubsub::BlockingSpinner spinner;
 	spinner.addNode(node);
 
 	spinner.wait();

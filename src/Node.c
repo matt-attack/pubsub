@@ -645,8 +645,8 @@ int ps_node_get_num_events(const struct ps_node_t* node)
 // returns the number added
 int ps_node_create_events(struct ps_node_t* node, struct ps_event_t* events)
 {
-	events[0] = ps_create_event();
-	events[1] = ps_create_event();
+	events[0] = ps_event_create();
+	events[1] = ps_event_create();
 
 	WSAEventSelect(node->socket, events[0].handle, FD_READ);
 	WSAEventSelect(node->mc_socket, events[1].handle, FD_READ);

@@ -171,9 +171,12 @@ void ps_node_create_subscriber_cb(struct ps_node_t* node, const char* topic, con
 
 int ps_node_spin(struct ps_node_t* node);
 
+// Functions to wait on a node
 #ifndef PUBSUB_REAL_TIME
 struct ps_event_t;
-// waits for an event or an internal timer in the node to trigger before returning
+// waits for an event in the node to trigger before returning
+// note this creates and destroys events so is probably not the fastest
+// way to wait, the functions below should be better
 // used to avoid polling spin
 int ps_node_wait(struct ps_node_t* node, unsigned int timeout_ms);
 

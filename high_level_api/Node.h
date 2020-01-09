@@ -15,6 +15,10 @@
 #include <functional>
 #include <algorithm>
 
+
+#include <WS2tcpip.h>
+#include "../src/Events.h"
+
 namespace pubsub
 {
 static std::map<std::string, std::string> _remappings;
@@ -141,6 +145,8 @@ class Node
 	std::string qualified_name_;// necessary to hold the pointer to the name for C
 
 	ps_node_t node_;
+
+	ps_event_t event_;
 public:
 	// todo try and eliminate this needing to be recursive
 	// recursive for the moment...
@@ -164,6 +170,9 @@ public:
 
 		qualified_name_ = getQualifiedName();
 		ps_node_init(&node_, qualified_name_.c_str(), "", use_broadcast);
+
+		// create the event for intraprocess
+		event_ = ps_event_create();
 	}
 
 	~Node()
@@ -194,6 +203,11 @@ public:
 	inline int spin()
 	{
 		return ps_node_spin(&node_);
+	}
+
+	inline ps_event_t getEvent()
+	{
+		return event_;
 	}
 };
 
@@ -287,6 +301,8 @@ public:
 			//printf("Publishing locally with no copy..\n");
 
 			auto specific_sub = (Subscriber<T>*)sub;
+			ps_event_t ev = specific_sub->node_->getEvent();
+			ps_event_trigger(&ev);
 			specific_sub->queue_mutex_.lock();
 			specific_sub->queue_.push_front(msg);
 			if (specific_sub->queue_.size() > specific_sub->queue_size_)
@@ -323,6 +339,8 @@ public:
 
 			// help this isnt thread safe
 			auto specific_sub = (Subscriber<T>*)sub;
+			ps_event_t ev = specific_sub->node_->getEvent();
+			ps_event_trigger(&ev);
 			specific_sub->queue_mutex_.lock();
 			specific_sub->queue_.push_front(copy);
 			if (specific_sub->queue_.size() > specific_sub->queue_size_)
@@ -497,6 +515,9 @@ public:
 	}
 };
 
+//#include <Windows.h>
+//#include <WinSock2.h>
+
 // todo use smart pointers for nodes
 class BlockingSpinner
 {
@@ -506,6 +527,8 @@ class BlockingSpinner
 
 	std::thread thread_;
 	std::mutex list_mutex_;
+
+	std::vector<ps_event_t> events_;
 public:
 
 	// todo make it work with more than one thread
@@ -516,16 +539,19 @@ public:
 			while (running_ && ps_okay())
 			{
 				list_mutex_.lock();
+				if (events_.size() == 0)
+				{
+					ps_sleep(10);
+				}
+				else
+				{
+					ps_event_wait_multiple(events_.data(), events_.size(), 1000);
+				}
 				for (auto node : nodes_)
 				{
-					// todo block for more nodes simultaneously
-					ps_node_wait(node->getNode(), 10000);
-
 					node->lock_.lock();
-					if (ps_node_spin(node->getNode()))
-					{
+					ps_node_spin(node->getNode());
 
-					}
 					// todo how to make this not scale with subscriber count...
 					// though, it isnt very important here
 					// its probably worth more effort just make it not run any of this if we get no messages
@@ -538,8 +564,6 @@ public:
 					node->lock_.unlock();
 				}
 				list_mutex_.unlock();
-
-				ps_sleep(10);// make this configurable?
 			}
 		});
 	}
@@ -550,11 +574,23 @@ public:
 		{
 			stop();
 		}
+
+		// close out any events
+		for (int i = 0; i < events_.size(); i++)
+		{
+			ps_event_destroy(&events_[i]);
+		}
 	}
 
 	void addNode(Node& node)
 	{
 		list_mutex_.lock();
+
+		// build a wait list for all nodes
+		int old_size = events_.size();
+		events_.resize(old_size + ps_node_get_num_events(node.getNode())+1);
+		ps_node_create_events(node.getNode(), &events_[old_size]);
+		events_[events_.size() - 1] = node.getEvent();
 		nodes_.push_back(&node);
 		list_mutex_.unlock();
 	}
