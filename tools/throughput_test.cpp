@@ -2,6 +2,7 @@
 #include <stdio.h>
 
 #include "../high_level_api/Node.h"
+#include "../high_level_api/Spinners.h"
 #include "../src/System.h"
 
 #include "../msg/std_msgs__String.msg.h"

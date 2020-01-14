@@ -11,10 +11,15 @@ namespace pubsub
 class Duration
 {
 public:
-	unsigned int sec;
-	unsigned int usec;
+	unsigned long long usec;
 
 	Duration()
+	{
+
+	}
+
+	Duration(double seconds)
+		: usec(seconds*1000000.0)
 	{
 
 	}
@@ -54,10 +59,27 @@ public:
 		return out; // return the result by value (uses move constructor)
 	}
 
+	bool operator<(const Time& rhs) const// otherwise, both parameters may be const references
+	{
+		return this->usec < rhs.usec;
+	}
+
+	bool operator>(const Time& rhs) const// otherwise, both parameters may be const references
+	{
+		return this->usec > rhs.usec;
+	}
+
+	Time operator+(const Duration& rhs) // otherwise, both parameters may be const references
+	{
+		Time out;
+		out.usec = this->usec + rhs.usec;
+		return out; // return the result by value (uses move constructor)
+	}
+
 	static Time now()
 	{
 #ifdef _WIN32
-		int count = GetTickCount();
+		unsigned int count = GetTickCount();
 		return Time(count / 1000, (count % 1000)*1000);
 #else
 		struct timeval tv;

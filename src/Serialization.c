@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 #pragma pack(push)
 #pragma pack(1)
@@ -102,35 +103,35 @@ const char* ps_deserialize_internal(const char* data, const struct ps_field_t* f
 				switch (field->type)
 				{
 				case FT_Int8:
-					printf("%i", (int)*(signed char*)data);
+					printf("%i", (int)*(int8_t*)data);
 					data += 1;
 					break;
 				case FT_Int16:
-					printf("%s: %i\n", field->name, (int)*(signed short*)data);
+					printf("%s: %i\n", field->name, (int)*(int16_t*)data);
 					data += 2;
 					break;
 				case FT_Int32:
-					printf("%s: %i\n", field->name, (int)*(int*)data);
+					printf("%s: %i\n", field->name, (int)*(int32_t*)data);
 					data += 4;
 					break;
 				case FT_Int64:
-					printf("%s: %li\n", field->name, (long int)*(long int*)data);
+					printf("%s: %li\n", field->name, (long int)*(int64_t*)data);
 					data += 8;
 					break;
 				case FT_UInt8:
-					printf("%i", (int)*(unsigned char*)data);
+					printf("%i", (int)*(uint8_t*)data);
 					data += 1;
 					break;
 				case FT_UInt16:
-					printf("%s: %i\n", field->name, (int)*(unsigned short*)data);
+					printf("%s: %i\n", field->name, (int)*(uint16_t*)data);
 					data += 2;
 					break;
 				case FT_UInt32:
-					printf("%s: %i\n", field->name, (unsigned int)*(unsigned int*)data);
+					printf("%s: %i\n", field->name, (unsigned int)*(uint32_t*)data);
 					data += 4;
 					break;
 				case FT_UInt64:
-					printf("%s: %li\n", field->name, (unsigned long int)*(unsigned long int*)data);
+					printf("%s: %li\n", field->name, (unsigned long int)*(uint64_t*)data);
 					data += 8;
 					break;
 				case FT_Float32:
@@ -145,45 +146,52 @@ const char* ps_deserialize_internal(const char* data, const struct ps_field_t* f
 					printf("ERROR: unhandled field type when parsing....\n");
 				}
 			}
-			else if (field->length > 1)//print static arrrays
+			else if (field->length > 1 || field->length == 0)//print arrrays
 			{
+				unsigned int length = field->length;
+				if (length == 0)
+				{
+					//read in the length
+					length = *(uint32_t*)data;
+					data += 4;
+				}
 				printf("%s: [", field->name);
 
-				for (unsigned int i = 0; i < field->length; i++)
+				for (unsigned int i = 0; i < length; i++)
 				{
 					// non dynamic types 
 					switch (field->type)
 					{
 					case FT_Int8:
-						printf("%i", (int)*(signed char*)data);
+						printf("%i", (int)*(int8_t*)data);
 						data += 1;
 						break;
 					case FT_Int16:
-						printf("%i", (int)*(signed short*)data);
+						printf("%i", (int)*(int16_t*)data);
 						data += 2;
 						break;
 					case FT_Int32:
-						printf("%i", (int)*(int*)data);
+						printf("%i", (int)*(int32_t*)data);
 						data += 4;
 						break;
 					case FT_Int64:
-						printf("%li", (long int)*(long int*)data);
+						printf("%li", (long int)*(int64_t*)data);
 						data += 8;
 						break;
 					case FT_UInt8:
-						printf("%i", (int)*(unsigned char*)data);
+						printf("%i", (int)*(uint8_t*)data);
 						data += 1;
 						break;
 					case FT_UInt16:
-						printf("%i", (int)*(unsigned short*)data);
+						printf("%i", (int)*(uint16_t*)data);
 						data += 2;
 						break;
 					case FT_UInt32:
-						printf("%i", (unsigned int)*(unsigned int*)data);
+						printf("%i", (unsigned int)*(uint32_t*)data);
 						data += 4;
 						break;
 					case FT_UInt64:
-						printf("%li", (unsigned long int)*(unsigned long int*)data);
+						printf("%li", (unsigned long int)*(uint64_t*)data);
 						data += 8;
 						break;
 					case FT_Float32:
@@ -198,7 +206,7 @@ const char* ps_deserialize_internal(const char* data, const struct ps_field_t* f
 						printf("ERROR: unhandled field type when parsing....\n");
 					}
 
-					if (i == field->length - 1)
+					if (i == length - 1)
 					{
 						printf("]\n");
 					}
@@ -207,10 +215,6 @@ const char* ps_deserialize_internal(const char* data, const struct ps_field_t* f
 						printf(", ");
 					}
 				}
-			}
-			else
-			{
-				printf("ERROR: Dynamic arrays currently unhandled...");
 			}
 		}
 	}
