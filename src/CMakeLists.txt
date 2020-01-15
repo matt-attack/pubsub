@@ -10,7 +10,10 @@ add_library (pubsub
   "Subscriber.c"
   "Serialization.c"
   "System.c"
-  )
+)
+target_include_directories(pubsub PUBLIC ../include/)
 
+set(${PROJECT_NAME}_INCLUDE_DIRS ${PROJECT_SOURCE_DIR}/include
+    CACHE INTERNAL "${PROJECT_NAME}: Include Directories" FORCE)
 
 # TODO: Add tests and install targets if needed.

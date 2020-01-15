@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Time.h"
+#include <pubsub_cpp/Time.h>
 
 #undef min
 #undef max
@@ -145,6 +145,11 @@ public:
 						}
 						Duration delay = next - now;
 						timeout = std::max<int>(delay.usec / 1000, 1);
+						// todo there seems to be some kind of bug here that causes the timeout to be
+						// occasionally exceptionally long
+
+						// this line is necessary anyways, but happens to work around the above bug
+						timeout = std::min<int>(timeout, 1000);// make sure we dont block too long
 					}
 					ps_event_wait_multiple(events_.data(), events_.size(), timeout);
 				}

@@ -166,6 +166,11 @@ public:
 		return positional_[i];
 	}
 
+	const std::vector<std::string>& GetAllPositional()
+	{
+		return positional_;
+	}
+
 	bool GetBool(const std::string& arg)
 	{
 		auto& ar = args_[arg];

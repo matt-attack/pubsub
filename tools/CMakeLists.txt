@@ -33,12 +33,12 @@ macro(generate_messages)
   foreach (_file ${ARG_FILES})
     add_custom_command(
 	  COMMAND $<TARGET_FILE:pubsub_msg_gen> ${_file}
-      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/${ARG_DIRECTORY}/
-      DEPENDS ${CMAKE_SOURCE_DIR}/${ARG_DIRECTORY}/${_file} pubsub_msg_gen
-      OUTPUT ${CMAKE_SOURCE_DIR}/${ARG_DIRECTORY}/${_file}.h
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/${ARG_DIRECTORY}/
+      DEPENDS ${PROJECT_SOURCE_DIR}/${ARG_DIRECTORY}/${_file} pubsub_msg_gen
+      OUTPUT ${PROJECT_SOURCE_DIR}/${ARG_DIRECTORY}/${_file}.h
     )
 
-    set(MESSAGE_DEPS ${MESSAGE_DEPS} ${CMAKE_SOURCE_DIR}/${ARG_DIRECTORY}/${_file}.h)
+    set(MESSAGE_DEPS ${MESSAGE_DEPS} ${PROJECT_SOURCE_DIR}/${ARG_DIRECTORY}/${_file}.h)
   endforeach()
 
   add_custom_target(${ARG_TARGET}

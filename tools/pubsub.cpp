@@ -1,14 +1,14 @@
 
-#include "src/Node.h"
-#include "src/Publisher.h"
-#include "src/Subscriber.h"
-#include "src/Serialization.h"
-#include "src/System.h"
+#include <pubsub/Node.h>
+#include <pubsub/Publisher.h>
+#include <pubsub/Subscriber.h>
+#include <pubsub/Serialization.h>
+#include <pubsub/System.h>
 
-#include "../high_level_api/Time.h"
+#include <pubsub_cpp/Time.h>
 #include "../high_level_api/Serialize.h"
 
-#include "arg_parse.h"
+#include <pubsub_cpp/arg_parse.h>
 
 #include <iostream>
 #include <map>

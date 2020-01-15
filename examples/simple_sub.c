@@ -1,10 +1,10 @@
 //#include <cstdlib>
 #include <stdio.h>
 
-#include "../src/Node.h"
-#include "../src/Publisher.h"
-#include "../src/Subscriber.h"
-#include "../src/System.h"
+#include <pubsub/Node.h>
+#include <pubsub/Publisher.h>
+#include <pubsub/Subscriber.h>
+#include <pubsub/System.h>
 
 #include "../msg/std_msgs__String.msg.h"
 

@@ -1,9 +1,9 @@
 #pragma once
 
-#include "../src/Node.h"
-#include "../src/Publisher.h"
-#include "../src/Subscriber.h"
-#include "../src/System.h"
+#include <pubsub/Node.h>
+#include <pubsub/Publisher.h>
+#include <pubsub/Subscriber.h>
+#include <pubsub/System.h>
 
 
 #include <vector>
@@ -17,7 +17,7 @@
 
 
 #include <WS2tcpip.h>
-#include "../src/Events.h"
+#include <pubsub/Events.h>
 
 namespace pubsub
 {

@@ -10,6 +10,7 @@ add_library (pubsub_cpp
   "Node.cpp"
  )
 target_link_libraries(pubsub_cpp pubsub)
+target_include_directories(pubsub_cpp PUBLIC ../include)
 add_dependencies(pubsub_cpp pubsub)
 
 find_package( Threads )

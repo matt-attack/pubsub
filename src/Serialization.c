@@ -1,5 +1,5 @@
-#include "Serialization.h"
-#include "Node.h"
+#include <pubsub/Serialization.h>
+#include <pubsub/Node.h>
 
 #include <stdio.h>
 #include <string.h>

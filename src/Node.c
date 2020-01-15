@@ -1,11 +1,11 @@
-#include "Node.h"
-#include "Publisher.h"
-#include "Subscriber.h"
-#include "Serialization.h"
+#include <pubsub/Node.h>
+#include <pubsub/Publisher.h>
+#include <pubsub/Subscriber.h>
+#include <pubsub/Serialization.h>
 
 #include <stdio.h>
 
-#include "Net.h"
+#include <pubsub/Net.h>
 
 #include <string.h>
 
@@ -505,6 +505,7 @@ void ps_node_create_subscriber_adv(struct ps_node_t* node, const char* topic, co
 		sub->cb = options->cb;
 		sub->cb_data = options->cb_data;
 		sub->queue_size = 0;
+		sub->queue = 0;
 	}
 	else
 	{
@@ -613,12 +614,12 @@ static unsigned long GetTickCount64()
 #endif
 
 #ifndef PUBSUB_REAL_TIME
-#include "Events.h"
+#include <pubsub/Events.h>
 int ps_node_wait(struct ps_node_t* node, unsigned int timeout_ms)
 {
 #ifdef WIN32
 	// wait on the sockets or the passed event
-	HANDLE events[3];
+	HANDLE events[2];
 	events[0] = WSACreateEvent();
 	events[1] = WSACreateEvent();
 	//events[2] = WSACreateEvent();

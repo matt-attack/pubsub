@@ -1,13 +1,13 @@
-#include "Subscriber.h"
-#include "Publisher.h"
-#include "Node.h"
+#include <pubsub/Subscriber.h>
+#include <pubsub/Publisher.h>
+#include <pubsub/Node.h>
 
 #include <stdio.h>
 #ifndef ANDROID
 #include <stdlib.h>
 #endif
 
-#include "Net.h"
+#include <pubsub/Net.h>
 
 
 void ps_send_subscribe(struct ps_sub_t* sub, const struct ps_endpoint_t* ep)

@@ -7,7 +7,7 @@ extern "C"
 
 #include <stdbool.h>
 
-#include "../src/Serialization.h"
+#include "Serialization.h"
 
 struct ps_node_t;
 struct ps_message_definition_t;
