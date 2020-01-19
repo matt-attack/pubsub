@@ -30,6 +30,16 @@ public:
 
 	}
 
+	bool operator<(const Duration& rhs) const// otherwise, both parameters may be const references
+	{
+		return this->usec < rhs.usec;
+	}
+
+	bool operator>(const Duration& rhs) const// otherwise, both parameters may be const references
+	{
+		return this->usec > rhs.usec;
+	}
+
 	double toSec()
 	{
 		return usec / 1000000.0;
