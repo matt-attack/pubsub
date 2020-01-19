@@ -59,6 +59,7 @@ void ps_deserialize_message_definition(const void * start, struct ps_message_def
 	definition->num_fields = hdr->num_fields;
 	definition->decode = 0;
 	definition->encode = 0;
+	definition->name = 0;
 
 	definition->fields = (struct ps_field_t*)malloc(sizeof(struct ps_field_t)*definition->num_fields);
 
@@ -75,6 +76,17 @@ void ps_deserialize_message_definition(const void * start, struct ps_message_def
 
 		cur += 1 + 4 + 2 + strlen(f->name) + 1;
 	}
+}
+
+void ps_free_message_definition(struct ps_message_definition_t * definition)
+{
+	free(definition->name);
+
+	for (unsigned int i = 0; i < definition->num_fields; i++)
+	{
+		free(definition->fields[i].name);
+	}
+	free(definition->fields);
 }
 
 const char* ps_deserialize_internal(const char* data, const struct ps_field_t* fields, int num_fields, int indentation)

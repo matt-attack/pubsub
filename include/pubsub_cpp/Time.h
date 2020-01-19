@@ -46,6 +46,13 @@ public:
 
 	}
 
+	Time(unsigned long long usec)
+		: usec(usec)
+	{
+
+	}
+
+
 	Time(unsigned int sec, unsigned int usec)
 		: usec(sec*1000000 + usec)
 	{

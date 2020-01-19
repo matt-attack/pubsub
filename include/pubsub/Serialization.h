@@ -60,6 +60,8 @@ void ps_deserialize_message_definition(const void* start, struct ps_message_defi
 // in yaml format
 void ps_deserialize_print(const void* data, const struct ps_message_definition_t* definition);
 
+void ps_free_message_definition(struct ps_message_definition_t* definition);
+
 void ps_print_definition(const struct ps_message_definition_t* definition);
 
 void ps_msg_alloc(unsigned int size, struct ps_msg_t* out_msg);

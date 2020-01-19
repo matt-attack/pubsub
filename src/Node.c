@@ -218,7 +218,7 @@ char* GetPrimaryIp()
 	char* ip = inet_ntoa(name.sin_addr);
 	//assert(p);
 
-	printf("IP: %s\n", ip);
+	//printf("IP: %s\n", ip);
 
 #ifdef _WIN32
 	closesocket(sock);
@@ -313,7 +313,7 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 	getsockname(node->socket, (struct sockaddr*)&outaddr, &outlen);
 	node->port = ntohs(outaddr.sin_port);
 
-	printf("Bound to %i\n", node->port);
+	//printf("Bound to %i\n", node->port);
 
 	// set non-blocking i
 #ifdef _WIN32
@@ -828,7 +828,7 @@ int ps_node_spin(struct ps_node_t* node)
 
 			char* topic = (char*)&data[sizeof(struct ps_sub_req_header_t)];
 
-			printf("Got subscribe request for %s\n", topic);
+			//printf("Got subscribe request for %s\n", topic);
 
 			//check if we have a sub matching that topic
 			struct ps_pub_t* pub = 0;
@@ -863,7 +863,7 @@ int ps_node_spin(struct ps_node_t* node)
 			client.stream_id = p->sub_id;
 			client.modulo = p->skip > 0 ? p->skip + 1 : 0;
 
-			printf("Got subscribe request, adding client if we haven't already\n");
+			//printf("Got subscribe request, adding client if we haven't already\n");
 			ps_pub_add_client(pub, &client);
 
 			//send out the data format to the client
@@ -1012,14 +1012,14 @@ int ps_node_spin(struct ps_node_t* node)
 				}
 				else if (i == pub->num_clients - 1)
 				{
-					printf("Got new subscribe query, advertising\n");
+					//printf("Got new subscribe query, advertising\n");
 					ps_node_advertise(pub);
 				}
 			}
 
 			if (pub->num_clients == 0)
 			{
-				printf("Got new subscribe query, advertising\n");
+				//printf("Got new subscribe query, advertising\n");
 				ps_node_advertise(pub);
 			}
 		}
@@ -1095,7 +1095,7 @@ int ps_node_spin(struct ps_node_t* node)
 		}
 		else if (data[0] == PS_DISCOVERY_PROTOCOL_UNSUBSCRIBE)
 		{
-			printf("Got unsubscribe request\n");
+			//printf("Got unsubscribe request\n");
 
 			int* addr = (int*)&data[1];
 			unsigned short* port = (unsigned short*)&data[5];

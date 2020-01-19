@@ -44,7 +44,7 @@ void ps_pub_add_client(struct ps_pub_t* pub, const struct ps_client_t* client)
 		if (pub->clients[i].endpoint.address == client->endpoint.address
 			&& pub->clients[i].endpoint.port == client->endpoint.port)
 		{
-			printf("We already have this client, ignoring request\n");
+			//printf("We already have this client, ignoring request\n");
 			return;
 		}
 	}
