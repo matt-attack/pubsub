@@ -101,7 +101,7 @@ void ps_node_advertise(struct ps_pub_t* pub)
 	p->addr = pub->node->addr;
 	p->port = pub->node->port;
 	p->type_hash = pub->message_definition->hash;
-	p->transports = PS_TRANSPORT_UDP;
+	p->transports = pub->node->supported_transports;
 	p->group_id = pub->node->group_id;
 
 	int off = sizeof(struct ps_advertise_req_t);
@@ -245,6 +245,8 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 	node->adv_cb = 0;
 	node->sub_cb = 0;
 	node->def_cb = 0;
+
+	node->supported_transports = PS_TRANSPORT_UDP;
 
 	node->_last_advertise = 0;
 	node->_last_check = 0;

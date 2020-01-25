@@ -34,6 +34,10 @@ int ps_serialize_message_definition(void* start, const struct ps_message_definit
 	hdr->num_fields = definition->num_fields;
 
 	char* cur = ((char*)start) + sizeof(struct def_header);
+
+	// now write in the name
+	cur += serialize_string(cur, definition->name);
+
 	for (unsigned int i = 0; i < definition->num_fields; i++)
 	{
 		struct field* f = (struct field*)cur;
@@ -64,6 +68,12 @@ void ps_deserialize_message_definition(const void * start, struct ps_message_def
 	definition->fields = (struct ps_field_t*)malloc(sizeof(struct ps_field_t)*definition->num_fields);
 
 	char* cur = ((char*)start) + sizeof(struct def_header);
+
+	// read in the name
+	int len = strlen(cur);
+	definition->name = malloc(len + 1);
+	strcpy(definition->name, cur);
+	cur += len + 1;
 	for (unsigned int i = 0; i < definition->num_fields; i++)
 	{
 		struct field* f = (struct field*)cur;

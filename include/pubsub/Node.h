@@ -18,6 +18,19 @@ typedef unsigned int ps_socket_t;
 typedef int ps_socket_t;
 #endif
 
+// defines a transport implementation
+//so when you request a subscription, you would request a transport type 
+//then the pub can either do it, or fall back to default UDP transport
+
+typedef void(*ps_transport_fn_pub_t)(const char* topic, const char* type, const char* node, void* data);
+typedef void(*ps_transport_fn_spin_t)(const char* topic, const char* type, const char* node, void* data);
+struct ps_transport_t
+{
+	unsigned short uuid;// unique id for this transport type, listed in advertisements for it
+	ps_transport_fn_pub_t pub;
+	ps_transport_fn_spin_t spin;
+};
+
 typedef void(*ps_adv_cb_t)(const char* topic, const char* type, const char* node, const struct ps_advertise_req_t* data);
 typedef void(*ps_sub_cb_t)(const char* topic, const char* type, const char* node, void* data);
 typedef void(*ps_msg_def_cb_t)(const struct ps_message_definition_t* definition);
@@ -51,6 +64,13 @@ struct ps_node_t
 	//implementation data
 	unsigned long long _last_advertise;
 	unsigned long long _last_check;
+
+	int supported_transports;
+
+#ifndef ARDUINO
+	unsigned int num_transports;
+	struct ps_transport_t* transports;
+#endif
 };
 
 // describes where a message came from
@@ -111,19 +131,6 @@ struct ps_subscribe_accept_t
 	//message definition goes here...
 };
 #pragma pack(pop)
-
-// defines a transport implementation
-//so when you request a subscription, you would request a transport type 
-//then the pub can either do it, or fall back to default UDP transport
-
-typedef void(*ps_transport_fn_pub_t)(const char* topic, const char* type, const char* node, void* data);
-typedef void(*ps_transport_fn_spin_t)(const char* topic, const char* type, const char* node, void* data);
-struct ps_transport_t
-{
-	unsigned short uuid;// unique id for this transport type, listed in advertisements for it
-	ps_transport_fn_pub_t pub;
-	ps_transport_fn_spin_t spin;
-};
 
 //not threadsafe, but thats obvious isnt it
 // set broadcast to true to use that for advertising instead of multicast
