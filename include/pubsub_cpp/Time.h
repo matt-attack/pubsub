@@ -6,6 +6,9 @@
 #include <sys/time.h>
 #endif
 
+#include <time.h>
+#include <string>
+
 namespace pubsub
 {
 class Duration
@@ -96,8 +99,31 @@ public:
 	static Time now()
 	{
 #ifdef _WIN32
-		unsigned int count = GetTickCount();
-		return Time(count / 1000, (count % 1000)*1000);
+		static unsigned long long start = 0;
+		if (!start)
+		{
+			/* FILETIME of Jan 1 1970 00:00:00. */
+			static const unsigned __int64 epoch = ((unsigned __int64)116444736000000000ULL);
+
+			FILETIME    file_time;
+			SYSTEMTIME  system_time;
+			ULARGE_INTEGER ularge;
+
+			GetSystemTime(&system_time);
+			SystemTimeToFileTime(&system_time, &file_time);
+			ularge.LowPart = file_time.dwLowDateTime;
+			ularge.HighPart = file_time.dwHighDateTime;
+
+			// the file_time is in units of 100 nanoseconds
+			start = ((unsigned long long)(system_time.wMilliseconds * 1000)) + ((ularge.QuadPart - epoch) / 10ULL);
+
+			// subtract out uptime
+			start -= GetTickCount64() * 1000;
+		}
+		long long start_sec = start / 1000000;
+		unsigned long long count = GetTickCount();// todo use higher accuracy timer
+		unsigned long long usec = count * 1000 + start;
+		return Time(usec);
 #else
 		struct timeval tv;
 		gettimeofday(&tv, 0);
@@ -109,6 +135,15 @@ public:
 	double toSec()
 	{
 		return usec / 1000000.0;
+	}
+
+	std::string toString()
+	{
+		time_t t = toSec();
+
+		std::string str = ctime(&t);
+		str.pop_back();
+		return str;
 	}
 };
 }

@@ -22,13 +22,23 @@ typedef int ps_socket_t;
 //so when you request a subscription, you would request a transport type 
 //then the pub can either do it, or fall back to default UDP transport
 
-typedef void(*ps_transport_fn_pub_t)(const char* topic, const char* type, const char* node, void* data);
-typedef void(*ps_transport_fn_spin_t)(const char* topic, const char* type, const char* node, void* data);
+typedef void(*ps_transport_fn_pub_t)(struct ps_tcp_transport* transport, struct ps_pub_t* publisher, void* message);
+typedef void(*ps_transport_fn_spin_t)(struct ps_tcp_transport* transport);
+typedef void(*ps_transport_fn_add_publisher_t)(struct ps_tcp_transport* transport, struct ps_pub_t* publisher);
+typedef void(*ps_transport_fn_remove_publisher_t)(struct ps_tcp_transport* transport, struct ps_pub_t* publisher);
+typedef void(*ps_transport_fn_subscribe_t)(struct ps_tcp_transport* transport, struct ps_sub_t* subscriber);
+typedef void(*ps_transport_fn_unsubscribe_t)(struct ps_tcp_transport* transport, struct ps_sub_t* subscriber);
+typedef unsigned int(*ps_transport_fn_num_subscribers_t)(struct ps_tcp_transport* transport, struct ps_pub_t* publisher);
 struct ps_transport_t
 {
 	unsigned short uuid;// unique id for this transport type, listed in advertisements for it
 	ps_transport_fn_pub_t pub;
 	ps_transport_fn_spin_t spin;
+	ps_transport_fn_num_subscribers_t subscriber_count;
+	ps_transport_fn_subscribe_t subscribe;
+	ps_transport_fn_unsubscribe_t unsubscribe;
+	ps_transport_fn_add_publisher_t add_pub;
+	ps_transport_fn_remove_publisher_t remove_pub;
 };
 
 typedef void(*ps_adv_cb_t)(const char* topic, const char* type, const char* node, const struct ps_advertise_req_t* data);

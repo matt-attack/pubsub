@@ -168,7 +168,7 @@ const char* ps_deserialize_internal(const char* data, const struct ps_field_t* f
 					printf("ERROR: unhandled field type when parsing....\n");
 				}
 			}
-			else if (field->length > 1 || field->length == 0)//print arrrays
+			else if (field->length > 1 || field->length == 0)//print arrays
 			{
 				unsigned int length = field->length;
 				if (length == 0)

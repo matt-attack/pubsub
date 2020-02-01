@@ -38,7 +38,9 @@ struct ps_pub_t
 	struct ps_node_t* node;
 	unsigned int num_clients;
 	struct ps_client_t* clients;
+
 	bool latched;// todo make this an enum of options if we add more
+
 	struct ps_msg_t last_message;//only used if latched
 	unsigned int sequence_number;
 };
