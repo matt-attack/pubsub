@@ -121,7 +121,7 @@ public:
 			start -= GetTickCount64() * 1000;
 		}
 		long long start_sec = start / 1000000;
-		unsigned long long count = GetTickCount();// todo use higher accuracy timer
+		unsigned long long count = GetTickCount64();// todo use higher accuracy timer
 		unsigned long long usec = count * 1000 + start;
 		return Time(usec);
 #else

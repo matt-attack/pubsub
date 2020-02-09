@@ -18,6 +18,7 @@ int main()
 
 	pubsub::Spinner spinner;
 	spinner.addNode(node);
+	spinner.start();
 
 	int i = 0;
 	while (ps_okay())

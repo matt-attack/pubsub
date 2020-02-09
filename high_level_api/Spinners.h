@@ -20,8 +20,14 @@ class BlockingSpinner
 public:
 
 	// todo make it work with more than one thread
-	BlockingSpinner(int num_threads = 1) : running_(true)
+	BlockingSpinner(int num_threads = 1) : running_(false)
 	{
+
+	}
+
+	void start()
+	{
+		running_ = true;
 		thread_ = std::thread([this]()
 		{
 			while (running_ && ps_okay())
@@ -85,6 +91,10 @@ public:
 
 	void wait()
 	{
+		if (!running_)
+		{
+			start();
+		}
 		thread_.join();
 	}
 
@@ -117,8 +127,40 @@ class BlockingSpinnerWithTimers
 public:
 
 	// todo make it work with more than one thread
-	BlockingSpinnerWithTimers(int num_threads = 1) : running_(true)
+	BlockingSpinnerWithTimers(int num_threads = 1) : running_(false)
 	{
+	}
+
+	~BlockingSpinnerWithTimers()
+	{
+		if (running_)
+		{
+			stop();
+		}
+
+		// close out any events
+		for (size_t i = 0; i < events_.size(); i++)
+		{
+			ps_event_destroy(&events_[i]);
+		}
+	}
+
+	void addNode(Node& node)
+	{
+		list_mutex_.lock();
+
+		// build a wait list for all nodes
+		int old_size = events_.size();
+		events_.resize(old_size + ps_node_get_num_events(node.getNode()) + 1);
+		ps_node_create_events(node.getNode(), &events_[old_size]);
+		events_[events_.size() - 1] = node.getEvent();
+		nodes_.push_back(&node);
+		list_mutex_.unlock();
+	}
+
+	void start()
+	{
+		running_ = true;
 		thread_ = std::thread([this]()
 		{
 			while (running_ && ps_okay())
@@ -151,7 +193,9 @@ public:
 						// this line is necessary anyways, but happens to work around the above bug
 						timeout = std::min<int>(timeout, 1000);// make sure we dont block too long
 					}
+					list_mutex_.unlock();
 					ps_event_wait_multiple(events_.data(), events_.size(), timeout);
+					list_mutex_.lock();
 				}
 
 				// check all timers
@@ -189,33 +233,6 @@ public:
 		});
 	}
 
-	~BlockingSpinnerWithTimers()
-	{
-		if (running_)
-		{
-			stop();
-		}
-
-		// close out any events
-		for (size_t i = 0; i < events_.size(); i++)
-		{
-			ps_event_destroy(&events_[i]);
-		}
-	}
-
-	void addNode(Node& node)
-	{
-		list_mutex_.lock();
-
-		// build a wait list for all nodes
-		int old_size = events_.size();
-		events_.resize(old_size + ps_node_get_num_events(node.getNode()) + 1);
-		ps_node_create_events(node.getNode(), &events_[old_size]);
-		events_[events_.size() - 1] = node.getEvent();
-		nodes_.push_back(&node);
-		list_mutex_.unlock();
-	}
-
 	struct Timer
 	{
 		Time next_trigger;
@@ -236,6 +253,10 @@ public:
 
 	void wait()
 	{
+		if (!running_)
+		{
+			start();
+		}
 		thread_.join();
 	}
 
@@ -264,8 +285,14 @@ class Spinner
 public:
 
 	// todo make it work with more than one thread
-	Spinner(int num_threads = 1) : running_(true)
+	Spinner(int num_threads = 1) : running_(false)
 	{
+
+	}
+
+	void start()
+	{
+		running_ = true;
 		thread_ = std::thread([this]()
 		{
 			while (running_ && ps_okay())
@@ -313,6 +340,10 @@ public:
 
 	void wait()
 	{
+		if (!running_)
+		{
+			start();
+		}
 		thread_.join();
 	}
 
