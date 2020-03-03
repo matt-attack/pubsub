@@ -190,19 +190,16 @@ int ps_node_spin(struct ps_node_t* node);
 
 // Functions to wait on a node
 #ifndef PUBSUB_REAL_TIME
-struct ps_event_t;
+struct ps_event_set_t;
 // waits for an event in the node to trigger before returning
 // note this creates and destroys events so is probably not the fastest
 // way to wait, the functions below should be better
 // used to avoid polling spin
 int ps_node_wait(struct ps_node_t* node, unsigned int timeout_ms);
 
-// returns the number of events this node would need to create to wait on it
-int ps_node_get_num_events(const struct ps_node_t* node);
-
 // creates all the events that would need to be waited on for this node
 // returns the number added
-int ps_node_create_events(struct ps_node_t* node, struct ps_event_t* events);
+int ps_node_create_events(struct ps_node_t* node, struct ps_event_set_t* events);
 #endif
 
 int serialize_string(char* data, const char* str);

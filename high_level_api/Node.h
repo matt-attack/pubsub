@@ -16,7 +16,7 @@
 #include <algorithm>
 
 
-#include <WS2tcpip.h>
+//#include <WS2tcpip.h>
 #include <pubsub/Events.h>
 
 namespace pubsub
@@ -146,7 +146,7 @@ class Node
 
 	ps_node_t node_;
 
-	ps_event_t event_;
+	ps_event_set_t* event_set_;
 public:
 	// todo try and eliminate this needing to be recursive
 	// recursive for the moment...
@@ -156,7 +156,7 @@ public:
 	// probably need to add advertise and subscribe functions to me
 	std::vector<SubscriberBase*> subscribers_;
 
-	Node(const std::string& name, bool use_broadcast = false) : original_name_(name)
+	Node(const std::string& name, bool use_broadcast = false) : original_name_(name), event_set_(0)
 	{
 		// look up the namespace for this node (todo)
 		std::string ns = "/ns_test";
@@ -170,9 +170,6 @@ public:
 
 		qualified_name_ = getQualifiedName();
 		ps_node_init(&node_, qualified_name_.c_str(), "", use_broadcast);
-
-		// create the event for intraprocess
-		event_ = ps_event_create();
 	}
 
 	~Node()
@@ -205,9 +202,14 @@ public:
 		return ps_node_spin(&node_);
 	}
 
-	inline ps_event_t getEvent()
+    inline void setEventSet(ps_event_set_t* set)
+    {
+      event_set_ = set;
+    }
+
+	inline ps_event_set_t* getEventSet()
 	{
-		return event_;
+		return event_set_;
 	}
 };
 
@@ -301,8 +303,7 @@ public:
 			//printf("Publishing locally with no copy..\n");
 
 			auto specific_sub = (Subscriber<T>*)sub;
-			ps_event_t ev = specific_sub->node_->getEvent();
-			ps_event_trigger(&ev);
+			ps_event_set_trigger(specific_sub->node_->getEventSet());
 			specific_sub->queue_mutex_.lock();
 			specific_sub->queue_.push_front(msg);
 			if (specific_sub->queue_.size() > specific_sub->queue_size_)
@@ -339,8 +340,7 @@ public:
 
 			// help this isnt thread safe
 			auto specific_sub = (Subscriber<T>*)sub;
-			ps_event_t ev = specific_sub->node_->getEvent();
-			ps_event_trigger(&ev);
+			ps_event_set_trigger(specific_sub->node_->getEventSet());
 			specific_sub->queue_mutex_.lock();
 			specific_sub->queue_.push_front(copy);
 			if (specific_sub->queue_.size() > specific_sub->queue_size_)

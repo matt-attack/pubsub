@@ -619,7 +619,7 @@ static unsigned long GetTickCount64()
 #include <pubsub/Events.h>
 int ps_node_wait(struct ps_node_t* node, unsigned int timeout_ms)
 {
-#ifdef WIN32
+#ifdef _WIN32
 	// wait on the sockets or the passed event
 	HANDLE events[2];
 	events[0] = WSACreateEvent();
@@ -636,23 +636,26 @@ int ps_node_wait(struct ps_node_t* node, unsigned int timeout_ms)
 	WSACloseEvent(events[0]);
 	WSACloseEvent(events[1]);
 	//WSACloseEvent(events[2]);
+#else
+    // todo
 #endif
 	return 0;
 }
 
-int ps_node_get_num_events(const struct ps_node_t* node)
-{
-	return 2;
-}
-
 // returns the number added
-int ps_node_create_events(struct ps_node_t* node, struct ps_event_t* events)
+int ps_node_create_events(struct ps_node_t* node, struct ps_event_set_t* events)
 {
-	events[0] = ps_event_create();
+    ps_event_set_add_socket(events, node->socket);
+    ps_event_set_add_socket(events, node->mc_socket);
+
+/*	events[0] = ps_event_create();
 	events[1] = ps_event_create();
 
+#ifdef _WIN32
 	WSAEventSelect(node->socket, events[0].handle, FD_READ);
 	WSAEventSelect(node->mc_socket, events[1].handle, FD_READ);
+#else
+#endif*/
 
 	return 2;
 }
