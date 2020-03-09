@@ -6,6 +6,7 @@ include_directories("../")
 add_executable (info "pubsub.cpp")
 target_link_libraries(info pubsub)
 add_dependencies(info pubsub)
+set_property(TARGET info PROPERTY CXX_STANDARD 11)
 
 # Build the serialization generator
 add_executable(pubsub_msg_gen "generator.cpp")

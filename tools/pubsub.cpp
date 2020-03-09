@@ -43,7 +43,7 @@ void print_help()
 void wait(ps_node_t* node)
 {
 	printf("Waiting for responses...\n\n");
-	unsigned int start = GetTimeMs();
+	unsigned long long start = GetTimeMs();
 	while (ps_okay() && start + 3000 > GetTimeMs())
 	{
 		ps_node_wait(node, 100);
@@ -89,7 +89,7 @@ int main(int num_args_real, char** args)
 
 	// Setup the node with a random name
 	static ps_node_t node;
-	ps_node_init(&node, "Query", "", true);
+	ps_node_init(&node, "Query", "", false);
 
 	// Setup introspection callbacks
 	node.adv_cb = [](const char* topic, const char* type, const char* node, const ps_advertise_req_t* data)
