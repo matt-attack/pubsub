@@ -218,7 +218,13 @@ char* GetPrimaryIp()
 	char* ip = inet_ntoa(name.sin_addr);
 	//assert(p);
 
-	//printf("IP: %s\n", ip);
+    if (name.sin_addr.s_addr == 0)
+    {
+      ip = "127.0.0.1";
+    }
+
+    printf("IP: %s\n", ip);
+
 
 #ifdef _WIN32
 	closesocket(sock);
@@ -265,8 +271,16 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 	node->group_id = 0;// ignore the group
 #endif
 
+    unsigned int mc_bind_addr = INADDR_ANY;
 	unsigned int mc_addr = inet_addr("239.255.255.249");// todo make this configurable
-	if (broadcast)
+    if (strcmp(ip, "127.0.0.1") == 0)
+    {
+      // hack for localhost
+      broadcast = true;
+      node->advertise_addr = inet_addr("127.255.255.255");
+      mc_bind_addr = mc_bind_addr;
+    }
+	else if (broadcast)
 	{
 		//convert to a broadcast address (just the subnet wide one)
 		node->advertise_addr = inet_addr(ip);
@@ -352,7 +366,7 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 	int opt = 1;
 	if (setsockopt(node->mc_socket, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt)) < 0)
 	{
-		perror("setsockopt");
+		perror("setsockopt reuse");
 		exit(EXIT_FAILURE);
 	}
 
@@ -362,12 +376,12 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 		int opt = 1;
 		if (setsockopt(node->mc_socket, SOL_SOCKET, SO_BROADCAST, (char *)&opt, sizeof(opt)) < 0)
 		{
-			perror("setsockopt");
+			perror("setsockopt broadcast mc");
 			exit(EXIT_FAILURE);
 		}
 		if (setsockopt(node->socket, SOL_SOCKET, SO_BROADCAST, (char *)&opt, sizeof(opt)) < 0)
 		{
-			perror("setsockopt");
+			perror("setsockopt broadcast");
 			exit(EXIT_FAILURE);
 		}
 	}
@@ -375,7 +389,7 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 	// bind to port
 	struct sockaddr_in mc_address;
 	mc_address.sin_family = AF_INET;
-	mc_address.sin_addr.s_addr = htonl(INADDR_ANY);// Linux seems to need to be bound to INADDR_ANY for broadcast or multicast
+	mc_address.sin_addr.s_addr = htonl(mc_bind_addr);// Linux seems to need to be bound to INADDR_ANY for broadcast or multicast
 	mc_address.sin_port = htons(node->advertise_port);
 
 	if (bind(node->mc_socket, (const struct sockaddr*)&mc_address, sizeof(struct sockaddr_in)) < 0)
@@ -409,13 +423,18 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 	fcntl(node->mc_socket, F_SETFL, flags2 | O_NONBLOCK);
 #endif
 
-	struct ip_mreq mreq;
+    if (broadcast)
+    {
+      return;
+    }
+     
+    struct ip_mreq mreq;
 	mreq.imr_multiaddr.s_addr = mc_addr;
 	mreq.imr_interface.s_addr = htonl(INADDR_ANY);// Linux seems to require INADDR_ANY here
-	if (setsockopt(node->mc_socket, IPPROTO_IP, IP_ADD_MEMBERSHIP,
+    if (setsockopt(node->mc_socket, IPPROTO_IP, IP_ADD_MEMBERSHIP,
 		(char*)&mreq, sizeof(mreq)) < 0)
 	{
-		perror("setsockopt");
+		perror("setsockopt multicast add membership");
 		return;
 	}
 }

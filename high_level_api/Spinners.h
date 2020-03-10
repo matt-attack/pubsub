@@ -16,7 +16,7 @@ class BlockingSpinner
 	std::thread thread_;
 	std::mutex list_mutex_;
 
-	std::vector<ps_event_t> events_;
+	ps_event_set_t events_;
 public:
 
 	// todo make it work with more than one thread
@@ -33,13 +33,13 @@ public:
 			while (running_ && ps_okay())
 			{
 				list_mutex_.lock();
-				if (events_.size() == 0)
+				if (ps_event_set_count(&events_) == 0)
 				{
 					ps_sleep(10);
 				}
 				else
 				{
-					ps_event_wait_multiple(events_.data(), events_.size(), 1000);
+					ps_event_set_wait(&events_, 1000);
 				}
 				for (auto node : nodes_)
 				{
@@ -69,11 +69,7 @@ public:
 			stop();
 		}
 
-		// close out any events
-		for (size_t i = 0; i < events_.size(); i++)
-		{
-			ps_event_destroy(&events_[i]);
-		}
+		ps_event_set_destroy(&events_);
 	}
 
 	void addNode(Node& node)
@@ -81,10 +77,7 @@ public:
 		list_mutex_.lock();
 
 		// build a wait list for all nodes
-		int old_size = events_.size();
-		events_.resize(old_size + ps_node_get_num_events(node.getNode()) + 1);
-		ps_node_create_events(node.getNode(), &events_[old_size]);
-		events_[events_.size() - 1] = node.getEvent();
+		ps_node_create_events(node.getNode(), &events_);
 		nodes_.push_back(&node);
 		list_mutex_.unlock();
 	}
@@ -123,7 +116,7 @@ class BlockingSpinnerWithTimers
 	std::thread thread_;
 	std::mutex list_mutex_;
 
-	std::vector<ps_event_t> events_;
+	ps_event_set_t events_;
 public:
 
 	// todo make it work with more than one thread
@@ -139,10 +132,7 @@ public:
 		}
 
 		// close out any events
-		for (size_t i = 0; i < events_.size(); i++)
-		{
-			ps_event_destroy(&events_[i]);
-		}
+		ps_event_set_destroy(&events_);
 	}
 
 	void addNode(Node& node)
@@ -150,10 +140,7 @@ public:
 		list_mutex_.lock();
 
 		// build a wait list for all nodes
-		int old_size = events_.size();
-		events_.resize(old_size + ps_node_get_num_events(node.getNode()) + 1);
-		ps_node_create_events(node.getNode(), &events_[old_size]);
-		events_[events_.size() - 1] = node.getEvent();
+		ps_node_create_events(node.getNode(), &events_);
 		nodes_.push_back(&node);
 		list_mutex_.unlock();
 	}
@@ -166,7 +153,7 @@ public:
 			while (running_ && ps_okay())
 			{
 				list_mutex_.lock();
-				if (events_.size() == 0)
+				if (ps_event_set_count(&events_) == 0)
 				{
 					ps_sleep(10);
 				}
@@ -194,7 +181,7 @@ public:
 						timeout = std::min<int>(timeout, 1000);// make sure we dont block too long
 					}
 					list_mutex_.unlock();
-					ps_event_wait_multiple(events_.data(), events_.size(), timeout);
+					ps_event_set_wait(&events_, timeout);
 					list_mutex_.lock();
 				}
 

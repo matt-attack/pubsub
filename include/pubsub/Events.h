@@ -12,10 +12,11 @@
 struct ps_event_set_t
 {
 #ifdef WIN32
-    int num_handles;
+    unsigned int num_handles;
     HANDLE* handles;
 #else
     int fd;
+    unsigned int num_events;
 #endif
 };
 
@@ -28,6 +29,7 @@ void ps_event_set_create(struct ps_event_set_t* set)
   set->handles[0] = WSACreateEvent();
 #else
   set->fd = epoll_create(1);
+  set->num_events = 0;
 #endif
 }
 
@@ -40,6 +42,7 @@ void ps_event_set_destroy(struct ps_event_set_t* set)
   }
   free(set->handles);
 #else
+  set->num_events = 0;
   close(set->fd);
 #endif
 }
@@ -65,6 +68,7 @@ void ps_event_set_add_socket(struct ps_event_set_t* set, int socket)
   struct epoll_event event;
   event.events = EPOLLIN;
   epoll_ctl(set->fd, EPOLL_CTL_ADD, socket, &event);
+  set->num_events++;
 #endif
 }
 
@@ -78,6 +82,15 @@ void ps_event_set_trigger(struct ps_event_set_t* set)
   WSASetEvent(set->handles[0]);
 #else
   // todo
+#endif
+}
+
+unsigned int ps_event_set_count(const struct ps_event_set_t* set)
+{
+#ifdef WIN32
+  return set->num_handles;
+#else
+  return set->num_events;
 #endif
 }
 

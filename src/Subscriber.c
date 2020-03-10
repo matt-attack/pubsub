@@ -60,19 +60,26 @@ void ps_sub_destroy(struct ps_sub_t* sub)
 	//remove it from my list of subs
 	sub->node->num_subs--;
 	struct ps_sub_t** old_subs = sub->node->subs;
-	sub->node->subs = (struct ps_sub_t**)malloc(sizeof(struct ps_sub_t*)*sub->node->num_subs);
-	int ind = 0;
-	for (unsigned int i = 0; i < sub->node->num_subs+1; i++)
-	{
+    if (sub->node->num_subs == 0)
+    {
+      sub->node->subs = 0;
+    }
+    else
+    {
+	  sub->node->subs = (struct ps_sub_t**)malloc(sizeof(struct ps_sub_t*)*sub->node->num_subs);
+	  int ind = 0;
+	  for (unsigned int i = 0; i < sub->node->num_subs+1; i++)
+	  {
 		if (old_subs[i] == sub)
 		{
-			//skip me
+		  //skip me
 		}
 		else
 		{
-			sub->node->subs[ind++] = old_subs[i];
+          sub->node->subs[ind++] = old_subs[i];
 		}
-	}
+	  }
+    }
 	free(old_subs);
 
 	//free any queued up messages and our queue

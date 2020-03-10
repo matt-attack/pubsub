@@ -11,7 +11,7 @@
 int main()
 {
 	struct ps_node_t node;
-	ps_node_init(&node, "simple_subscriber", "", true);
+	ps_node_init(&node, "simple_subscriber", "", false);
 
 	struct ps_sub_t string_sub;
 	ps_node_create_subscriber(&node, "/data", &std_msgs__String_def, &string_sub, 10, false, 0, true);
