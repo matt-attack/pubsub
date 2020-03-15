@@ -385,22 +385,22 @@ int main(int num_args_real, char** args)
 							double rate = ((double)total) / ((double)delta);
 							if (rate > 5000000)
 							{
-								printf("Bw: %0.3lf MB/s n=%i\n", rate / 1000000.0, message_times.size());
+								printf("Bw: %0.3lf MB/s n=%zi\n", rate / 1000000.0, message_times.size());
 							}
 							else if (rate > 5000)
 							{
-								printf("Bw: %0.3lf KB/s n=%i\n", rate / 1000.0, message_times.size());
+								printf("Bw: %0.3lf KB/s n=%zi\n", rate / 1000.0, message_times.size());
 							}
 							else
 							{
-								printf("Bw: %lf B/s n=%i\n", rate, message_times.size());
+								printf("Bw: %lf B/s n=%zi\n", rate, message_times.size());
 							}
 						}
 						else
 						{
 							double delta = (pubsub::Time::now() - message_times.front().first).toSec();
 							double rate = ((double)(message_times.size() - 1)) / ((double)delta);
-							printf("Rate: %lf Hz n=%i\n", rate, message_times.size());
+							printf("Rate: %lf Hz n=%zi\n", rate, message_times.size());
 						}
 					}
 				}

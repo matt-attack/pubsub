@@ -21,7 +21,7 @@ typedef int ps_socket_t;
 // defines a transport implementation
 //so when you request a subscription, you would request a transport type 
 //then the pub can either do it, or fall back to default UDP transport
-
+struct ps_tcp_transport;
 typedef void(*ps_transport_fn_pub_t)(struct ps_tcp_transport* transport, struct ps_pub_t* publisher, void* message);
 typedef void(*ps_transport_fn_spin_t)(struct ps_tcp_transport* transport);
 typedef void(*ps_transport_fn_add_publisher_t)(struct ps_tcp_transport* transport, struct ps_pub_t* publisher);

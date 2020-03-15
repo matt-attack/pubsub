@@ -7,6 +7,7 @@
 #ifndef WIN32
 #include <unistd.h>
 #include <sys/epoll.h>
+#include <sys/eventfd.h>
 #endif
 
 struct ps_event_set_t
@@ -17,6 +18,7 @@ struct ps_event_set_t
 #else
     int fd;
     unsigned int num_events;
+    int event_fd;
 #endif
 };
 
@@ -30,6 +32,13 @@ void ps_event_set_create(struct ps_event_set_t* set)
 #else
   set->fd = epoll_create(1);
   set->num_events = 0;
+
+  // create the pipe for manual triggers
+  set->event_fd = eventfd(0, 0);
+
+  struct epoll_event event;
+  event.events = EPOLLIN;
+  epoll_ctl(set->fd, EPOLL_CTL_ADD, set->event_fd, &event);
 #endif
 }
 
@@ -43,6 +52,7 @@ void ps_event_set_destroy(struct ps_event_set_t* set)
   free(set->handles);
 #else
   set->num_events = 0;
+  close(set->event_fd);
   close(set->fd);
 #endif
 }
@@ -81,14 +91,15 @@ void ps_event_set_trigger(struct ps_event_set_t* set)
 #ifdef WIN32
   WSASetEvent(set->handles[0]);
 #else
-  // todo
+  uint64_t val = 1;
+  write(set->event_fd, &val, 8);
 #endif
 }
 
 unsigned int ps_event_set_count(const struct ps_event_set_t* set)
 {
 #ifdef WIN32
-  return set->num_handles;
+  return set->num_handles-1;
 #else
   return set->num_events;
 #endif
