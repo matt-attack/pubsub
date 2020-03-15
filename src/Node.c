@@ -492,6 +492,7 @@ void ps_subscriber_options_init(struct ps_subscriber_options* options)
 	options->want_message_def = false;
 	options->cb = 0;
 	options->cb_data = 0;
+    options->preferred_transport = PS_TRANSPORT_UDP;
 }
 
 void ps_node_create_subscriber_adv(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,
@@ -521,6 +522,7 @@ void ps_node_create_subscriber_adv(struct ps_node_t* node, const char* topic, co
 	sub->allocator = allocator;
 	sub->ignore_local = options->ignore_local;
 	sub->skip = options->skip;
+    sub->preferred_transport = options->preferred_transport;
 
 	sub->want_message_definition = type ? options->want_message_def : true;
 	sub->received_message_def.fields = 0;

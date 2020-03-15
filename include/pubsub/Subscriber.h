@@ -36,6 +36,8 @@ struct ps_sub_t
 	ps_subscriber_fn_cb_t cb;
 	void* cb_data;
 
+    unsigned int preferred_transport;// udp or tcp
+
 	unsigned int skip;
 
 	int queue_size;// maximum size of the queue

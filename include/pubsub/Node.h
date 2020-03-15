@@ -21,14 +21,14 @@ typedef int ps_socket_t;
 // defines a transport implementation
 //so when you request a subscription, you would request a transport type 
 //then the pub can either do it, or fall back to default UDP transport
-struct ps_tcp_transport;
-typedef void(*ps_transport_fn_pub_t)(struct ps_tcp_transport* transport, struct ps_pub_t* publisher, void* message);
-typedef void(*ps_transport_fn_spin_t)(struct ps_tcp_transport* transport);
-typedef void(*ps_transport_fn_add_publisher_t)(struct ps_tcp_transport* transport, struct ps_pub_t* publisher);
-typedef void(*ps_transport_fn_remove_publisher_t)(struct ps_tcp_transport* transport, struct ps_pub_t* publisher);
-typedef void(*ps_transport_fn_subscribe_t)(struct ps_tcp_transport* transport, struct ps_sub_t* subscriber);
-typedef void(*ps_transport_fn_unsubscribe_t)(struct ps_tcp_transport* transport, struct ps_sub_t* subscriber);
-typedef unsigned int(*ps_transport_fn_num_subscribers_t)(struct ps_tcp_transport* transport, struct ps_pub_t* publisher);
+struct ps_transport_t;
+typedef void(*ps_transport_fn_pub_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher, void* message);
+typedef void(*ps_transport_fn_spin_t)(struct ps_transport_t* transport);
+typedef void(*ps_transport_fn_add_publisher_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher);
+typedef void(*ps_transport_fn_remove_publisher_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher);
+typedef void(*ps_transport_fn_subscribe_t)(struct ps_transport_t* transport, struct ps_sub_t* subscriber);
+typedef void(*ps_transport_fn_unsubscribe_t)(struct ps_transport_t* transport, struct ps_sub_t* subscriber);
+typedef unsigned int(*ps_transport_fn_num_subscribers_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher);
 struct ps_transport_t
 {
 	unsigned short uuid;// unique id for this transport type, listed in advertisements for it
@@ -169,6 +169,7 @@ struct ps_subscriber_options
 	unsigned int skip;// skips to every nth message for throttling
 	ps_subscriber_fn_cb_t cb;
 	void* cb_data;
+    unsigned int preferred_transport;// falls back to udp otherwise
 };
 
 void ps_subscriber_options_init(struct ps_subscriber_options* options);

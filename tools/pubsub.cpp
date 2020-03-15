@@ -68,6 +68,7 @@ struct NodeInfo
 {
 	int port;
 	int address;
+    int transports;
 };
 
 std::map<std::string, NodeInfo> _nodes;
@@ -97,6 +98,7 @@ int main(int num_args_real, char** args)
 		NodeInfo info;
 		info.address = data->addr;
 		info.port = data->port;
+        info.transports = data->transports;
 		_nodes[node] = info;
 
 		auto t = _topics.find(topic);
@@ -420,7 +422,15 @@ int main(int num_args_real, char** args)
 			std::cout << "Type: " << info->second.type << "\n";
 			std::cout << "Published by:\n";
 			for (auto pub : info->second.publishers)
-				std::cout << " " << pub << "\n";
+            {
+                int transports = _nodes[pub].transports;
+                std::string tps = "UDP";
+                if (transports & PS_TRANSPORT_TCP)
+                {
+                    tps += ", TCP";
+                }
+				std::cout << " " << pub << " (" << tps <<")\n";
+            }
 
 			std::cout << "\nSubscribed by:\n";
 			for (auto sub : info->second.subscribers)
@@ -614,6 +624,7 @@ int main(int num_args_real, char** args)
 
 				std::cout << "Node: " << node_name << "\n";
 
+
 				// print port info if we got it
 				if (_nodes.find(node_name) != _nodes.end())
 				{
@@ -623,6 +634,14 @@ int main(int num_args_real, char** args)
 						<< ((info.address & 0xFF0000) >> 16) << "."
 						<< ((info.address & 0xFF00) >> 8) << "."
 						<< ((info.address & 0xFF)) << ":" << info.port << "\n";
+
+                    int transports = info.transports;
+                    std::string tps = "UDP";
+                    if (transports & PS_TRANSPORT_TCP)
+                    {
+                        tps += ", TCP";
+                    }
+                    std::cout << " Transports: " << tps << "\n";
 				}
 
 				if (subs.size() == 0 && pubs.size() == 0)

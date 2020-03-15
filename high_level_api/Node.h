@@ -204,7 +204,12 @@ public:
 
 	std::string getQualifiedName()
 	{
-		return "/" + namespace_ + "/" + real_name_;
+        if (namespace_.length())
+		    return "/" + namespace_ + "/" + real_name_;
+        else
+        {
+            return "/" + real_name_;
+        }
 	}
 
 	const std::string& getName()
