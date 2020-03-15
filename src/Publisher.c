@@ -153,20 +153,34 @@ void ps_pub_destroy(struct ps_pub_t* pub)
 	//remove it from my list of subs
 	pub->node->num_pubs--;
 	struct ps_pub_t** old_pubs = pub->node->pubs;
-	pub->node->pubs = (struct ps_pub_t**)malloc(sizeof(struct ps_pub_t*)*pub->node->num_pubs);
-	int ind = 0;
-	for (unsigned int i = 0; i < pub->node->num_pubs+1; i++)
-	{
-		if (old_pubs[i] == pub)
-		{
-			//skip me
-		}
-		else
-		{
-			pub->node->pubs[ind++] = old_pubs[i];
-		}
-	}
+    if (pub->node->num_pubs)
+    {
+	  pub->node->pubs = (struct ps_pub_t**)malloc(sizeof(struct ps_pub_t*)*pub->node->num_pubs);
+	  int ind = 0;
+	  for (unsigned int i = 0; i < pub->node->num_pubs+1; i++)
+	  {
+		  if (old_pubs[i] == pub)
+		  {
+			 //skip me
+		  }
+		  else
+		  {
+			  pub->node->pubs[ind++] = old_pubs[i];
+		  }
+	  }
+    }
+    else
+    {
+      pub->node->pubs = 0;
+    }
 	free(old_pubs);
+
+    // free my latched message
+    if (pub->last_message.data)
+	{
+		//free the old and add the new
+		free(pub->last_message.data);// todo use allocator
+	}
 
 	pub->clients = 0;
 	pub->num_clients = 0;

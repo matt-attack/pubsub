@@ -10,7 +10,7 @@
 
 int main()
 {
-	pubsub::Node node("simple_publisher", true);
+	pubsub::Node node("simple_publisher");
 
 	pubsub::Publisher<std_msgs::String> string_pub(node, "/data");
 

@@ -187,10 +187,16 @@ int ps_okay()
 }
 
 #else
+#include <signal.h>
+volatile static int ps_shutdown = 0;
+void CtrlHandler(int sig)
+{
+    ps_shutdown = 1;
+}
 
 int ps_okay()
 {
-	return 1;
+	return ps_shutdown ? 0 : 1;
 }
 
 #endif
@@ -240,6 +246,8 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 
 #ifdef _WIN32
 	SetConsoleCtrlHandler(CtrlHandler, TRUE);
+#else
+    signal(SIGINT, CtrlHandler);
 #endif
 
 	node->name = name;

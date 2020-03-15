@@ -35,6 +35,7 @@ static std::multimap<std::string, PublisherBase*> _publishers;
 // ns should not have a leading slash, topic should if it is absolute
 std::string handle_remap(const std::string& topic, const std::string& ns)
 {
+    //printf("Handling remap of %s in ns %s\n", topic.c_str(), ns.c_str());
 	// we need at least one character
 	if (topic.length() == 0)
 	{
@@ -80,7 +81,10 @@ std::string handle_remap(const std::string& topic, const std::string& ns)
 	}
 
 	// okay, we had no remappings, use our namespace
-	return "/" + ns + "/" + topic;
+    if (ns.length())
+	    return "/" + ns + "/" + topic;
+    else
+        return "/" + topic;
 }
 
 // not thread safe
@@ -109,6 +113,7 @@ void initialize(const char** args, const int argc)
 // valid names must be all lowercase and only
 std::string validate_name(const std::string& name, bool remove_leading_slashes = false)
 {
+    //printf("Validating %s\n", name.c_str());
 	for (size_t i = 0; i < name.length(); i++)
 	{
 		if (name[i] >= 'A' && name[i] <= 'Z')
@@ -122,9 +127,29 @@ std::string validate_name(const std::string& name, bool remove_leading_slashes =
 
 	if (remove_leading_slashes)
 	{
-		if (name[0] == '/')
-			return name.substr(1);
+      int i = 0;
+      while (name[i] == '/') { i++;}
+	
+      return name.substr(i);
 	}
+    else
+    {
+      // remove any duplicate slashes we may have
+      std::string out;
+      if (name.length())
+      {
+        out += name[0];
+      }
+      for (size_t i = 1; i < name.length(); i++)
+      {
+        if (name[i] == '/' && out[i-1] == '/')
+        {
+          continue;
+        }
+        out += name[i];
+      }
+      return out;
+    }
 	return name;
 }
 
@@ -159,7 +184,7 @@ public:
 	Node(const std::string& name, bool use_broadcast = false) : original_name_(name), event_set_(0)
 	{
 		// look up the namespace for this node (todo)
-		std::string ns = "/ns_test";
+		std::string ns = "/";
 		
 		// now look up the name (todo)
 		std::string arg_name = original_name_;

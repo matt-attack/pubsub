@@ -108,8 +108,14 @@ void ps_event_set_wait(struct ps_event_set_t* set, unsigned int timeout_ms)
     wprintf(L"WSAResetEvent failed with error = %d\n", WSAGetLastError());
   }
 #else
+  //printf("waiting for %i events\n", set->num_events);
   struct epoll_event events[10];
-  epoll_wait(set->fd, events, 10, timeout_ms);
+  int num_ready = epoll_wait(set->fd, events, 10, timeout_ms);
+  //printf("%i ready to read\n", num_ready);
+  if (num_ready < 0)
+  {
+    perror("poll error");
+  }
 #endif
 }
 

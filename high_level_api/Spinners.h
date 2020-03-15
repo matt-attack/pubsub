@@ -22,7 +22,7 @@ public:
 	// todo make it work with more than one thread
 	BlockingSpinner(int num_threads = 1) : running_(false)
 	{
-
+      ps_event_set_create(&events_);
 	}
 
 	void start()
@@ -100,7 +100,8 @@ public:
 		}
 
 		running_ = false;
-		thread_.join();// wait for it to stop
+        if (thread_.joinable())
+		    thread_.join();// wait for it to stop
 	}
 };
 
@@ -122,6 +123,7 @@ public:
 	// todo make it work with more than one thread
 	BlockingSpinnerWithTimers(int num_threads = 1) : running_(false)
 	{
+      ps_event_set_create(&events_);
 	}
 
 	~BlockingSpinnerWithTimers()
@@ -152,9 +154,11 @@ public:
 		{
 			while (running_ && ps_okay())
 			{
+                //printf("Entering thread\n");
 				list_mutex_.lock();
 				if (ps_event_set_count(&events_) == 0)
 				{
+                    printf("Waiting for events\n");
 					ps_sleep(10);
 				}
 				else
@@ -179,6 +183,7 @@ public:
 
 						// this line is necessary anyways, but happens to work around the above bug
 						timeout = std::min<int>(timeout, 1000);// make sure we dont block too long
+                        //printf("setting timeout to %i\n", timeout);
 					}
 					list_mutex_.unlock();
 					ps_event_set_wait(&events_, timeout);
@@ -193,6 +198,7 @@ public:
 					{
 						// so either trigger at least 2 ms from now or at the next desired time
 						// this makes sure we dont develop a backlog
+                        //printf("Calling timer\n");
 						timer.next_trigger = std::max(now + Duration(0, 2000), timer.next_trigger + timer.period);
 						timer.fn();
 					}
@@ -256,7 +262,8 @@ public:
 		}
 
 		running_ = false;
-		thread_.join();// wait for it to stop
+        if (thread_.joinable())
+		    thread_.join();// wait for it to stop
 	}
 };
 
