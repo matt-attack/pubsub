@@ -261,6 +261,7 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 	node->def_cb = 0;
 
 	node->supported_transports = PS_TRANSPORT_UDP;
+    node->num_transports = 0;
 
 	node->_last_advertise = 0;
 	node->_last_check = 0;
@@ -653,7 +654,6 @@ int ps_node_wait(struct ps_node_t* node, unsigned int timeout_ms)
 	HANDLE events[2];
 	events[0] = WSACreateEvent();
 	events[1] = WSACreateEvent();
-	//events[2] = WSACreateEvent();
 	WSAEventSelect(node->socket, events[0], FD_READ);
 	WSAEventSelect(node->mc_socket, events[1], FD_READ);
 	
@@ -664,7 +664,6 @@ int ps_node_wait(struct ps_node_t* node, unsigned int timeout_ms)
 
 	WSACloseEvent(events[0]);
 	WSACloseEvent(events[1]);
-	//WSACloseEvent(events[2]);
 #else
     // todo
 #endif
@@ -690,6 +689,16 @@ int ps_node_create_events(struct ps_node_t* node, struct ps_event_set_t* events)
 }
 #endif
 
+void ps_node_add_transport(struct ps_node_t* node, struct ps_transport_t* transport)
+{
+  node->num_transports++;
+  // todo dont hack here
+  node->transports = (struct ps_transport_t*)malloc(sizeof(struct ps_transport_t)*node->num_transports);
+  node->transports[0] = *transport;
+
+  node->supported_transports |= transport->uuid;
+}
+
 //returns nonzero if we got a message
 int ps_node_spin(struct ps_node_t* node)
 {
@@ -710,7 +719,7 @@ int ps_node_spin(struct ps_node_t* node)
 #else
 	unsigned long now = millis();
 #endif
-	if (node->_last_advertise + 25 * 1000 < now)
+	if (node->_last_advertise + 10 * 1000 < now)
 	{
 		node->_last_advertise = now;
 		//printf("Advertising\n");
@@ -728,6 +737,12 @@ int ps_node_spin(struct ps_node_t* node)
 		}
 	}
 
+    // check if any of our sockets are available
+    for (int i = 0; i < node->num_transports; i++)
+    {
+      node->transports[i].spin(&node->transports[i], node);
+    }
+
 	// this block holds the update for one protocol
 	// other protocols can add to this
 	int packet_count = 0;
@@ -740,6 +755,8 @@ int ps_node_spin(struct ps_node_t* node)
 
 		if (received_bytes <= 0)
 			break;
+
+        //printf("got transport packet\n");
 
 		struct ps_msg_info_t message_info;
 		message_info.address = ntohl(from.sin_addr.s_addr);
@@ -969,8 +986,6 @@ int ps_node_spin(struct ps_node_t* node)
 
 			//send out the data format to the client
 			ps_pub_publish_accept(pub, &client, pub->message_definition);
-
-			//todo if it is a latched topic, need to publish our last value
 		}
 #endif
 	}
@@ -987,6 +1002,8 @@ int ps_node_spin(struct ps_node_t* node)
 		if (received_bytes <= 0)
 			break;
 
+        //printf("Got discovery msg \n");
+
 		unsigned int address = ntohl(from.sin_addr.s_addr);
 		unsigned int port = ntohs(from.sin_port);
 
@@ -996,6 +1013,7 @@ int ps_node_spin(struct ps_node_t* node)
 		//todo add enums for these
 		if (data[0] == PS_DISCOVERY_PROTOCOL_SUBSCRIBE_QUERY)
 		{
+            //printf("Got subscribe msg \n");
 			//subscribe query, from a node subscribing to a topic
 			int* addr = (int*)&data[1];
 			unsigned short* port = (unsigned short*)&data[5];
@@ -1059,6 +1077,7 @@ int ps_node_spin(struct ps_node_t* node)
 		}
 		else if (data[0] == PS_DISCOVERY_PROTOCOL_ADVERTISE)
 		{
+            //printf("Got advertise msg \n");
 			struct ps_advertise_req_t* p = (struct ps_advertise_req_t*)data;
 
 			char* topic = (char*)&data[sizeof(struct ps_advertise_req_t)];
@@ -1076,6 +1095,7 @@ int ps_node_spin(struct ps_node_t* node)
 			struct ps_sub_t* sub = 0;
 			for (unsigned int i = 0; i < node->num_subs; i++)
 			{
+                //printf("%s\n", node->subs[i]->topic);
 				if (strcmp(node->subs[i]->topic, topic) == 0)
 				{
 					sub = node->subs[i];
@@ -1084,20 +1104,20 @@ int ps_node_spin(struct ps_node_t* node)
 			}
 			if (sub == 0)
 			{
-				//printf("Got advertise notice, but it was for a topic we don't have\n");
+				//printf("Got advertise notice, but it was for a topic we don't have %s\n", topic);
 				continue;
 			}
 
 			if (sub->ignore_local && sub->node->port == p->port && sub->node->addr == p->addr)
 			{
-				//printf("Got advertise notice, but it was for a local pub which we are set to ignore\n");
+				printf("Got advertise notice, but it was for a local pub which we are set to ignore\n");
 				continue;
 			}
 
 			// check group id
 			if (sub->ignore_local && p->group_id != 0 && p->group_id == node->group_id)
 			{
-				//printf("We are a member of this group, ignoring advertise");
+				printf("We are a member of this group, ignoring advertise");
 				continue;
 			}
 
@@ -1121,11 +1141,19 @@ int ps_node_spin(struct ps_node_t* node)
 			// check if we are already getting data from this person, if so lets not send another request to their advertise
 
 			//printf("Got advertise notice for a topic we need\n");
-
+            // pick which protocol to subscribe with
 			struct ps_endpoint_t ep;
 			ep.address = p->addr;
 			ep.port = p->port;
-			ps_send_subscribe(sub, &ep);
+            if (sub->preferred_transport == PS_TRANSPORT_UDP || p->transports == PS_TRANSPORT_UDP)
+            {
+			    ps_send_subscribe(sub, &ep);
+            }
+            else
+            {
+                printf("Want to subscribe to tcp but it has yet to be implemented\n");
+                node->transports[0].subscribe(&node->transports[0], sub, &ep);
+            }
 		}
 		else if (data[0] == PS_DISCOVERY_PROTOCOL_UNSUBSCRIBE)
 		{

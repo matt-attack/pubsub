@@ -21,17 +21,22 @@ typedef int ps_socket_t;
 // defines a transport implementation
 //so when you request a subscription, you would request a transport type 
 //then the pub can either do it, or fall back to default UDP transport
+struct ps_event_set_t;
 struct ps_transport_t;
+struct ps_node_t;
+struct ps_endpoint_t;
 typedef void(*ps_transport_fn_pub_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher, void* message);
-typedef void(*ps_transport_fn_spin_t)(struct ps_transport_t* transport);
+typedef void(*ps_transport_fn_spin_t)(struct ps_transport_t* transport, struct ps_node_t* node);
 typedef void(*ps_transport_fn_add_publisher_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher);
 typedef void(*ps_transport_fn_remove_publisher_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher);
-typedef void(*ps_transport_fn_subscribe_t)(struct ps_transport_t* transport, struct ps_sub_t* subscriber);
+typedef void(*ps_transport_fn_subscribe_t)(struct ps_transport_t* transport, struct ps_sub_t* subscriber, struct ps_endpoint_t* ep);
 typedef void(*ps_transport_fn_unsubscribe_t)(struct ps_transport_t* transport, struct ps_sub_t* subscriber);
 typedef unsigned int(*ps_transport_fn_num_subscribers_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher);
+typedef unsigned int(*ps_transport_fn_add_wait_set_t)(struct ps_transport_t* transport, struct ps_event_set_t* events);
 struct ps_transport_t
 {
 	unsigned short uuid;// unique id for this transport type, listed in advertisements for it
+    void* impl;
 	ps_transport_fn_pub_t pub;
 	ps_transport_fn_spin_t spin;
 	ps_transport_fn_num_subscribers_t subscriber_count;
@@ -39,6 +44,7 @@ struct ps_transport_t
 	ps_transport_fn_unsubscribe_t unsubscribe;
 	ps_transport_fn_add_publisher_t add_pub;
 	ps_transport_fn_remove_publisher_t remove_pub;
+    ps_transport_fn_add_wait_set_t add_wait_set;
 };
 
 typedef void(*ps_adv_cb_t)(const char* topic, const char* type, const char* node, const struct ps_advertise_req_t* data);
@@ -82,6 +88,8 @@ struct ps_node_t
 	struct ps_transport_t* transports;
 #endif
 };
+
+void ps_node_add_transport(struct ps_node_t* node, struct ps_transport_t* transport);
 
 // describes where a message came from
 struct ps_msg_info_t
