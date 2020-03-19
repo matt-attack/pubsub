@@ -18,6 +18,13 @@ void ps_pub_publish_client(struct ps_pub_t* pub, struct ps_client_t* client, str
 			return;
 		}
 	}
+
+    if (client->transport)
+    {
+      client->transport->pub(client->transport, pub, msg->data, msg->len);
+      return;
+    }
+
 	// send da udp packet!
 	struct sockaddr_in address;
 	address.sin_family = AF_INET;

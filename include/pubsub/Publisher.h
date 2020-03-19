@@ -27,6 +27,7 @@ struct ps_client_t
 	unsigned long long last_keepalive;//timestamp of the last keepalive message, used to know when to deactiveate this connection
 	unsigned int stream_id;
 	unsigned int modulo;
+    struct ps_transport_t* transport;
 };
 
 struct ps_pub_t

@@ -6,6 +6,7 @@ extern "C"
 #endif
 
 #include <stdbool.h>
+#include <stdint.h>
 
 struct ps_sub_t;
 struct ps_pub_t;
@@ -25,7 +26,7 @@ struct ps_event_set_t;
 struct ps_transport_t;
 struct ps_node_t;
 struct ps_endpoint_t;
-typedef void(*ps_transport_fn_pub_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher, void* message);
+typedef void(*ps_transport_fn_pub_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher, const void* message, uint32_t length);
 typedef void(*ps_transport_fn_spin_t)(struct ps_transport_t* transport, struct ps_node_t* node);
 typedef void(*ps_transport_fn_add_publisher_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher);
 typedef void(*ps_transport_fn_remove_publisher_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher);

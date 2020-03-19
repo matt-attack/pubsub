@@ -913,6 +913,7 @@ int ps_node_spin(struct ps_node_t* node)
 			client.sequence_number = 0;
 			client.stream_id = p->sub_id;
 			client.modulo = p->skip > 0 ? p->skip + 1 : 0;
+            client.transport = 0;
 
 			//printf("Got subscribe request, adding client if we haven't already\n");
 			ps_pub_add_client(pub, &client);

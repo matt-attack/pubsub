@@ -6,12 +6,19 @@
 #include <pubsub/Subscriber.h>
 #include <pubsub/System.h>
 
+#include <pubsub/TCPTransport.h>
+
 #include "../msg/std_msgs__String.msg.h"
+
 
 int main()
 {
 	struct ps_node_t node;
 	ps_node_init(&node, "simple_publisher", "", false);
+
+    struct ps_transport_t tcp_transport;
+    ps_tcp_transport_init(&tcp_transport, &node);
+    ps_node_add_transport(&node, &tcp_transport);
 
 	struct ps_pub_t string_pub;
 	ps_node_create_publisher(&node, "/data", &std_msgs__String_def, &string_pub, true);
