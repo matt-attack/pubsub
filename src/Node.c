@@ -151,8 +151,8 @@ void networking_init()
 		int retval;
 		if ((retval = WSAStartup(MAKEWORD(2, 2), &wsaData)) != 0)
 		{
-			char sz[56];
-			sprintf_s(sz, "WSAStartup failed with error %d\n", retval);
+			char sz[156];
+			sprintf_s(sz, 156, "WSAStartup failed with error %d\n", retval);
 			OutputDebugStringA(sz);
 			WSACleanup();
 		}
@@ -657,7 +657,7 @@ int ps_node_wait(struct ps_node_t* node, unsigned int timeout_ms)
 	WSAEventSelect(node->socket, events[0], FD_READ);
 	WSAEventSelect(node->mc_socket, events[1], FD_READ);
 	
-	WSAWaitForMultipleEvents(2, &events, false, timeout_ms, false);
+	WSAWaitForMultipleEvents(2, events, false, timeout_ms, false);
 
 	//int res = ps_node_spin(node);
 	// todo cache these
@@ -738,7 +738,7 @@ int ps_node_spin(struct ps_node_t* node)
 	}
 
     // check if any of our sockets are available
-    for (int i = 0; i < node->num_transports; i++)
+    for (unsigned int i = 0; i < node->num_transports; i++)
     {
       node->transports[i].spin(&node->transports[i], node);
     }

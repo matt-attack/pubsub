@@ -8,6 +8,8 @@
 #include <unistd.h>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
+#else
+#include <WinSock2.h>
 #endif
 
 struct ps_event_set_t
@@ -45,7 +47,7 @@ void ps_event_set_create(struct ps_event_set_t* set)
 void ps_event_set_destroy(struct ps_event_set_t* set)
 {
 #ifdef WIN32
-  for (int i = 0; i < set->num_handles; i++)
+  for (unsigned int i = 0; i < set->num_handles; i++)
   {
     WSACloseEvent(set->handles[i]);
   }

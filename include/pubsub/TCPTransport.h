@@ -202,7 +202,7 @@ void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_
     // set non-blocking
 #ifdef _WIN32
 	DWORD nonBlocking = 1;
-	if (ioctlsocket(ock, FIONBIO, &nonBlocking) != 0)
+	if (ioctlsocket(sock, FIONBIO, &nonBlocking) != 0)
 	{
 		printf("Failed to Set Socket as Non-Blocking!\n");
 		closesocket(sock);
