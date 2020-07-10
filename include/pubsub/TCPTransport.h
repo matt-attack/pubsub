@@ -35,7 +35,17 @@ struct ps_transport_t
     void* impl;
 };*/
 
+struct ps_tcp_transport_connection
+{
+	int socket;
+	struct ps_endpoint_t endpoint;
 
+	bool waiting_for_header;
+	int packet_size;
+
+    int current_size;
+	char* packet_data;
+};
 
 struct ps_tcp_transport_impl
 {
@@ -43,8 +53,7 @@ struct ps_tcp_transport_impl
   int* client_sockets;
   int num_client_sockets;
 
-  int* connection_sockets;// for subscriptions
-  struct ps_endpoint_t* connection_eps;
+  struct ps_tcp_transport_connection* connections;
   int num_connections;
 };
 
@@ -84,7 +93,10 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
 	fcntl(socket, F_SETFL, flags | O_NONBLOCK);
 #endif
 
-    free(old_sockets);
+	if (impl->num_client_sockets - 1)
+	{
+	  free(old_sockets);
+	}
   }
   //printf("polled\n");
 
@@ -109,19 +121,77 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
       client.transport = transport;
 
       //printf("Got subscribe request, adding client if we haven't already\n");
+       todo store something about this client so we can remove it on unsub/exit
       ps_pub_add_client(node->pubs[0], &client);
     }
   }
 
   for (int i = 0; i < impl->num_connections; i++)
   {
-    // check for new messages
     char buf[1500];
-    int len = recv(impl->connection_sockets[i], buf, 1500, 0);
-    if (len > 0)
+    // if we havent gotten a header yet, just check for that
+    if (impl->connections[i].waiting_for_header)
     {
-      printf("Read %i bytes from connection '%s'\n", len, &buf[5]);
+      const int header_size = 5;
+      int len = recv(impl->connections[i].socket, buf, header_size, MSG_PEEK);
+      if (len < header_size)
+      {
+        continue;// no header yet
+      }
+
+      // we actually got the header! start looking for the message
+      len = recv(impl->connections[i].socket, buf, header_size, 0);
+      impl->connections[i].waiting_for_header = false;
+      impl->connections[i].packet_size = *(int*)&buf[1];
+      printf("Incoming message with %i bytes\n", impl->connections[i].packet_size);
+      impl->connections[i].packet_data = malloc(impl->connections[i].packet_size);
+
+      impl->connections[i].current_size = 0;
+	}
+    else // read in the message
+    {
+      int remaining_size = impl->connections[i].packet_size - impl->connections[i].current_size;
+      // check for new messages and read until we hit packet size
+      int len = recv(impl->connections[i].socket, &impl->connections[i].packet_data[impl->connections[i].current_size], remaining_size, 0);
+      if (len > 0)
+      {
+        //printf("Read %i bytes of message\n", len);
+        impl->connections[i].current_size += len;
+
+        if (impl->connections[i].current_size == impl->connections[i].packet_size)
+        {
+          printf("message finished %s\n", impl->connections[i].packet_data);
+          // todo add it to the queue
+          free(impl->connections[i].packet_data);
+          impl->connections[i].waiting_for_header = true;
+        }
+      }
     }
+  }
+}
+
+void remove_client_socket(struct ps_tcp_transport_impl* transport, int i)
+{
+  int* old_sockets = transport->client_sockets;
+  transport->num_client_sockets -= 1;
+
+  if (transport->num_client_sockets)
+  {
+    transport->client_sockets = (int*)malloc(sizeof(int)*transport->num_client_sockets);
+    for (int j = 0; j < i; j++)
+    {
+      transport->client_sockets[j] = old_sockets[j];
+    }
+
+    for (int j = i+1; j < transport->num_client_sockets; j++)
+    {
+      transport->client_sockets[j-1] = old_sockets[j];
+    }
+    free(old_sockets);
+  }
+  else
+  {
+    free(transport->client_sockets);
   }
 }
 
@@ -131,14 +201,24 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
   // just send it to all of the clients for the moment
   for (int i = 0; i < impl->num_client_sockets; i++)
   {
-    printf("publishing real\n");
+    printf("publishing tcp\n");
     // a packet is an int length followed by data
     int8_t packet_type = 0x02;//message
-    write(impl->client_sockets[i], &packet_type, 1);
+    if (send(impl->client_sockets[i], &packet_type, 1, 0) < 0)
+    {
+      perror("send error, removing socket");
+      // remove this socket
+
+      remove_client_socket(impl, i);
+      todo actually unsub
+      i = i - 1;
+
+      continue;
+    }
 
     // make the request
-    write(impl->client_sockets[i], &length, 4);
-    write(impl->client_sockets[i], ps_get_msg_start(message), length);
+    send(impl->client_sockets[i], &length, 4, 0);
+    send(impl->client_sockets[i], ps_get_msg_start(message), length, 0);
   }
 }
 
@@ -147,16 +227,16 @@ void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_
     struct ps_tcp_transport_impl* impl = (struct ps_tcp_transport_impl*)transport->impl;
 
     // check if we already have a sub with this endpoint
-    for (int i = 0; i < impl->num_connections-1; i++)
+    for (int i = 0; i < impl->num_connections; i++)
     {
-      if (impl->connection_eps[i].port == ep->port && impl->connection_eps[i].address == ep->address)
+      if (impl->connections[i].endpoint.port == ep->port && impl->connections[i].endpoint.address == ep->address)
       {
         printf("found duplicate\n");
         return;
       }
     }
 
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
 
     struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
@@ -167,10 +247,12 @@ void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_
       perror("error connecting tcp socket");
     }
 
+	printf("%i %i %i %i\n", (ep->address & 0xFF000000) >> 24, (ep->address & 0xFF0000) >> 16, (ep->address & 0xFF00) >> 8, (ep->address & 0xFF));
+
     // make the subscribe request in a "packet"
     // a packet is an int length followed by data
     int8_t packet_type = 0x01;//subscribe
-    write(sock, &packet_type, 1);
+    send(sock, &packet_type, 1, 0);
 
     // make the request
     int32_t length = 0;
@@ -178,26 +260,20 @@ void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_
     length += strlen(subscriber->topic)+1;
     printf("topic %s\n", subscriber->topic);
     strcpy(buffer, subscriber->topic);
-    write(sock, &length, 4);
-    write(sock, buffer, length);
+    send(sock, &length, 4, 0);
+    send(sock, buffer, length, 0);
 
     // add the socket to the list of connections
     impl->num_connections++;
-    int* old_sockets = impl->connection_sockets;
-    impl->connection_sockets = (int*)malloc(sizeof(int)*impl->num_connections);
+    struct ps_tcp_transport_connection* old_connections = impl->connections;
+    impl->connections = (struct tcp_transport_connection*)malloc(sizeof(struct ps_tcp_transport_connection)*impl->num_connections);
     for (int i = 0; i < impl->num_connections-1; i++)
     {
-      impl->connection_sockets[i] = old_sockets[i];
+	  impl->connections[i] = old_connections[i];
     }
-    impl->connection_sockets[impl->num_connections-1] = sock;
-
-    struct ps_endpoint_t* old_eps = impl->connection_eps;
-    impl->connection_eps = (struct ps_endpoint_t*)malloc(sizeof(struct ps_endpoint_t)*impl->num_connections);
-    for (int i = 0; i < impl->num_connections-1; i++)
-    {
-      impl->connection_eps[i] = old_eps[i];
-    }
-    impl->connection_eps[impl->num_connections-1] = *ep;
+    impl->connections[impl->num_connections-1].socket = sock;
+    impl->connections[impl->num_connections-1].endpoint = *ep;
+	impl->connections[impl->num_connections-1].waiting_for_header = true;
 
     // set non-blocking
 #ifdef _WIN32
@@ -217,7 +293,10 @@ void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_
 	fcntl(sock, F_SETFL, flags | O_NONBLOCK);
 #endif
 
-    free(old_sockets);
+	if (impl->num_connections - 1)
+	{
+       free(old_connections);
+	}
 }
 
 void ps_tcp_transport_init(struct ps_transport_t* transport, struct ps_node_t* node)

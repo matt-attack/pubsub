@@ -231,7 +231,6 @@ char* GetPrimaryIp()
 
     printf("IP: %s\n", ip);
 
-
 #ifdef _WIN32
 	closesocket(sock);
 #else

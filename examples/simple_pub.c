@@ -23,6 +23,8 @@ int main()
 	struct ps_pub_t string_pub;
 	ps_node_create_publisher(&node, "/data", &std_msgs__String_def, &string_pub, true);
 
+	struct ps_pub_t other_pub;
+
 	// user is responsible for lifetime of the message they publish
 	struct std_msgs__String rmsg;
 	rmsg.value = "Hello";
