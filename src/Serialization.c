@@ -248,7 +248,7 @@ void ps_deserialize_print(const void * data, const struct ps_message_definition_
 	ps_deserialize_internal((char*)data, definition->fields, definition->num_fields, 0);
 }
 
-void* ps_get_msg_start(void* data)
+void* ps_get_msg_start(const void* data)
 {
 	return (void*)((char*)data + sizeof(struct ps_msg_header));
 }

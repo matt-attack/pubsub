@@ -459,6 +459,11 @@ void ps_node_destroy(struct ps_node_t* node)
 		ps_sub_destroy(node->subs[i]);
 	}
 
+    for (unsigned int i = 0; i < node->supported_transports; i++)
+    {
+      node->transports[i].destroy(&node->transports[i]);
+    }
+
 #ifdef _WIN32
 	closesocket(node->socket);
 	closesocket(node->mc_socket);
@@ -806,23 +811,8 @@ int ps_node_spin(struct ps_node_t* node)
 				memcpy(out_data, data + sizeof(struct ps_msg_header), data_size);
 			}
 
-			// maybe todo, this doesnt do fifo very correctly
-			// only does first newest than two old ones
-			//add it to the fifo packet queue which always shows the n most recent packets
-			//most recent is always first
-			//so lets push to the front (highest open index or highest if full)
-			if (sub->queue_size == 0)
-			{
-				sub->cb(out_data, data_size, sub->cb_data, &message_info);
-			}
-			else if (sub->queue_size == sub->queue_len)
-			{
-				sub->queue[sub->queue_size - 1] = out_data;
-			}
-			else
-			{
-				sub->queue[sub->queue_len++] = out_data;
-			}
+            ps_sub_enqueue(sub, out_data, data_size, &message_info);
+
 			//printf("Got message, queue len %i\n", sub->queue_len);
 
 			packet_count++;
@@ -865,7 +855,7 @@ int ps_node_spin(struct ps_node_t* node)
 				printf("Could not find sub matching stream id %i\n", p->sid);
 				continue;
 			}
-
+            todo need to implement for tcp
 			if (sub->want_message_definition)
 			{
 				ps_deserialize_message_definition(&data[sizeof(struct ps_subscribe_accept_t)], &sub->received_message_def);

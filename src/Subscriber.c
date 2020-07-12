@@ -9,6 +9,27 @@
 
 #include <pubsub/Net.h>
 
+void ps_sub_enqueue(struct ps_sub_t* sub, char* out_data, int data_size, const struct ps_msg_info_t* message_info)
+{
+  // maybe todo, this doesnt do fifo very correctly
+  // only does first newest than two old ones
+  //add it to the fifo packet queue which always shows the n most recent packets
+  //most recent is always first
+  //so lets push to the front (highest open index or highest if full)
+  if (sub->queue_size == 0)
+  {
+    sub->cb(out_data, data_size, sub->cb_data, message_info);
+  }
+  else if (sub->queue_size == sub->queue_len)
+  {
+    sub->queue[sub->queue_size - 1] = out_data;
+  }
+  else
+  {
+    sub->queue[sub->queue_len++] = out_data;
+  }
+}
+
 
 void ps_send_subscribe(struct ps_sub_t* sub, const struct ps_endpoint_t* ep)
 {

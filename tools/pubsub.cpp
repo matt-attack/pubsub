@@ -4,6 +4,7 @@
 #include <pubsub/Subscriber.h>
 #include <pubsub/Serialization.h>
 #include <pubsub/System.h>
+#include <pubsub/TCPTransport.h>
 
 #include <pubsub_cpp/Time.h>
 #include "../high_level_api/Serialize.h"
@@ -91,6 +92,10 @@ int main(int num_args_real, char** args)
 	// Setup the node with a random name
 	static ps_node_t node;
 	ps_node_init(&node, "Query", "", false);
+
+    struct ps_transport_t tcp_transport;
+    ps_tcp_transport_init(&tcp_transport, &node);
+    ps_node_add_transport(&node, &tcp_transport);
 
 	// Setup introspection callbacks
 	node.adv_cb = [](const char* topic, const char* type, const char* node, const ps_advertise_req_t* data)
@@ -193,16 +198,20 @@ int main(int num_args_real, char** args)
 			parser.AddMulti({ "i" }, "Print info about the publisher with each message.");
 			parser.AddMulti({ "n" }, "Number of messages to echo.", "0");
 			parser.AddMulti({ "skip", "s" }, "Skip factor for the subscriber.", "0");
+            parser.AddMulti({ "tcp" }, "Prefer the TCP transport.");
 
 			parser.Parse(args, num_args, 3);
 
 			static bool print_info = parser.GetBool("i");
-			static long long int n = parser.GetDouble("n");
+            double vn = parser.GetDouble("n");
+            if (vn <= 0)
+            {
+              vn = 2147483647;
+            }
+			static unsigned long long int n = vn;
 			int skip = parser.GetDouble("s");
-			if (n <= 0)
-			{
-				n = 2147483647L;
-			}
+            bool tcp = parser.GetBool("tcp");
+
 
 			// create a subscriber
 			static ps_sub_t sub;
@@ -232,6 +241,7 @@ int main(int num_args_real, char** args)
 					options.want_message_def = true;
 					options.allocator = 0;
 					options.ignore_local = false;
+                    options.preferred_transport = tcp ? 1 : 0;
 					options.cb = [](void* message, unsigned int size, void* data, const ps_msg_info_t* info)
 					{
 						if (todo_msgs.size() && sub.received_message_def.fields != 0)
@@ -330,7 +340,7 @@ int main(int num_args_real, char** args)
 			std::vector<void*> todo_msgs;
 
 			std::deque<std::pair<pubsub::Time, unsigned int>> message_times;
-			static int window = parser.GetDouble("w");
+			static size_t window = parser.GetDouble("w");
 			// subscribe to the topic
 			while (ps_okay())
 			{
@@ -358,7 +368,7 @@ int main(int num_args_real, char** args)
 			}
 
 			// now just receive and time as fast as we can
-			unsigned int last_print = GetTimeMs();
+			unsigned long long last_print = GetTimeMs();
 			while (ps_okay())
 			{
 				ps_node_wait(&node, 100);
@@ -380,7 +390,7 @@ int main(int num_args_real, char** args)
 							// in sec
 							double delta = (pubsub::Time::now() - message_times.front().first).toSec();
 							unsigned long long total = 0;
-							for (int i = 0; i < message_times.size(); i++)
+							for (size_t i = 0; i < message_times.size(); i++)
 							{
 								total += message_times[i].second;
 							}
@@ -568,7 +578,7 @@ int main(int num_args_real, char** args)
 				// copy the message
 				ps_msg_t cpy = ps_msg_cpy(&msg);
 				ps_pub_publish(&pub, &cpy);
-				ps_sleep(1000 / rate);
+				ps_sleep(1000.0 / rate);
 			}
 		}
 	}

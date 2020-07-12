@@ -71,7 +71,7 @@ extern "C"
 
 	void ps_msg_alloc(unsigned int size, struct ps_msg_t* out_msg);
 
-	void* ps_get_msg_start(void* data);
+	void* ps_get_msg_start(const void* data);
 
 	struct ps_msg_t ps_msg_cpy(const struct ps_msg_t* msg);
 

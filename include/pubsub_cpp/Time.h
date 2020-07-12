@@ -134,16 +134,16 @@ public:
 
 	double toSec()
 	{
-		return usec / 1000000.0;
+	  return usec / 1000000.0;
 	}
 
 	std::string toString()
 	{
-		time_t t = toSec();
+      time_t t = usec / 100000;// toSec();
 
-		std::string str = ctime(&t);
-		str.pop_back();
-		return str;
+	  std::string str = ctime(&t);
+      str.pop_back();
+      return str;
 	}
 };
 }

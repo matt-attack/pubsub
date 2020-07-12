@@ -34,6 +34,7 @@ typedef void(*ps_transport_fn_subscribe_t)(struct ps_transport_t* transport, str
 typedef void(*ps_transport_fn_unsubscribe_t)(struct ps_transport_t* transport, struct ps_sub_t* subscriber);
 typedef unsigned int(*ps_transport_fn_num_subscribers_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher);
 typedef unsigned int(*ps_transport_fn_add_wait_set_t)(struct ps_transport_t* transport, struct ps_event_set_t* events);
+typedef void(*ps_transport_fn_destroy_t)(struct ps_transport_t* transport);
 struct ps_transport_t
 {
 	unsigned short uuid;// unique id for this transport type, listed in advertisements for it
@@ -46,6 +47,7 @@ struct ps_transport_t
 	ps_transport_fn_add_publisher_t add_pub;
 	ps_transport_fn_remove_publisher_t remove_pub;
     ps_transport_fn_add_wait_set_t add_wait_set;
+    ps_transport_fn_destroy_t destroy;
 };
 
 typedef void(*ps_adv_cb_t)(const char* topic, const char* type, const char* node, const struct ps_advertise_req_t* data);
