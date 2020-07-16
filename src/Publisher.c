@@ -43,7 +43,7 @@ void ps_pub_publish_client(struct ps_pub_t* pub, struct ps_client_t* client, str
 		0, (struct sockaddr*)&address, sizeof(struct sockaddr_in));
 }
 
-void ps_pub_add_client(struct ps_pub_t* pub, const struct ps_client_t* client)
+bool ps_pub_add_client(struct ps_pub_t* pub, const struct ps_client_t* client)
 {
 	// first make sure we dont add any duplicate clients
 	for (unsigned int i = 0; i < pub->num_clients; i++)
@@ -52,7 +52,7 @@ void ps_pub_add_client(struct ps_pub_t* pub, const struct ps_client_t* client)
 			&& pub->clients[i].endpoint.port == client->endpoint.port)
 		{
 			//printf("We already have this client, ignoring request\n");
-			return;
+			return false;
 		}
 	}
 	pub->num_clients++;
@@ -71,6 +71,7 @@ void ps_pub_add_client(struct ps_pub_t* pub, const struct ps_client_t* client)
 	{
 		ps_pub_publish_client(pub, &pub->clients[pub->num_clients - 1], &pub->last_message);
 	}
+    return true;
 }
 
 void ps_pub_remove_client(struct ps_pub_t* pub, const struct ps_client_t* client)

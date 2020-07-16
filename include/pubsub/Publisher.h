@@ -47,7 +47,7 @@ struct ps_pub_t
 };
 
 // adds a client to a publisher
-void ps_pub_add_client(struct ps_pub_t* pub, const struct ps_client_t* client);
+bool ps_pub_add_client(struct ps_pub_t* pub, const struct ps_client_t* client);
 
 void ps_pub_remove_client(struct ps_pub_t* pub, const struct ps_client_t* client);
 

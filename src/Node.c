@@ -431,6 +431,13 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 	fcntl(node->mc_socket, F_SETFL, flags2 | O_NONBLOCK);
 #endif
 
+    // add sockets to events
+#ifndef PUBSUB_REAL_TIME
+    ps_event_set_create(&node->events);
+    ps_event_set_add_socket(&node->events, node->socket);
+    ps_event_set_add_socket(&node->events, node->mc_socket);
+#endif
+
     if (broadcast)
     {
       return;
@@ -463,6 +470,10 @@ void ps_node_destroy(struct ps_node_t* node)
     {
       node->transports[i].destroy(&node->transports[i]);
     }
+
+#ifndef PUBSUB_REAL_TIME
+    ps_event_set_destroy(&node->events);
+#endif
 
 #ifdef _WIN32
 	closesocket(node->socket);
@@ -653,9 +664,11 @@ static unsigned long GetTickCount64()
 #include <pubsub/Events.h>
 int ps_node_wait(struct ps_node_t* node, unsigned int timeout_ms)
 {
-#ifdef _WIN32
+  ps_event_set_wait(&node->events, timeout_ms);
+  //todo actually build a wait set and add tcp sockets
+
 	// wait on the sockets or the passed event
-	HANDLE events[2];
+	/*HANDLE events[2];
 	events[0] = WSACreateEvent();
 	events[1] = WSACreateEvent();
 	WSAEventSelect(node->socket, events[0], FD_READ);
@@ -667,10 +680,8 @@ int ps_node_wait(struct ps_node_t* node, unsigned int timeout_ms)
 	// todo cache these
 
 	WSACloseEvent(events[0]);
-	WSACloseEvent(events[1]);
-#else
-    // todo
-#endif
+	WSACloseEvent(events[1]);*/
+
 	return 0;
 }
 
@@ -855,7 +866,7 @@ int ps_node_spin(struct ps_node_t* node)
 				printf("Could not find sub matching stream id %i\n", p->sid);
 				continue;
 			}
-            todo need to implement for tcp
+
 			if (sub->want_message_definition)
 			{
 				ps_deserialize_message_definition(&data[sizeof(struct ps_subscribe_accept_t)], &sub->received_message_def);

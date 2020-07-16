@@ -1,6 +1,7 @@
 
 # Add source to this project's executable.
 add_library (pubsub 
+  "Events.c"
   "Node.c"
   "Publisher.c"
   "Subscriber.c"

@@ -53,6 +53,10 @@ struct ps_transport_t
 typedef void(*ps_adv_cb_t)(const char* topic, const char* type, const char* node, const struct ps_advertise_req_t* data);
 typedef void(*ps_sub_cb_t)(const char* topic, const char* type, const char* node, void* data);
 typedef void(*ps_msg_def_cb_t)(const struct ps_message_definition_t* definition);
+
+#ifndef PUBSUB_REAL_TIME
+#include <pubsub/Events.h>
+#endif
 struct ps_node_t
 {
 	const char* name;
@@ -83,6 +87,11 @@ struct ps_node_t
 	//implementation data
 	unsigned long long _last_advertise;
 	unsigned long long _last_check;
+
+
+#ifndef PUBSUB_REAL_TIME
+    struct ps_event_set_t events;
+#endif
 
 	int supported_transports;
 

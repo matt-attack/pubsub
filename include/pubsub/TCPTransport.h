@@ -46,6 +46,7 @@ struct ps_tcp_transport_connection
 	bool waiting_for_header;
 	int packet_size;
 
+    char packet_type;
     int current_size;
 	char* packet_data;
 };
@@ -96,6 +97,8 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
 	fcntl(socket, F_SETFL, flags | O_NONBLOCK);
 #endif
 
+    ps_event_set_add_socket(&node->events, socket);
+
 	if (impl->num_client_sockets - 1)
 	{
 	  free(old_sockets);
@@ -111,20 +114,38 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
     int len = recv(impl->client_sockets[i], buf, 1500, 0);
     if (len > 0)
     {
-      printf("Read %i bytes '%s'\n", len, &buf[5]);
+      printf("Read %i bytes from client '%s'\n", len, &buf[5]);
 
-      // send response and start publishing
-      struct ps_client_t client;
-      client.endpoint.address = impl->client_sockets[i];
-      client.endpoint.port = 255;// p->port;
-      client.last_keepalive = 10000000000000;//GetTickCount64();// use the current time stamp
-      client.sequence_number = 0;
-      client.stream_id = 0;
-      client.modulo = 0;
-      client.transport = transport;
+      const char* topic = &buf[5];
+      // check if this matches any of our publishers
+      for (unsigned int i = 0; i < node->num_pubs; i++)
+      {
+        if (strcmp(topic, node->pubs[i]->topic) == 0)
+        {
+          // send response and start publishing
+          struct ps_client_t client;
+          client.endpoint.address = impl->client_sockets[i];
+          client.endpoint.port = 255;// p->port;
+          client.last_keepalive = 10000000000000;//GetTickCount64();// use the current time stamp
+          client.sequence_number = 0;
+          client.stream_id = 0;
+          client.modulo = 0;
+          client.transport = transport;
 
-      //printf("Got subscribe request, adding client if we haven't already\n");
-      ps_pub_add_client(node->pubs[0], &client);
+          //printf("Got subscribe request, adding client if we haven't already\n");
+          ps_pub_add_client(node->pubs[i], &client);
+
+          // send the client the acknowledgement and message definition
+          int8_t packet_type = 0x03;//message definition
+          send(impl->client_sockets[i], (char*)&packet_type, 1, 0);
+
+          char buf[1500];
+          int length = ps_serialize_message_definition((void*)buf, node->pubs[i]->message_definition);
+          send(impl->client_sockets[i], (char*)&length, 4, 0);
+          send(impl->client_sockets[i], buf, length, 0);
+          break;
+        }
+      }
     }
   }
 
@@ -142,11 +163,14 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
         continue;// no header yet
       }
 
+      char message_type = buf[0];
+
       // we actually got the header! start looking for the message
       len = recv(connection->socket, buf, header_size, 0);
+      connection->packet_type = message_type;
       connection->waiting_for_header = false;
       connection->packet_size = *(int*)&buf[1];
-      printf("Incoming message with %i bytes\n", impl->connections[i].packet_size);
+      //printf("Incoming message with %i bytes\n", impl->connections[i].packet_size);
       connection->packet_data = (char*)malloc(connection->packet_size);
 
       connection->current_size = 0;
@@ -163,7 +187,20 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
 
         if (connection->current_size == connection->packet_size)
         {
-          printf("message finished\n");
+          //printf("message finished\n");
+
+          if (connection->packet_type == 0x3)
+          {
+            //printf("Was message definition");
+            if (connection->subscriber->want_message_definition)
+            {
+              ps_deserialize_message_definition(connection->packet_data, &connection->subscriber->received_message_def);
+            }
+            
+            free(connection->packet_data);
+            connection->waiting_for_header = true;
+            return;
+          }
 
           // decode and add it to the queue
           struct ps_msg_info_t message_info;
@@ -193,10 +230,13 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
   }
 }
 
-void remove_client_socket(struct ps_tcp_transport_impl* transport, int i)
+void remove_client_socket(struct ps_tcp_transport_impl* transport, int i, struct ps_node_t* node)
 {
   int* old_sockets = transport->client_sockets;
   transport->num_client_sockets -= 1;
+
+  // close the socket and dont wait on it anymore
+  ps_event_set_remove_socket(&node->events, transport->client_sockets[i]);
 
   if (transport->num_client_sockets)
   {
@@ -229,14 +269,14 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
     int8_t packet_type = 0x02;//message
     if (send(impl->client_sockets[i], (char*)&packet_type, 1, 0) < 0)
     {
-      perror("send error, removing socket");
+      //perror("send error, removing socket");
       // remove this socket
       struct ps_client_t client;
       client.endpoint.address = impl->client_sockets[i];
       client.endpoint.port = 255;// p->port;
       ps_pub_remove_client(publisher, &client);
 
-      remove_client_socket(impl, i);
+      remove_client_socket(impl, i, publisher->node);
 
       i = i - 1;
 
@@ -258,7 +298,7 @@ void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_
     {
       if (impl->connections[i].endpoint.port == ep->port && impl->connections[i].endpoint.address == ep->address)
       {
-        printf("found duplicate\n");
+        //printf("found duplicate\n");
         return;
       }
     }
@@ -274,7 +314,7 @@ void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_
       perror("error connecting tcp socket");
     }
 
-	printf("%i %i %i %i\n", (ep->address & 0xFF000000) >> 24, (ep->address & 0xFF0000) >> 16, (ep->address & 0xFF00) >> 8, (ep->address & 0xFF));
+	//printf("%i %i %i %i\n", (ep->address & 0xFF000000) >> 24, (ep->address & 0xFF0000) >> 16, (ep->address & 0xFF00) >> 8, (ep->address & 0xFF));
 
     // make the subscribe request in a "packet"
     // a packet is an int length followed by data
@@ -285,7 +325,7 @@ void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_
     int32_t length = 0;
     char buffer[500];
     length += strlen(subscriber->topic)+1;
-    printf("topic %s\n", subscriber->topic);
+    //printf("topic %s\n", subscriber->topic);
     strcpy(buffer, subscriber->topic);
     send(sock, (char*)&length, 4, 0);
     send(sock, buffer, length, 0);
@@ -321,6 +361,8 @@ void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_
 	fcntl(sock, F_SETFL, flags | O_NONBLOCK);
 #endif
 
+    ps_event_set_add_socket(&subscriber->node->events, sock);
+
 	if (impl->num_connections - 1)
 	{
        free(old_connections);
@@ -339,11 +381,13 @@ void ps_tcp_transport_destroy(struct ps_transport_t* transport)
     {
       free(impl->connections[i].packet_data);
     }
+    //ps_event_set_remove_socket(&subscriber->node->events, impl->connections[i].socket);
     closesocket(impl->connections[i].socket);
   }
 
   for (int i = 0; i < impl->num_client_sockets; i++)
   {
+    //ps_event_set_add_socket(&subscriber->node->events, impl->client_sockets[i]);
     closesocket(impl->client_sockets[i]);
   }
 
