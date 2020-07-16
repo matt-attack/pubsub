@@ -21,7 +21,7 @@ void ps_pub_publish_client(struct ps_pub_t* pub, struct ps_client_t* client, str
 
     if (client->transport)
     {
-      client->transport->pub(client->transport, pub, msg->data, msg->len);
+      client->transport->pub(client->transport, pub, client, msg->data, msg->len);
       return;
     }
 

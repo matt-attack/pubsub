@@ -51,15 +51,60 @@ struct ps_tcp_transport_connection
 	char* packet_data;
 };
 
+struct ps_tcp_client_t
+{
+  int socket;
+  bool needs_removal;
+
+  struct ps_pub_t* publisher;
+};
+
 struct ps_tcp_transport_impl
 {
   int socket;
-  int* client_sockets;
-  int num_client_sockets;
+
+  struct ps_tcp_client_t* clients;
+  int num_clients;
 
   struct ps_tcp_transport_connection* connections;
   int num_connections;
 };
+
+void remove_client_socket(struct ps_tcp_transport_impl* transport, int socket, struct ps_node_t* node)
+{
+  // find the index
+  int i = 0;
+  for (; i < transport->num_clients; i++)
+  {
+    if (transport->clients[i].socket == socket)// socket packed in address
+    {
+      break;
+    }
+  }
+
+  closesocket(socket);
+
+  struct ps_tcp_client_t* old_clients = transport->clients;
+  transport->num_clients -= 1;
+
+  // close the socket and dont wait on it anymore
+  ps_event_set_remove_socket(&node->events, transport->clients[i].socket);
+
+  if (transport->num_clients)
+  {
+    transport->clients = (struct ps_tcp_client_t*)malloc(sizeof(struct ps_tcp_client_t)*transport->num_clients);
+    for (int j = 0; j < i; j++)
+    {
+      transport->clients[j] = old_clients[j];
+    }
+
+    for (int j = i + 1; j < transport->num_clients; j++)
+    {
+      transport->clients[j - 1] = old_clients[j];
+    }
+  }
+  free(old_clients);
+}
 
 void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* node)
 {
@@ -70,14 +115,15 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
     printf("Got new socket connection!\n");
 
     // add it to the list yo
-    impl->num_client_sockets++;
-    int* old_sockets = impl->client_sockets;
-    impl->client_sockets = (int*)malloc(sizeof(int)*impl->num_client_sockets);
-    for (int i = 0; i < impl->num_client_sockets-1; i++)
+    impl->num_clients++;
+    struct ps_tcp_client_t* old_sockets = impl->clients;
+    impl->clients = (struct ps_tcp_client_t*)malloc(sizeof(struct ps_tcp_client_t)*impl->num_clients);
+    for (int i = 0; i < impl->num_clients-1; i++)
     {
-      impl->client_sockets[i] = old_sockets[i];
+      impl->clients[i] = old_sockets[i];
     }
-    impl->client_sockets[impl->num_client_sockets-1] = socket;
+    impl->clients[impl->num_clients-1].socket = socket;
+    impl->clients[impl->num_clients - 1].needs_removal = false;
 
     // set non-blocking
 #ifdef _WIN32
@@ -99,51 +145,72 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
 
     ps_event_set_add_socket(&node->events, socket);
 
-	if (impl->num_client_sockets - 1)
+	if (impl->num_clients - 1)
 	{
 	  free(old_sockets);
 	}
   }
   //printf("polled\n");
 
+  // remove any old sockets
+  for (int i = 0; i < impl->num_clients; i++)
+  {
+    if (impl->clients[i].needs_removal)
+    {
+      // add it to the list
+      struct ps_client_t client;
+      client.endpoint.address = impl->clients[i].socket;
+      client.endpoint.port = 255;// p->port;
+      ps_pub_remove_client(impl->clients[i].publisher, &client);// todo this is probably unsafe....
+
+      remove_client_socket(impl, impl->clients[i].socket, impl->clients[i].publisher->node);
+
+      i = i - 1;
+      return;
+    }
+  }
+
   // update our sockets yo
-  for (int i = 0; i < impl->num_client_sockets; i++)
+  for (int i = 0; i < impl->num_clients; i++)
   {
     // check for new data
     char buf[1500];
-    int len = recv(impl->client_sockets[i], buf, 1500, 0);
+    int len = recv(impl->clients[i].socket, buf, 1500, 0);
     if (len > 0)
     {
-      printf("Read %i bytes from client '%s'\n", len, &buf[5]);
+      //printf("Read %i bytes from client '%s'\n", len, &buf[5]);
 
-      const char* topic = &buf[5];
+      const char* topic = &buf[5+4];
       // check if this matches any of our publishers
       for (unsigned int pi = 0; pi < node->num_pubs; pi++)
       {
         struct ps_pub_t* pub = node->pubs[pi];
         if (strcmp(topic, pub->topic) == 0)
         {
+          unsigned int skip = *(unsigned int*)&buf[5];
           // send response and start publishing
           struct ps_client_t client;
-          client.endpoint.address = impl->client_sockets[i];
+          client.endpoint.address = impl->clients[i].socket;
           client.endpoint.port = 255;// p->port;
           client.last_keepalive = 10000000000000;//GetTickCount64();// use the current time stamp
           client.sequence_number = 0;
           client.stream_id = 0;
-          client.modulo = 0;
+          client.modulo = skip > 0 ? skip + 1 : 0;
           client.transport = transport;
+
+          impl->clients[i].publisher = pub;
 
           //printf("Got subscribe request, adding client if we haven't already\n");
           ps_pub_add_client(pub, &client);
 
           // send the client the acknowledgement and message definition
           int8_t packet_type = 0x03;//message definition
-          send(impl->client_sockets[i], (char*)&packet_type, 1, 0);
+          send(impl->clients[i].socket, (char*)&packet_type, 1, 0);
 
           char buf[1500];
           int length = ps_serialize_message_definition((void*)buf, pub->message_definition);
-          send(impl->client_sockets[i], (char*)&length, 4, 0);
-          send(impl->client_sockets[i], buf, length, 0);
+          send(impl->clients[i].socket, (char*)&length, 4, 0);
+          send(impl->clients[i].socket, buf, length, 0);
           break;
         }
       }
@@ -231,63 +298,35 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
   }
 }
 
-void remove_client_socket(struct ps_tcp_transport_impl* transport, int i, struct ps_node_t* node)
-{
-  int* old_sockets = transport->client_sockets;
-  transport->num_client_sockets -= 1;
-
-  // close the socket and dont wait on it anymore
-  ps_event_set_remove_socket(&node->events, transport->client_sockets[i]);
-
-  if (transport->num_client_sockets)
-  {
-    transport->client_sockets = (int*)malloc(sizeof(int)*transport->num_client_sockets);
-    for (int j = 0; j < i; j++)
-    {
-      transport->client_sockets[j] = old_sockets[j];
-    }
-
-    for (int j = i+1; j < transport->num_client_sockets; j++)
-    {
-      transport->client_sockets[j-1] = old_sockets[j];
-    }
-    free(old_sockets);
-  }
-  else
-  {
-    free(transport->client_sockets);
-  }
-}
-
-void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* publisher, const void* message, uint32_t length)
+void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* publisher, struct ps_client_t* client, const void* message, uint32_t length)
 {
   struct ps_tcp_transport_impl* impl = (struct ps_tcp_transport_impl*)transport->impl;
-  // just send it to all of the clients for the moment
-  for (int i = 0; i < impl->num_client_sockets; i++)
+
+  // the client packs the socket id in the addr
+  int socket = client->endpoint.address;
+
+  printf("publishing tcp\n");
+  // a packet is an int length followed by data
+  int8_t packet_type = 0x02;//message
+  if (send(socket, (char*)&packet_type, 1, 0) < 0)
   {
-    printf("publishing tcp\n");
-    // a packet is an int length followed by data
-    int8_t packet_type = 0x02;//message
-    if (send(impl->client_sockets[i], (char*)&packet_type, 1, 0) < 0)
+    //perror("send error, removing socket");
+    // remove this socket
+    // add this to the list of clients to remove if it doesnt exist
+    for (int i = 0; i < impl->num_clients; i++)
     {
-      //perror("send error, removing socket");
-      // remove this socket
-      struct ps_client_t client;
-      client.endpoint.address = impl->client_sockets[i];
-      client.endpoint.port = 255;// p->port;
-      ps_pub_remove_client(publisher, &client);
-
-      remove_client_socket(impl, i, publisher->node);
-
-      i = i - 1;
-
-      continue;
+      if (impl->clients[i].socket == socket)
+      {
+        impl->clients[i].needs_removal = true;
+        return;// we already have it in the list
+      }
     }
 
-    // make the request
-    send(impl->client_sockets[i], (char*)&length, 4, 0);
-    send(impl->client_sockets[i], (char*)ps_get_msg_start(message), length, 0);
+    return;
   }
+
+  send(socket, (char*)&length, 4, 0);
+  send(socket, (char*)ps_get_msg_start(message), length, 0);
 }
 
 void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_t* subscriber, struct ps_endpoint_t* ep)
@@ -325,9 +364,11 @@ void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_
     // make the request
     int32_t length = 0;
     char buffer[500];
-    length += strlen(subscriber->topic)+1;
+    length += strlen(subscriber->topic)+1 + 4;
     strcpy(buffer, subscriber->topic);
     send(sock, (char*)&length, 4, 0);
+    unsigned int skip = subscriber->skip;
+    send(sock, (char*)&skip, 4, 0);
     send(sock, buffer, length, 0);
 
     // add the socket to the list of connections
@@ -385,10 +426,15 @@ void ps_tcp_transport_destroy(struct ps_transport_t* transport)
     closesocket(impl->connections[i].socket);
   }
 
-  for (int i = 0; i < impl->num_client_sockets; i++)
+  for (int i = 0; i < impl->num_clients; i++)
   {
     //ps_event_set_add_socket(&subscriber->node->events, impl->client_sockets[i]);
-    closesocket(impl->client_sockets[i]);
+    closesocket(impl->clients[i].socket);
+  }
+
+  if (impl->num_clients)
+  {
+    free(impl->clients);
   }
 
   if (impl->num_connections)
@@ -409,7 +455,7 @@ void ps_tcp_transport_init(struct ps_transport_t* transport, struct ps_node_t* n
 
     struct ps_tcp_transport_impl* impl = (struct ps_tcp_transport_impl*)malloc(sizeof(struct ps_tcp_transport_impl));
 
-    impl->num_client_sockets = 0;
+    impl->num_clients = 0;
     impl->num_connections = 0;
 
     impl->socket = socket(AF_INET, SOCK_STREAM, 0);
