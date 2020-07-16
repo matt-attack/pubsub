@@ -1016,8 +1016,7 @@ int ps_node_spin(struct ps_node_t* node)
 		{
             //printf("Got subscribe msg \n");
 			//subscribe query, from a node subscribing to a topic
-			int* addr = (int*)&data[1];
-			unsigned short* port = (unsigned short*)&data[5];
+            struct ps_subscribe_req_t* req = (struct ps_subscribe_req_t*)data;
 
 			char* topic = (char*)&data[7];
 
@@ -1025,7 +1024,7 @@ int ps_node_spin(struct ps_node_t* node)
 			{
 				char* type = (char*)&data[strlen(topic) + 8];
 				char* node_name = type + 1 + strlen(type);
-				node->sub_cb(topic, type, node_name, 0);
+				node->sub_cb(topic, type, node_name, req);
 			}
 
 			//check if we have a sub matching that topic
@@ -1057,7 +1056,7 @@ int ps_node_spin(struct ps_node_t* node)
 			//if we already have a sub for this, ignore
 			for (unsigned int i = 0; i < pub->num_clients; i++)
 			{
-				if (pub->clients[i].endpoint.port == *port && pub->clients[i].endpoint.address == *addr)
+				if (pub->clients[i].endpoint.port == req->port && pub->clients[i].endpoint.address == req->addr)
 				{
 					//printf("Got subscribe query from a current client, not advertising\n");
 					pub->clients[i].last_keepalive = GetTickCount64();

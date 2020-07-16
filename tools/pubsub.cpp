@@ -128,8 +128,22 @@ int main(int num_args_real, char** args)
 		return;
 	};
 
-	node.sub_cb = [](const char* topic, const char* type, const char* node, void* data)
+	node.sub_cb = [](const char* topic, const char* type, const char* node, const ps_subscribe_req_t* data)
 	{
+        auto iter = _nodes.find(node);
+        if (iter == _nodes.end())
+        {
+          NodeInfo info;
+          info.address = data->addr;
+          info.port = data->port;
+          info.transports = 0;
+          _nodes[node] = info;
+        }
+        else
+        {
+          iter->second.address = data->addr;
+          iter->second.port = data->port;
+        }
 		auto t = _topics.find(topic);
 		if (t == _topics.end())
 		{

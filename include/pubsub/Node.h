@@ -51,7 +51,7 @@ struct ps_transport_t
 };
 
 typedef void(*ps_adv_cb_t)(const char* topic, const char* type, const char* node, const struct ps_advertise_req_t* data);
-typedef void(*ps_sub_cb_t)(const char* topic, const char* type, const char* node, void* data);
+typedef void(*ps_sub_cb_t)(const char* topic, const char* type, const char* node, const struct ps_subscribe_req_t* data);
 typedef void(*ps_msg_def_cb_t)(const struct ps_message_definition_t* definition);
 
 #ifndef PUBSUB_REAL_TIME
@@ -146,9 +146,19 @@ struct ps_advertise_req_t
 	char id;
 	int addr;
 	unsigned short port;
-	unsigned int transports;// bitmask showing supported protocols for this subscriber
+	unsigned int transports;// bitmask showing supported protocols for this publisher
 	unsigned int type_hash;// to see if the type is correct
 	unsigned int group_id;// unique (hopefully) id that indicates which process this node is a part of
+};
+#pragma pack(pop)
+
+#pragma pack(push)
+#pragma pack(1)
+struct ps_subscribe_req_t
+{
+  char id;
+  int addr;
+  unsigned short port;
 };
 #pragma pack(pop)
 

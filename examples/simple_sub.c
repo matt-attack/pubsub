@@ -14,6 +14,7 @@ int main()
 	struct ps_node_t node;
 	ps_node_init(&node, "simple_subscriber", "", false);
 
+    // Adds TCP transport
     struct ps_transport_t tcp_transport;
     ps_tcp_transport_init(&tcp_transport, &node);
     ps_node_add_transport(&node, &tcp_transport);
@@ -27,7 +28,6 @@ int main()
 
 	//ps_node_create_subscriber(&node, "/data", &std_msgs__String_def, &string_sub, 10, false, 0, true);
 
-    //ps_tcp_transport_subscribe(0, 0, 0);
 	while (ps_okay())
 	{
 		ps_sleep(1);

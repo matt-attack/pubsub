@@ -118,9 +118,10 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
 
       const char* topic = &buf[5];
       // check if this matches any of our publishers
-      for (unsigned int i = 0; i < node->num_pubs; i++)
+      for (unsigned int pi = 0; pi < node->num_pubs; pi++)
       {
-        if (strcmp(topic, node->pubs[i]->topic) == 0)
+        struct ps_pub_t* pub = node->pubs[pi];
+        if (strcmp(topic, pub->topic) == 0)
         {
           // send response and start publishing
           struct ps_client_t client;
@@ -133,14 +134,14 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
           client.transport = transport;
 
           //printf("Got subscribe request, adding client if we haven't already\n");
-          ps_pub_add_client(node->pubs[i], &client);
+          ps_pub_add_client(pub, &client);
 
           // send the client the acknowledgement and message definition
           int8_t packet_type = 0x03;//message definition
           send(impl->client_sockets[i], (char*)&packet_type, 1, 0);
 
           char buf[1500];
-          int length = ps_serialize_message_definition((void*)buf, node->pubs[i]->message_definition);
+          int length = ps_serialize_message_definition((void*)buf, pub->message_definition);
           send(impl->client_sockets[i], (char*)&length, 4, 0);
           send(impl->client_sockets[i], buf, length, 0);
           break;
@@ -294,11 +295,11 @@ void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_
     struct ps_tcp_transport_impl* impl = (struct ps_tcp_transport_impl*)transport->impl;
 
     // check if we already have a sub with this endpoint
+    // if so, ignore it
     for (int i = 0; i < impl->num_connections; i++)
     {
       if (impl->connections[i].endpoint.port == ep->port && impl->connections[i].endpoint.address == ep->address)
       {
-        //printf("found duplicate\n");
         return;
       }
     }
@@ -325,7 +326,6 @@ void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_
     int32_t length = 0;
     char buffer[500];
     length += strlen(subscriber->topic)+1;
-    //printf("topic %s\n", subscriber->topic);
     strcpy(buffer, subscriber->topic);
     send(sock, (char*)&length, 4, 0);
     send(sock, buffer, length, 0);
@@ -404,7 +404,6 @@ void ps_tcp_transport_init(struct ps_transport_t* transport, struct ps_node_t* n
     transport->spin = ps_tcp_transport_spin;
     transport->subscribe = ps_tcp_transport_subscribe;
     transport->destroy = ps_tcp_transport_destroy;
-    //transport->add_publisher = ;
     transport->pub = ps_tcp_transport_pub;
     transport->uuid = 1;
 
