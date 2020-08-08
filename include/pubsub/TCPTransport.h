@@ -422,15 +422,17 @@ void ps_tcp_transport_destroy(struct ps_transport_t* transport)
     {
       free(impl->connections[i].packet_data);
     }
-    //ps_event_set_remove_socket(&subscriber->node->events, impl->connections[i].socket);
+    ps_event_set_remove_socket(&impl->connections[i].subscriber->node->events, impl->connections[i].socket);
     closesocket(impl->connections[i].socket);
   }
 
   for (int i = 0; i < impl->num_clients; i++)
   {
-    //ps_event_set_remove_socket(&subscriber->node->events, impl->client_sockets[i]);
+    ps_event_set_remove_socket(&impl->clients[i].publisher->node->events, impl->clients[i].socket);
     closesocket(impl->clients[i].socket);
   }
+
+  closesocket(impl->socket);
 
   if (impl->num_clients)
   {
@@ -488,6 +490,8 @@ void ps_tcp_transport_init(struct ps_transport_t* transport, struct ps_node_t* n
 #endif
 
     listen(impl->socket, 5);
+
+    ps_event_set_add_socket(&node->events, impl->socket);
 
     transport->impl = (void*) impl;
 }

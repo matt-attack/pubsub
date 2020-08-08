@@ -1151,7 +1151,8 @@ int ps_node_spin(struct ps_node_t* node)
             }
             else
             {
-                printf("Want to subscribe to tcp but it has yet to be implemented\n");
+                // for now we just assume TCP is the first transport
+                // todo support more transports
                 node->transports[0].subscribe(&node->transports[0], sub, &ep);
             }
 		}
