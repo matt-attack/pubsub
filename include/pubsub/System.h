@@ -7,7 +7,7 @@ extern "C"
 
 void ps_sleep(unsigned int time_ms);
 
-unsigned int GetTimeMs();
+unsigned long long GetTimeMs();
 
 #ifdef __cplusplus
 }

@@ -1,3 +1,4 @@
+#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -34,6 +35,10 @@ struct field
 
 	std::string getBaseType()
 	{
+		if (type == "int64")
+		{
+			return "int64_t";
+		}
 		if (type == "int32")
 		{
 			return "int32_t";
@@ -45,6 +50,10 @@ struct field
 		if (type == "int8")
 		{
 			return "int8_t";
+		}
+		if (type == "uint64")
+		{
+			return "uint64_t";
 		}
 		if (type == "uint32")
 		{
@@ -77,6 +86,10 @@ struct field
 
 	std::string getTypeEnum()
 	{
+		if (type == "int64")
+		{
+			return "FT_Int64";
+		}
 		if (type == "int32")
 		{
 			return "FT_Int32";
@@ -88,6 +101,10 @@ struct field
 		if (type == "int8")
 		{
 			return "FT_Int8";
+		}
+		if (type == "uint64")
+		{
+			return "FT_UInt64";
 		}
 		if (type == "uint32")
 		{
@@ -125,8 +142,19 @@ std::string generate(const char* definition, const char* name)
 
 	// first parse out the fields
 	std::vector<field> fields;
+
+	// remove any windows line extensions
+	std::string cleaned;
+	size_t len = strlen(definition);
+	for (size_t i = 0; i < len; i++)
+	{
+		if (definition[i] != '\r')
+		{
+			cleaned += definition[i];
+		}
+	}
 	
-	auto lines = split(definition, '\n');
+	auto lines = split(cleaned.c_str(), '\n');
 
 	// now lets remove comments from lines so we can generate a hash from it
 	// todo, also remove extra spacing
@@ -162,7 +190,12 @@ std::string generate(const char* definition, const char* name)
 			std::string type = words[0];
 
 			int size = 1;
-			if (name.find('[') != -1)
+			if (name.substr(name.size() - 2) == "[]")
+			{
+				size = 0;
+				name = name.substr(0, name.length() - 2);
+			}
+			else if (name.find('[') != -1)
 			{
 				int index = name.find('[');
 				size = std::stoi(name.substr(index + 1));
@@ -198,7 +231,7 @@ std::string generate(const char* definition, const char* name)
 	output += "#pragma once\n\n";
 
 	output += "#include <stdint.h>\n";
-	output += "#include <string.h>\n\n;";
+	output += "#include <string.h>\n\n";
 
 	// now that we have these, generate stuff!, start with the struct
 	output += "struct " + type_name + "\n{\n";
@@ -207,6 +240,11 @@ std::string generate(const char* definition, const char* name)
 		if (field.array_size > 1)
 		{
 			output += "  " + field.getBaseType() + " " + field.name + "[" + std::to_string(field.array_size) + "];\n";
+		}
+		else if (field.array_size == 0)
+		{
+			output += "  " + field.getBaseType() + "* " + field.name + ";\n";
+			output += "  uint32_t " + field.name + "_length;\n";
 		}
 		else
 		{
@@ -248,10 +286,15 @@ std::string generate(const char* definition, const char* name)
 	// okay, lets determine if it is pure data, if so just do a memcpy
 
 	bool is_pure = true;
-	// for now, just check for a string
+	// determine if we are a pure structure (nothing dynamic)
 	for (auto& field : fields)
 	{
 		if (field.type == "string")
+		{
+			is_pure = false;
+			break;
+		}
+		else if (field.array_size == 0)
 		{
 			is_pure = false;
 			break;
@@ -288,6 +331,12 @@ std::string generate(const char* definition, const char* name)
 				output += "  int len_" + fields[i].name + " = strlen(p) + 1; \n";
 				output += "  p += len_" + fields[i].name + ";\n";
 			}
+			else if (fields[i].array_size == 0)
+			{
+				output += "  int len_" + fields[i].name + " = *(uint32_t*)p;\n";
+				output += "  p += len_" + fields[i].name + ";\n";
+				output += "  p += 4;\n";// add size of length
+			}
 			else
 			{
 				output += "  p += sizeof(" + fields[i].getBaseType() + ");\n";
@@ -298,7 +347,15 @@ std::string generate(const char* definition, const char* name)
 		// for now lets just decode non strings
 		for (size_t i = 0; i < fields.size(); i++)
 		{
-			if (fields[i].type != "string")
+			if (fields[i].array_size == 0)
+			{
+				output += "  out->" + fields[i].name + "_length = len_" + fields[i].name + ";\n";
+				output += "  out->" + fields[i].name + " = ("+fields[i].getBaseType()+"*)allocator->alloc(len_" + fields[i].name + "*sizeof(" + fields[i].getBaseType() + "), allocator->context);\n";
+				output += "  p += 4;\n";// move past the length
+				output += "  memcpy(out->" + fields[i].name + ", p, len_" + fields[i].name + "*sizeof(" + fields[i].getBaseType() + "));\n";// is memcpy faster in this case?
+				output += "  p += len_" + fields[i].name + ";\n";
+			}
+			else if (fields[i].type != "string")
 			{
 				output += "  out->" + fields[i].name + " = *((" + fields[i].getBaseType() + "*)p);\n";
 				output += "  p += sizeof(" + fields[i].getBaseType() + ");\n";
@@ -328,6 +385,11 @@ std::string generate(const char* definition, const char* name)
 				output += "  len += len_" + fields[i].name + ";\n";
 				n_str++;
 			}
+			else if (fields[i].array_size == 0)
+			{
+				output += "  len += msg->" + fields[i].name + "_length;\n";
+				n_str++;
+			}
 		}
 		output += "  len -= " + std::to_string(n_str) + "*sizeof(char*);\n";
 		output += "  struct ps_msg_t omsg;\n";
@@ -339,6 +401,14 @@ std::string generate(const char* definition, const char* name)
 			{
 				output += "  strcpy(start, msg->" + fields[i].name + ");\n";
 				output += "  start += len_" + fields[i].name + ";\n";
+			}
+			else if (fields[i].array_size == 0)
+			{
+				// write in the length
+				output += "  *(uint32_t*)start = msg->" + fields[i].name + "_length;\n";
+				output += "  start += 4;\n";
+				output += "  memcpy(start, msg->" + fields[i].name + ", msg->" + fields[i].name + "_length*sizeof(" + fields[i].getBaseType() + "));\n";
+				output += "  start += msg->" + fields[i].name + "_length*sizeof(" + fields[i].getBaseType() + ");\n";
 			}
 			else
 			{
@@ -366,7 +436,7 @@ std::string generate(const char* definition, const char* name)
 	bool added_destructor = false;
 	for (size_t i = 0; i < fields.size(); i++)
 	{
-		if (fields[i].type == "string")
+		if (fields[i].type == "string" || fields[i].array_size == 0)
 		{
 			if (added_destructor == false)
 			{
@@ -379,7 +449,7 @@ std::string generate(const char* definition, const char* name)
 	}
 	if (added_destructor)
 	{
-		output += "  }\n";
+		output += "  }\n\n";
 
 		// add a copy constructor and constructor now...
 		output += "  " + raw_name + "(const " + raw_name + "& obj)\n  {\n";
@@ -390,8 +460,22 @@ std::string generate(const char* definition, const char* name)
 				output += "    " + fields[i].name + " = new char[strlen(obj." + fields[i].name + ") + 1];\n";
 				output += "    strcpy(" + fields[i].name + ", obj." + fields[i].name + ");\n";
 			}
+			else if (fields[i].array_size > 1)
+			{
+				//todo
+			}
+			else if (fields[i].array_size == 0)
+			{
+				output += "    " + fields[i].name + " = new " + fields[i].getBaseType() + "[obj." + fields[i].name + "_length*sizeof(" + fields[i].getBaseType() + ")];\n";
+				output += "    " + fields[i].name + "_length = obj." + fields[i].name + "_length;\n";
+				output += "    memcpy(" + fields[i].name + ", obj." + fields[i].name + ", obj." + fields[i].name + "_length*sizeof(" + fields[i].getBaseType() + "));\n";
+			}
+			else
+			{
+				output += "    " + fields[i].name + " = obj." + fields[i].name + "; \n";
+			}
 		}
-		output += "  }\n";
+		output += "  }\n\n";
 		// todo maybe just use stl types for strings/arrays?
 
 		output += "  " + raw_name + "& operator=(const " + raw_name + "& obj)\n  {\n";
@@ -402,8 +486,22 @@ std::string generate(const char* definition, const char* name)
 				output += "    " + fields[i].name + " = new char[strlen(obj." + fields[i].name + ") + 1];\n";
 				output += "    strcpy(" + fields[i].name + ", obj." + fields[i].name + ");\n";
 			}
+			else if (fields[i].array_size == 0)
+			{
+				output += "    " + fields[i].name + " = new " + fields[i].getBaseType() + "[obj." + fields[i].name + "_length*sizeof(" + fields[i].getBaseType() + ")];\n";
+				output += "    " + fields[i].name + "_length = obj." + fields[i].name + "_length;\n";
+				output += "    memcpy(" + fields[i].name + ", obj." + fields[i].name + ", obj." + fields[i].name + "_length*sizeof(" + fields[i].getBaseType() + "));\n";
+			}
+			else if (fields[i].array_size > 1)
+			{
+				//todo 
+			}
+			else
+			{
+				output += "    " + fields[i].name + " = obj." + fields[i].name + "; \n";
+			}
 		}
-		output += "    return *this;\n  }\n";
+		output += "    return *this;\n  }\n\n";
 
 		// mark all pointers as null to avoid crashes
 		output += "  " + raw_name + "()\n  {\n";
@@ -413,8 +511,13 @@ std::string generate(const char* definition, const char* name)
 			{
 				output += "    " + fields[i].name + " = 0;\n";
 			}
+			else if (fields[i].array_size == 0)
+			{
+				output += "    " + fields[i].name + " = 0;\n";
+				output += "    " + fields[i].name + "_length = 0;\n";
+			}
 		}
-		output += "  }\n";
+		output += "  }\n\n";
 	}
 	output += "  static const ps_message_definition_t* GetDefinition()\n  {\n";
 	output += "    return &" + type_name + "_def;\n  }\n";
@@ -500,6 +603,9 @@ int main(int num_args, char** args)
 	generate(test3, "joy_msgs/Joy");
 
 	generate(test4, "std_msgs/Int");*/
+
+	//const char* test = "int32 width\r\nint32 height\r\nuint8 data[]";
+	//generate(test, "okay/Image");
 	//getchar();
 	return 0;
 }

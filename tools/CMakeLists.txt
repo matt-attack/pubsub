@@ -1,5 +1,3 @@
-﻿
-cmake_minimum_required (VERSION 3.8)
 
 # Add source to this project's executable.
 include_directories("../")
@@ -8,9 +6,11 @@ include_directories("../")
 add_executable (info "pubsub.cpp")
 target_link_libraries(info pubsub)
 add_dependencies(info pubsub)
+set_property(TARGET info PROPERTY CXX_STANDARD 11)
 
 # Build the serialization generator
 add_executable(pubsub_msg_gen "generator.cpp")
+set_property(TARGET pubsub_msg_gen PROPERTY CXX_STANDARD 11)
 
 # This is used to generate messages for a package
 macro(generate_messages)
@@ -32,12 +32,12 @@ macro(generate_messages)
   foreach (_file ${ARG_FILES})
     add_custom_command(
 	  COMMAND $<TARGET_FILE:pubsub_msg_gen> ${_file}
-      WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/${ARG_DIRECTORY}/
-      DEPENDS ${CMAKE_SOURCE_DIR}/${ARG_DIRECTORY}/${_file} pubsub_msg_gen
-      OUTPUT ${CMAKE_SOURCE_DIR}/${ARG_DIRECTORY}/${_file}.h
+      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/${ARG_DIRECTORY}/
+      DEPENDS ${PROJECT_SOURCE_DIR}/${ARG_DIRECTORY}/${_file} pubsub_msg_gen
+      OUTPUT ${PROJECT_SOURCE_DIR}/${ARG_DIRECTORY}/${_file}.h
     )
 
-    set(MESSAGE_DEPS ${MESSAGE_DEPS} ${CMAKE_SOURCE_DIR}/${ARG_DIRECTORY}/${_file}.h)
+    set(MESSAGE_DEPS ${MESSAGE_DEPS} ${PROJECT_SOURCE_DIR}/${ARG_DIRECTORY}/${_file}.h)
   endforeach()
 
   add_custom_target(${ARG_TARGET}
@@ -49,6 +49,7 @@ generate_messages(FILES
   std_msgs__Joy.msg
   std_msgs__String.msg 
   std_msgs__Float.msg
+  std_msgs__Image.msg
 )
 
 
@@ -56,10 +57,12 @@ generate_messages(FILES
 add_executable(pubsubtest "PubSubTest.cpp")
 target_link_libraries(pubsubtest pubsub)
 add_dependencies(pubsubtest pubsub pubsub_msgs)
+set_property(TARGET pubsubtest PROPERTY CXX_STANDARD 11)
 
 add_executable(throughput_test "throughput_test.cpp")
 target_link_libraries(throughput_test pubsub pubsub_cpp)
 add_dependencies(throughput_test pubsub pubsub_cpp pubsub_msgs)
+set_property(TARGET throughput_test PROPERTY CXX_STANDARD 11)
 
 # TODO: Add tests and install targets if needed.
 

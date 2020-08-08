@@ -2,7 +2,8 @@
 #include <stdio.h>
 
 #include "../high_level_api/Node.h"
-#include "../src/System.h"
+#include "../high_level_api/Spinners.h"
+#include <pubsub/System.h>
 
 #include "../msg/std_msgs__String.msg.h"
 
@@ -14,8 +15,8 @@ int main()
 		printf("Got message %s\n", msg->value);
 	}, 10);
 
-	pubsub::Spinner spinner;
-	spinner.addNode(node);
+	pubsub::BlockingSpinner spinner;
+	spinner.setNode(node);
 
 	spinner.wait();
 

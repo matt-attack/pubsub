@@ -1,9 +1,9 @@
 #pragma once
 
-#include "../src/Node.h"
-#include "../src/Publisher.h"
-#include "../src/Subscriber.h"
-#include "../src/System.h"
+#include <pubsub/Node.h>
+#include <pubsub/Publisher.h>
+#include <pubsub/Subscriber.h>
+#include <pubsub/System.h>
 
 
 #include <vector>
@@ -15,6 +15,10 @@
 #include <functional>
 #include <algorithm>
 
+
+//#include <WS2tcpip.h>
+#include <pubsub/Events.h>
+
 namespace pubsub
 {
 static std::map<std::string, std::string> _remappings;
@@ -22,15 +26,17 @@ static std::map<std::string, std::string> _remappings;
 // how intraprocess passing works
 class SubscriberBase;
 class PublisherBase;
-//static std::mutex _subscriber_mutex;
-//static std::multimap<std::string, SubscriberBase*> _subscribers;
+
+// this mutex protects both of the below
 static std::mutex _publisher_mutex;
 static std::multimap<std::string, PublisherBase*> _publishers;
+static std::multimap<std::string, SubscriberBase*> _subscribers;
 
 // this assumes topic and ns are properly checked
 // ns should not have a leading slash, topic should if it is absolute
 std::string handle_remap(const std::string& topic, const std::string& ns)
 {
+    //printf("Handling remap of %s in ns %s\n", topic.c_str(), ns.c_str());
 	// we need at least one character
 	if (topic.length() == 0)
 	{
@@ -76,7 +82,10 @@ std::string handle_remap(const std::string& topic, const std::string& ns)
 	}
 
 	// okay, we had no remappings, use our namespace
-	return "/" + ns + "/" + topic;
+    if (ns.length())
+	    return "/" + ns + "/" + topic;
+    else
+        return "/" + topic;
 }
 
 // not thread safe
@@ -105,6 +114,7 @@ void initialize(const char** args, const int argc)
 // valid names must be all lowercase and only
 std::string validate_name(const std::string& name, bool remove_leading_slashes = false)
 {
+    //printf("Validating %s\n", name.c_str());
 	for (size_t i = 0; i < name.length(); i++)
 	{
 		if (name[i] >= 'A' && name[i] <= 'Z')
@@ -118,9 +128,29 @@ std::string validate_name(const std::string& name, bool remove_leading_slashes =
 
 	if (remove_leading_slashes)
 	{
-		if (name[0] == '/')
-			return name.substr(1);
+      int i = 0;
+      while (name[i] == '/') { i++;}
+	
+      return name.substr(i);
 	}
+    else
+    {
+      // remove any duplicate slashes we may have
+      std::string out;
+      if (name.length())
+      {
+        out += name[0];
+      }
+      for (size_t i = 1; i < name.length(); i++)
+      {
+        if (name[i] == '/' && out[i-1] == '/')
+        {
+          continue;
+        }
+        out += name[i];
+      }
+      return out;
+    }
 	return name;
 }
 
@@ -141,6 +171,8 @@ class Node
 	std::string qualified_name_;// necessary to hold the pointer to the name for C
 
 	ps_node_t node_;
+
+	ps_event_set_t* event_set_;
 public:
 	// todo try and eliminate this needing to be recursive
 	// recursive for the moment...
@@ -150,10 +182,10 @@ public:
 	// probably need to add advertise and subscribe functions to me
 	std::vector<SubscriberBase*> subscribers_;
 
-	Node(const std::string& name, bool use_broadcast = false) : original_name_(name)
+	Node(const std::string& name, bool use_broadcast = false) : original_name_(name), event_set_(0)
 	{
 		// look up the namespace for this node (todo)
-		std::string ns = "/ns_test";
+		std::string ns = "/";
 		
 		// now look up the name (todo)
 		std::string arg_name = original_name_;
@@ -173,7 +205,12 @@ public:
 
 	std::string getQualifiedName()
 	{
-		return "/" + namespace_ + "/" + real_name_;
+        if (namespace_.length())
+		    return "/" + namespace_ + "/" + real_name_;
+        else
+        {
+            return "/" + real_name_;
+        }
 	}
 
 	const std::string& getName()
@@ -194,6 +231,16 @@ public:
 	inline int spin()
 	{
 		return ps_node_spin(&node_);
+	}
+
+    inline void setEventSet(ps_event_set_t* set)
+    {
+      event_set_ = set;
+    }
+
+	inline ps_event_set_t* getEventSet()
+	{
+		return event_set_;
 	}
 };
 
@@ -249,6 +296,15 @@ public:
 		//add me to the publisher list
 		_publisher_mutex.lock();
 		_publishers.insert(std::pair<std::string, PublisherBase*>(remapped_topic_, this));
+
+        // look for any matching subscribers and add them to our list
+        auto iterpair = _subscribers.equal_range(topic);
+        for (auto it = iterpair.first; it != iterpair.second; ++it)
+        {
+          node.lock_.lock();
+          subs_.push_back(it->second);
+          node.lock_.unlock();
+        }
 		_publisher_mutex.unlock();
 	}
 
@@ -287,6 +343,7 @@ public:
 			//printf("Publishing locally with no copy..\n");
 
 			auto specific_sub = (Subscriber<T>*)sub;
+			ps_event_set_trigger(specific_sub->node_->getEventSet());
 			specific_sub->queue_mutex_.lock();
 			specific_sub->queue_.push_front(msg);
 			if (specific_sub->queue_.size() > specific_sub->queue_size_)
@@ -323,6 +380,7 @@ public:
 
 			// help this isnt thread safe
 			auto specific_sub = (Subscriber<T>*)sub;
+			ps_event_set_trigger(specific_sub->node_->getEventSet());
 			specific_sub->queue_mutex_.lock();
 			specific_sub->queue_.push_front(copy);
 			if (specific_sub->queue_.size() > specific_sub->queue_size_)
@@ -373,6 +431,8 @@ protected:
 			}
 		}
 
+        _subscribers.insert(std::pair<std::string, SubscriberBase*>(topic, sub));
+
 		_publisher_mutex.unlock();
 	}
 
@@ -393,6 +453,17 @@ protected:
 				it->second->GetNode()->lock_.unlock();
 			}
 		}
+
+        //remove me from the subscriber list
+        auto subiterpair = _subscribers.equal_range(topic);
+        for (auto it = subiterpair.first; it != subiterpair.second; ++it)
+        {
+          if (it->second == sub)
+          {
+            _subscribers.erase(it);
+            break;
+          }
+        }
 
 		_publisher_mutex.unlock();
 	}
@@ -494,83 +565,6 @@ public:
 	const std::string& getQualifiedTopic()
 	{
 		return remapped_topic_;
-	}
-};
-
-// todo use smart pointers for nodes
-class Spinner
-{
-	std::vector<Node*> nodes_;
-
-	bool running_;
-
-	std::thread thread_;
-	std::mutex list_mutex_;
-public:
-
-	// todo make it work with more than one thread
-	Spinner(int num_threads = 1) : running_(true)
-	{
-		thread_ = std::thread([this]()
-		{
-			while (running_ && ps_okay())
-			{
-				list_mutex_.lock();
-				for (auto node : nodes_)
-				{
-					node->lock_.lock();
-					if (ps_node_spin(node->getNode()))
-					{
-
-					}
-					// todo how to make this not scale with subscriber count...
-					// though, it isnt very important here
-					// its probably worth more effort just make it not run any of this if we get no messages
-					// we got a message, now call a subscriber
-					for (size_t i = 0; i < node->subscribers_.size(); i++)
-					{
-						// this doesnt ensure switching subs, but works
-						while (node->subscribers_[i]->CallOne()) {};
-					}
-					node->lock_.unlock();
-				}
-				list_mutex_.unlock();
-
-				ps_sleep(10);// make this configurable?
-			}
-		});
-	}
-
-	~Spinner()
-	{
-		if (running_)
-		{
-			stop();
-		}
-	}
-
-	void addNode(Node& node)
-	{
-		list_mutex_.lock();
-		nodes_.push_back(&node);
-		list_mutex_.unlock();
-	}
-
-	void wait()
-	{
-		thread_.join();
-	}
-
-	void stop()
-	{
-		// kill everything
-		if (!running_)
-		{
-			return;
-		}
-
-		running_ = false;
-		thread_.join();// wait for it to stop
 	}
 };
 

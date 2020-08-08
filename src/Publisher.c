@@ -1,12 +1,12 @@
-#include "Publisher.h"
-#include "Node.h"
+#include <pubsub/Publisher.h>
+#include <pubsub/Node.h>
 
 #include <stdio.h>
 #ifndef ANDROID
 #include <stdlib.h>
 #endif
 
-#include "Net.h"
+#include <pubsub/Net.h>
 
 void ps_pub_publish_client(struct ps_pub_t* pub, struct ps_client_t* client, struct ps_msg_t* msg)
 {
@@ -18,6 +18,13 @@ void ps_pub_publish_client(struct ps_pub_t* pub, struct ps_client_t* client, str
 			return;
 		}
 	}
+
+    if (client->transport)
+    {
+      client->transport->pub(client->transport, pub, client, msg->data, msg->len);
+      return;
+    }
+
 	// send da udp packet!
 	struct sockaddr_in address;
 	address.sin_family = AF_INET;
@@ -36,7 +43,7 @@ void ps_pub_publish_client(struct ps_pub_t* pub, struct ps_client_t* client, str
 		0, (struct sockaddr*)&address, sizeof(struct sockaddr_in));
 }
 
-void ps_pub_add_client(struct ps_pub_t* pub, const struct ps_client_t* client)
+bool ps_pub_add_client(struct ps_pub_t* pub, const struct ps_client_t* client)
 {
 	// first make sure we dont add any duplicate clients
 	for (unsigned int i = 0; i < pub->num_clients; i++)
@@ -44,8 +51,8 @@ void ps_pub_add_client(struct ps_pub_t* pub, const struct ps_client_t* client)
 		if (pub->clients[i].endpoint.address == client->endpoint.address
 			&& pub->clients[i].endpoint.port == client->endpoint.port)
 		{
-			printf("We already have this client, ignoring request\n");
-			return;
+			//printf("We already have this client, ignoring request\n");
+			return false;
 		}
 	}
 	pub->num_clients++;
@@ -64,6 +71,7 @@ void ps_pub_add_client(struct ps_pub_t* pub, const struct ps_client_t* client)
 	{
 		ps_pub_publish_client(pub, &pub->clients[pub->num_clients - 1], &pub->last_message);
 	}
+    return true;
 }
 
 void ps_pub_remove_client(struct ps_pub_t* pub, const struct ps_client_t* client)
@@ -153,20 +161,34 @@ void ps_pub_destroy(struct ps_pub_t* pub)
 	//remove it from my list of subs
 	pub->node->num_pubs--;
 	struct ps_pub_t** old_pubs = pub->node->pubs;
-	pub->node->pubs = (struct ps_pub_t**)malloc(sizeof(struct ps_pub_t*)*pub->node->num_pubs);
-	int ind = 0;
-	for (unsigned int i = 0; i < pub->node->num_pubs+1; i++)
-	{
-		if (old_pubs[i] == pub)
-		{
-			//skip me
-		}
-		else
-		{
-			pub->node->pubs[ind++] = old_pubs[i];
-		}
-	}
+    if (pub->node->num_pubs)
+    {
+	  pub->node->pubs = (struct ps_pub_t**)malloc(sizeof(struct ps_pub_t*)*pub->node->num_pubs);
+	  int ind = 0;
+	  for (unsigned int i = 0; i < pub->node->num_pubs+1; i++)
+	  {
+		  if (old_pubs[i] == pub)
+		  {
+			 //skip me
+		  }
+		  else
+		  {
+			  pub->node->pubs[ind++] = old_pubs[i];
+		  }
+	  }
+    }
+    else
+    {
+      pub->node->pubs = 0;
+    }
 	free(old_pubs);
+
+    // free my latched message
+    if (pub->last_message.data)
+	{
+		//free the old and add the new
+		free(pub->last_message.data);// todo use allocator
+	}
 
 	pub->clients = 0;
 	pub->num_clients = 0;

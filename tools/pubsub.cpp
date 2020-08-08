@@ -1,14 +1,15 @@
 
-#include "src/Node.h"
-#include "src/Publisher.h"
-#include "src/Subscriber.h"
-#include "src/Serialization.h"
-#include "src/System.h"
+#include <pubsub/Node.h>
+#include <pubsub/Publisher.h>
+#include <pubsub/Subscriber.h>
+#include <pubsub/Serialization.h>
+#include <pubsub/System.h>
+#include <pubsub/TCPTransport.h>
 
-#include "../high_level_api/Time.h"
+#include <pubsub_cpp/Time.h>
 #include "../high_level_api/Serialize.h"
 
-#include "arg_parse.h"
+#include <pubsub_cpp/arg_parse.h>
 
 #include <iostream>
 #include <map>
@@ -43,9 +44,10 @@ void print_help()
 void wait(ps_node_t* node)
 {
 	printf("Waiting for responses...\n\n");
-	unsigned int start = GetTimeMs();
+	unsigned long long start = GetTimeMs();
 	while (ps_okay() && start + 3000 > GetTimeMs())
 	{
+		ps_node_wait(node, 100);
 		ps_node_spin(node);
 	}
 }
@@ -67,6 +69,7 @@ struct NodeInfo
 {
 	int port;
 	int address;
+    int transports;
 };
 
 std::map<std::string, NodeInfo> _nodes;
@@ -88,7 +91,11 @@ int main(int num_args_real, char** args)
 
 	// Setup the node with a random name
 	static ps_node_t node;
-	ps_node_init(&node, "Query", "", true);
+	ps_node_init(&node, "Query", "", false);
+
+    struct ps_transport_t tcp_transport;
+    ps_tcp_transport_init(&tcp_transport, &node);
+    ps_node_add_transport(&node, &tcp_transport);
 
 	// Setup introspection callbacks
 	node.adv_cb = [](const char* topic, const char* type, const char* node, const ps_advertise_req_t* data)
@@ -96,6 +103,7 @@ int main(int num_args_real, char** args)
 		NodeInfo info;
 		info.address = data->addr;
 		info.port = data->port;
+        info.transports = data->transports;
 		_nodes[node] = info;
 
 		auto t = _topics.find(topic);
@@ -120,8 +128,22 @@ int main(int num_args_real, char** args)
 		return;
 	};
 
-	node.sub_cb = [](const char* topic, const char* type, const char* node, void* data)
+	node.sub_cb = [](const char* topic, const char* type, const char* node, const ps_subscribe_req_t* data)
 	{
+        auto iter = _nodes.find(node);
+        if (iter == _nodes.end())
+        {
+          NodeInfo info;
+          info.address = data->addr;
+          info.port = data->port;
+          info.transports = 0;
+          _nodes[node] = info;
+        }
+        else
+        {
+          iter->second.address = data->addr;
+          iter->second.port = data->port;
+        }
 		auto t = _topics.find(topic);
 		if (t == _topics.end())
 		{
@@ -190,16 +212,20 @@ int main(int num_args_real, char** args)
 			parser.AddMulti({ "i" }, "Print info about the publisher with each message.");
 			parser.AddMulti({ "n" }, "Number of messages to echo.", "0");
 			parser.AddMulti({ "skip", "s" }, "Skip factor for the subscriber.", "0");
+            parser.AddMulti({ "tcp" }, "Prefer the TCP transport.");
 
 			parser.Parse(args, num_args, 3);
 
 			static bool print_info = parser.GetBool("i");
-			static long long int n = parser.GetDouble("n");
+            double vn = parser.GetDouble("n");
+            if (vn <= 0)
+            {
+              vn = 2147483647;
+            }
+			static unsigned long long int n = vn;
 			int skip = parser.GetDouble("s");
-			if (n <= 0)
-			{
-				n = 2147483647L;
-			}
+            bool tcp = parser.GetBool("tcp");
+
 
 			// create a subscriber
 			static ps_sub_t sub;
@@ -210,6 +236,7 @@ int main(int num_args_real, char** args)
 			bool subscribed = false;
 			while (ps_okay())
 			{
+				ps_node_wait(&node, 1000);
 				ps_node_spin(&node);
 
 				// spin until we get the topic
@@ -228,6 +255,7 @@ int main(int num_args_real, char** args)
 					options.want_message_def = true;
 					options.allocator = 0;
 					options.ignore_local = false;
+                    options.preferred_transport = tcp ? 1 : 0;
 					options.cb = [](void* message, unsigned int size, void* data, const ps_msg_info_t* info)
 					{
 						if (todo_msgs.size() && sub.received_message_def.fields != 0)
@@ -326,10 +354,11 @@ int main(int num_args_real, char** args)
 			std::vector<void*> todo_msgs;
 
 			std::deque<std::pair<pubsub::Time, unsigned int>> message_times;
-			static int window = parser.GetDouble("w");
+			static size_t window = parser.GetDouble("w");
 			// subscribe to the topic
 			while (ps_okay())
 			{
+				ps_node_wait(&node, 1000);
 				ps_node_spin(&node);
 
 				// spin until we get the topic
@@ -353,9 +382,10 @@ int main(int num_args_real, char** args)
 			}
 
 			// now just receive and time as fast as we can
-			unsigned int last_print = GetTimeMs();
+			unsigned long long last_print = GetTimeMs();
 			while (ps_okay())
 			{
+				ps_node_wait(&node, 100);
 				ps_node_spin(&node);
 
 				if (last_print + 1000 < GetTimeMs())
@@ -374,29 +404,29 @@ int main(int num_args_real, char** args)
 							// in sec
 							double delta = (pubsub::Time::now() - message_times.front().first).toSec();
 							unsigned long long total = 0;
-							for (int i = 0; i < message_times.size(); i++)
+							for (size_t i = 0; i < message_times.size(); i++)
 							{
 								total += message_times[i].second;
 							}
 							double rate = ((double)total) / ((double)delta);
 							if (rate > 5000000)
 							{
-								printf("Bw: %0.3lf MB/s n=%i\n", rate / 1000000.0, message_times.size());
+								printf("Bw: %0.3lf MB/s n=%zi\n", rate / 1000000.0, message_times.size());
 							}
 							else if (rate > 5000)
 							{
-								printf("Bw: %0.3lf KB/s n=%i\n", rate / 1000.0, message_times.size());
+								printf("Bw: %0.3lf KB/s n=%zi\n", rate / 1000.0, message_times.size());
 							}
 							else
 							{
-								printf("Bw: %lf B/s n=%i\n", rate, message_times.size());
+								printf("Bw: %lf B/s n=%zi\n", rate, message_times.size());
 							}
 						}
 						else
 						{
 							double delta = (pubsub::Time::now() - message_times.front().first).toSec();
 							double rate = ((double)(message_times.size() - 1)) / ((double)delta);
-							printf("Rate: %lf Hz n=%i\n", rate, message_times.size());
+							printf("Rate: %lf Hz n=%zi\n", rate, message_times.size());
 						}
 					}
 				}
@@ -416,7 +446,15 @@ int main(int num_args_real, char** args)
 			std::cout << "Type: " << info->second.type << "\n";
 			std::cout << "Published by:\n";
 			for (auto pub : info->second.publishers)
-				std::cout << " " << pub << "\n";
+            {
+                int transports = _nodes[pub].transports;
+                std::string tps = "UDP";
+                if (transports & PS_TRANSPORT_TCP)
+                {
+                    tps += ", TCP";
+                }
+				std::cout << " " << pub << " (" << tps <<")\n";
+            }
 
 			std::cout << "\nSubscribed by:\n";
 			for (auto sub : info->second.subscribers)
@@ -429,8 +467,8 @@ int main(int num_args_real, char** args)
 			bool got_data = false;
 			while (ps_okay())
 			{
+				ps_node_wait(&node, 1000);
 				ps_node_spin(&node);
-				ps_sleep(1);
 
 				// spin until we get the topic
 				auto info = _topics.find(topic);
@@ -488,7 +526,6 @@ int main(int num_args_real, char** args)
 			while (ps_okay())
 			{
 				ps_node_spin(&node);
-				ps_sleep(1);
 
 				// spin until we get the topic
 				auto info = _topics.find(topic);
@@ -555,7 +592,7 @@ int main(int num_args_real, char** args)
 				// copy the message
 				ps_msg_t cpy = ps_msg_cpy(&msg);
 				ps_pub_publish(&pub, &cpy);
-				ps_sleep(1000 / rate);
+				ps_sleep(1000.0 / rate);
 			}
 		}
 	}
@@ -611,6 +648,7 @@ int main(int num_args_real, char** args)
 
 				std::cout << "Node: " << node_name << "\n";
 
+
 				// print port info if we got it
 				if (_nodes.find(node_name) != _nodes.end())
 				{
@@ -620,6 +658,14 @@ int main(int num_args_real, char** args)
 						<< ((info.address & 0xFF0000) >> 16) << "."
 						<< ((info.address & 0xFF00) >> 8) << "."
 						<< ((info.address & 0xFF)) << ":" << info.port << "\n";
+
+                    int transports = info.transports;
+                    std::string tps = "UDP";
+                    if (transports & PS_TRANSPORT_TCP)
+                    {
+                        tps += ", TCP";
+                    }
+                    std::cout << " Transports: " << tps << "\n";
 				}
 
 				if (subs.size() == 0 && pubs.size() == 0)

@@ -7,7 +7,7 @@ extern "C"
 
 #include <stdbool.h>
 
-#include "../src/Serialization.h"
+#include "Serialization.h"
 
 struct ps_node_t;
 struct ps_message_definition_t;
@@ -27,6 +27,7 @@ struct ps_client_t
 	unsigned long long last_keepalive;//timestamp of the last keepalive message, used to know when to deactiveate this connection
 	unsigned int stream_id;
 	unsigned int modulo;
+    struct ps_transport_t* transport;
 };
 
 struct ps_pub_t
@@ -38,13 +39,15 @@ struct ps_pub_t
 	struct ps_node_t* node;
 	unsigned int num_clients;
 	struct ps_client_t* clients;
+
 	bool latched;// todo make this an enum of options if we add more
+
 	struct ps_msg_t last_message;//only used if latched
 	unsigned int sequence_number;
 };
 
 // adds a client to a publisher
-void ps_pub_add_client(struct ps_pub_t* pub, const struct ps_client_t* client);
+bool ps_pub_add_client(struct ps_pub_t* pub, const struct ps_client_t* client);
 
 void ps_pub_remove_client(struct ps_pub_t* pub, const struct ps_client_t* client);
 

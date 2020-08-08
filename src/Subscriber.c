@@ -1,13 +1,34 @@
-#include "Subscriber.h"
-#include "Publisher.h"
-#include "Node.h"
+#include <pubsub/Subscriber.h>
+#include <pubsub/Publisher.h>
+#include <pubsub/Node.h>
 
 #include <stdio.h>
 #ifndef ANDROID
 #include <stdlib.h>
 #endif
 
-#include "Net.h"
+#include <pubsub/Net.h>
+
+void ps_sub_enqueue(struct ps_sub_t* sub, void* out_data, int data_size, const struct ps_msg_info_t* message_info)
+{
+  // maybe todo, this doesnt do fifo very correctly
+  // only does first newest than two old ones
+  //add it to the fifo packet queue which always shows the n most recent packets
+  //most recent is always first
+  //so lets push to the front (highest open index or highest if full)
+  if (sub->queue_size == 0)
+  {
+    sub->cb(out_data, data_size, sub->cb_data, message_info);
+  }
+  else if (sub->queue_size == sub->queue_len)
+  {
+    sub->queue[sub->queue_size - 1] = out_data;
+  }
+  else
+  {
+    sub->queue[sub->queue_len++] = out_data;
+  }
+}
 
 
 void ps_send_subscribe(struct ps_sub_t* sub, const struct ps_endpoint_t* ep)
@@ -60,19 +81,26 @@ void ps_sub_destroy(struct ps_sub_t* sub)
 	//remove it from my list of subs
 	sub->node->num_subs--;
 	struct ps_sub_t** old_subs = sub->node->subs;
-	sub->node->subs = (struct ps_sub_t**)malloc(sizeof(struct ps_sub_t*)*sub->node->num_subs);
-	int ind = 0;
-	for (unsigned int i = 0; i < sub->node->num_subs+1; i++)
-	{
+    if (sub->node->num_subs == 0)
+    {
+      sub->node->subs = 0;
+    }
+    else
+    {
+	  sub->node->subs = (struct ps_sub_t**)malloc(sizeof(struct ps_sub_t*)*sub->node->num_subs);
+	  int ind = 0;
+	  for (unsigned int i = 0; i < sub->node->num_subs+1; i++)
+	  {
 		if (old_subs[i] == sub)
 		{
-			//skip me
+		  //skip me
 		}
 		else
 		{
-			sub->node->subs[ind++] = old_subs[i];
+          sub->node->subs[ind++] = old_subs[i];
 		}
-	}
+	  }
+    }
 	free(old_subs);
 
 	//free any queued up messages and our queue

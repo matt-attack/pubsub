@@ -36,6 +36,8 @@ struct ps_sub_t
 	ps_subscriber_fn_cb_t cb;
 	void* cb_data;
 
+    unsigned int preferred_transport;// udp or tcp
+
 	unsigned int skip;
 
 	int queue_size;// maximum size of the queue
@@ -55,7 +57,7 @@ struct ps_sub_req_header_t
 };
 #pragma pack(pop)
 
-void ps_sub_enqueue(struct ps_sub_t* sub, void* message);
+void ps_sub_enqueue(struct ps_sub_t* sub, void* message, int data_size, const struct ps_msg_info_t* message_info);
 
 // if the subscriber was initialized with a type this returns decoded messages
 void* ps_sub_deque(struct ps_sub_t* sub);

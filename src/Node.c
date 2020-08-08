@@ -1,11 +1,11 @@
-#include "Node.h"
-#include "Publisher.h"
-#include "Subscriber.h"
-#include "Serialization.h"
+#include <pubsub/Node.h>
+#include <pubsub/Publisher.h>
+#include <pubsub/Subscriber.h>
+#include <pubsub/Serialization.h>
 
 #include <stdio.h>
 
-#include "Net.h"
+#include <pubsub/Net.h>
 
 #include <string.h>
 
@@ -101,7 +101,8 @@ void ps_node_advertise(struct ps_pub_t* pub)
 	p->addr = pub->node->addr;
 	p->port = pub->node->port;
 	p->type_hash = pub->message_definition->hash;
-	p->transports = PS_TRANSPORT_UDP;
+	p->transports = pub->node->supported_transports;
+	p->group_id = pub->node->group_id;
 
 	int off = sizeof(struct ps_advertise_req_t);
 	off += serialize_string(&data[off], pub->topic);
@@ -150,8 +151,8 @@ void networking_init()
 		int retval;
 		if ((retval = WSAStartup(MAKEWORD(2, 2), &wsaData)) != 0)
 		{
-			char sz[56];
-			sprintf_s(sz, "WSAStartup failed with error %d\n", retval);
+			char sz[156];
+			sprintf_s(sz, 156, "WSAStartup failed with error %d\n", retval);
 			OutputDebugStringA(sz);
 			WSACleanup();
 		}
@@ -172,6 +173,8 @@ BOOL WINAPI CtrlHandler(DWORD fdwCtrlType)
 	case CTRL_C_EVENT:
 		//printf("Ctrl-C event\n\n");
 		ps_shutdown = 1;
+
+		// trigger an event to break out 
 		return TRUE;
 	default:
 		return FALSE;
@@ -184,10 +187,16 @@ int ps_okay()
 }
 
 #else
+#include <signal.h>
+volatile static int ps_shutdown = 0;
+void CtrlHandler(int sig)
+{
+    ps_shutdown = 1;
+}
 
 int ps_okay()
 {
-	return 1;
+	return ps_shutdown ? 0 : 1;
 }
 
 #endif
@@ -215,6 +224,13 @@ char* GetPrimaryIp()
 	char* ip = inet_ntoa(name.sin_addr);
 	//assert(p);
 
+    if (name.sin_addr.s_addr == 0)
+    {
+      ip = "127.0.0.1";
+    }
+
+    printf("IP: %s\n", ip);
+
 #ifdef _WIN32
 	closesocket(sock);
 #else
@@ -229,6 +245,8 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 
 #ifdef _WIN32
 	SetConsoleCtrlHandler(CtrlHandler, TRUE);
+#else
+    signal(SIGINT, CtrlHandler);
 #endif
 
 	node->name = name;
@@ -241,6 +259,9 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 	node->sub_cb = 0;
 	node->def_cb = 0;
 
+	node->supported_transports = PS_TRANSPORT_UDP;
+    node->num_transports = 0;
+
 	node->_last_advertise = 0;
 	node->_last_check = 0;
 
@@ -252,8 +273,22 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 		ip = GetPrimaryIp();
 	}
 
+#ifdef _WIN32
+	node->group_id = GetCurrentProcessId() + (10000 * ((inet_addr(ip) >> 24) && 0xFF));
+#else
+	node->group_id = 0;// ignore the group
+#endif
+
+    unsigned int mc_bind_addr = INADDR_ANY;
 	unsigned int mc_addr = inet_addr("239.255.255.249");// todo make this configurable
-	if (broadcast)
+    if (strcmp(ip, "127.0.0.1") == 0)
+    {
+      // hack for localhost
+      broadcast = true;
+      node->advertise_addr = inet_addr("127.255.255.255");
+      mc_bind_addr = mc_bind_addr;
+    }
+	else if (broadcast)
 	{
 		//convert to a broadcast address (just the subnet wide one)
 		node->advertise_addr = inet_addr(ip);
@@ -302,7 +337,7 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 	getsockname(node->socket, (struct sockaddr*)&outaddr, &outlen);
 	node->port = ntohs(outaddr.sin_port);
 
-	printf("Bound to %i\n", node->port);
+	//printf("Bound to %i\n", node->port);
 
 	// set non-blocking i
 #ifdef _WIN32
@@ -321,7 +356,7 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 #ifdef ARDUINO
     fcntl(node->socket, F_SETFL, O_NONBLOCK);
 #endif
-#ifdef LINUX
+#ifdef __unix__
 	int flags = fcntl(node->socket, F_GETFL);
 	fcntl(node->socket, F_SETFL, flags | O_NONBLOCK);
 #endif
@@ -339,16 +374,22 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 	int opt = 1;
 	if (setsockopt(node->mc_socket, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt)) < 0)
 	{
-		perror("setsockopt");
+		perror("setsockopt reuse");
 		exit(EXIT_FAILURE);
 	}
 
 	if (broadcast)
 	{
+		// Enable broadcast on all sockets just in case
 		int opt = 1;
 		if (setsockopt(node->mc_socket, SOL_SOCKET, SO_BROADCAST, (char *)&opt, sizeof(opt)) < 0)
 		{
-			perror("setsockopt");
+			perror("setsockopt broadcast mc");
+			exit(EXIT_FAILURE);
+		}
+		if (setsockopt(node->socket, SOL_SOCKET, SO_BROADCAST, (char *)&opt, sizeof(opt)) < 0)
+		{
+			perror("setsockopt broadcast");
 			exit(EXIT_FAILURE);
 		}
 	}
@@ -356,7 +397,7 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 	// bind to port
 	struct sockaddr_in mc_address;
 	mc_address.sin_family = AF_INET;
-	mc_address.sin_addr.s_addr = htonl(node->addr);//INADDR_ANY;
+	mc_address.sin_addr.s_addr = htonl(mc_bind_addr);// Linux seems to need to be bound to INADDR_ANY for broadcast or multicast
 	mc_address.sin_port = htons(node->advertise_port);
 
 	if (bind(node->mc_socket, (const struct sockaddr*)&mc_address, sizeof(struct sockaddr_in)) < 0)
@@ -385,18 +426,30 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 #ifdef ARDUINO
     fcntl(node->mc_socket, F_SETFL, O_NONBLOCK);
 #endif
-#ifdef LINUX
-	int flags2 = fcntl(socket, F_GETFL);
+#ifdef __unix__
+	int flags2 = fcntl(node->mc_socket, F_GETFL);
 	fcntl(node->mc_socket, F_SETFL, flags2 | O_NONBLOCK);
 #endif
 
-	struct ip_mreq mreq;
+    // add sockets to events
+#ifndef PUBSUB_REAL_TIME
+    ps_event_set_create(&node->events);
+    ps_event_set_add_socket(&node->events, node->socket);
+    ps_event_set_add_socket(&node->events, node->mc_socket);
+#endif
+
+    if (broadcast)
+    {
+      return;
+    }
+     
+    struct ip_mreq mreq;
 	mreq.imr_multiaddr.s_addr = mc_addr;
-	mreq.imr_interface.s_addr = htonl(node->addr);// sets the interface to subscribe to multicast on
-	if (setsockopt(node->mc_socket, IPPROTO_IP, IP_ADD_MEMBERSHIP,
+	mreq.imr_interface.s_addr = htonl(INADDR_ANY);// Linux seems to require INADDR_ANY here
+    if (setsockopt(node->mc_socket, IPPROTO_IP, IP_ADD_MEMBERSHIP,
 		(char*)&mreq, sizeof(mreq)) < 0)
 	{
-		perror("setsockopt");
+		perror("setsockopt multicast add membership");
 		return;
 	}
 }
@@ -412,6 +465,15 @@ void ps_node_destroy(struct ps_node_t* node)
 	{
 		ps_sub_destroy(node->subs[i]);
 	}
+
+    for (unsigned int i = 0; i < node->supported_transports; i++)
+    {
+      node->transports[i].destroy(&node->transports[i]);
+    }
+
+#ifndef PUBSUB_REAL_TIME
+    ps_event_set_destroy(&node->events);
+#endif
 
 #ifdef _WIN32
 	closesocket(node->socket);
@@ -446,6 +508,7 @@ void ps_subscriber_options_init(struct ps_subscriber_options* options)
 	options->want_message_def = false;
 	options->cb = 0;
 	options->cb_data = 0;
+    options->preferred_transport = PS_TRANSPORT_UDP;
 }
 
 void ps_node_create_subscriber_adv(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,
@@ -475,6 +538,7 @@ void ps_node_create_subscriber_adv(struct ps_node_t* node, const char* topic, co
 	sub->allocator = allocator;
 	sub->ignore_local = options->ignore_local;
 	sub->skip = options->skip;
+    sub->preferred_transport = options->preferred_transport;
 
 	sub->want_message_definition = type ? options->want_message_def : true;
 	sub->received_message_def.fields = 0;
@@ -488,6 +552,7 @@ void ps_node_create_subscriber_adv(struct ps_node_t* node, const char* topic, co
 		sub->cb = options->cb;
 		sub->cb_data = options->cb_data;
 		sub->queue_size = 0;
+		sub->queue = 0;
 	}
 	else
 	{
@@ -595,6 +660,60 @@ static unsigned long GetTickCount64()
 }
 #endif
 
+#ifndef PUBSUB_REAL_TIME
+#include <pubsub/Events.h>
+int ps_node_wait(struct ps_node_t* node, unsigned int timeout_ms)
+{
+  ps_event_set_wait(&node->events, timeout_ms);
+  //todo actually build a wait set and add tcp sockets
+
+	// wait on the sockets or the passed event
+	/*HANDLE events[2];
+	events[0] = WSACreateEvent();
+	events[1] = WSACreateEvent();
+	WSAEventSelect(node->socket, events[0], FD_READ);
+	WSAEventSelect(node->mc_socket, events[1], FD_READ);
+	
+	WSAWaitForMultipleEvents(2, events, false, timeout_ms, false);
+
+	//int res = ps_node_spin(node);
+	// todo cache these
+
+	WSACloseEvent(events[0]);
+	WSACloseEvent(events[1]);*/
+
+	return 0;
+}
+
+// returns the number added
+int ps_node_create_events(struct ps_node_t* node, struct ps_event_set_t* events)
+{
+    ps_event_set_add_socket(events, node->socket);
+    ps_event_set_add_socket(events, node->mc_socket);
+
+/*	events[0] = ps_event_create();
+	events[1] = ps_event_create();
+
+#ifdef _WIN32
+	WSAEventSelect(node->socket, events[0].handle, FD_READ);
+	WSAEventSelect(node->mc_socket, events[1].handle, FD_READ);
+#else
+#endif*/
+
+	return 2;
+}
+#endif
+
+void ps_node_add_transport(struct ps_node_t* node, struct ps_transport_t* transport)
+{
+  node->num_transports++;
+  // todo dont hack here
+  node->transports = (struct ps_transport_t*)malloc(sizeof(struct ps_transport_t)*node->num_transports);
+  node->transports[0] = *transport;
+
+  node->supported_transports |= transport->uuid;
+}
+
 //returns nonzero if we got a message
 int ps_node_spin(struct ps_node_t* node)
 {
@@ -615,7 +734,7 @@ int ps_node_spin(struct ps_node_t* node)
 #else
 	unsigned long now = millis();
 #endif
-	if (node->_last_advertise + 25 * 1000 < now)
+	if (node->_last_advertise + 10 * 1000 < now)
 	{
 		node->_last_advertise = now;
 		//printf("Advertising\n");
@@ -633,6 +752,12 @@ int ps_node_spin(struct ps_node_t* node)
 		}
 	}
 
+    // check if any of our sockets are available
+    for (unsigned int i = 0; i < node->num_transports; i++)
+    {
+      node->transports[i].spin(&node->transports[i], node);
+    }
+
 	// this block holds the update for one protocol
 	// other protocols can add to this
 	int packet_count = 0;
@@ -645,6 +770,8 @@ int ps_node_spin(struct ps_node_t* node)
 
 		if (received_bytes <= 0)
 			break;
+
+        //printf("got transport packet\n");
 
 		struct ps_msg_info_t message_info;
 		message_info.address = ntohl(from.sin_addr.s_addr);
@@ -695,23 +822,8 @@ int ps_node_spin(struct ps_node_t* node)
 				memcpy(out_data, data + sizeof(struct ps_msg_header), data_size);
 			}
 
-			// maybe todo, this doesnt do fifo very correctly
-			// only does first newest than two old ones
-			//add it to the fifo packet queue which always shows the n most recent packets
-			//most recent is always first
-			//so lets push to the front (highest open index or highest if full)
-			if (sub->queue_size == 0)
-			{
-				sub->cb(out_data, data_size, sub->cb_data, &message_info);
-			}
-			else if (sub->queue_size == sub->queue_len)
-			{
-				sub->queue[sub->queue_size - 1] = out_data;
-			}
-			else
-			{
-				sub->queue[sub->queue_len++] = out_data;
-			}
+            ps_sub_enqueue(sub, out_data, data_size, &message_info);
+
 			//printf("Got message, queue len %i\n", sub->queue_len);
 
 			packet_count++;
@@ -767,7 +879,7 @@ int ps_node_spin(struct ps_node_t* node)
 
 			char* topic = (char*)&data[sizeof(struct ps_sub_req_header_t)];
 
-			printf("Got subscribe request for %s\n", topic);
+			//printf("Got subscribe request for %s\n", topic);
 
 			//check if we have a sub matching that topic
 			struct ps_pub_t* pub = 0;
@@ -801,8 +913,9 @@ int ps_node_spin(struct ps_node_t* node)
 			client.sequence_number = 0;
 			client.stream_id = p->sub_id;
 			client.modulo = p->skip > 0 ? p->skip + 1 : 0;
+            client.transport = 0;
 
-			printf("Got subscribe request, adding client if we haven't already\n");
+			//printf("Got subscribe request, adding client if we haven't already\n");
 			ps_pub_add_client(pub, &client);
 
 			//send out the data format to the client
@@ -874,8 +987,6 @@ int ps_node_spin(struct ps_node_t* node)
 
 			//send out the data format to the client
 			ps_pub_publish_accept(pub, &client, pub->message_definition);
-
-			//todo if it is a latched topic, need to publish our last value
 		}
 #endif
 	}
@@ -892,6 +1003,8 @@ int ps_node_spin(struct ps_node_t* node)
 		if (received_bytes <= 0)
 			break;
 
+        //printf("Got discovery msg \n");
+
 		unsigned int address = ntohl(from.sin_addr.s_addr);
 		unsigned int port = ntohs(from.sin_port);
 
@@ -901,9 +1014,9 @@ int ps_node_spin(struct ps_node_t* node)
 		//todo add enums for these
 		if (data[0] == PS_DISCOVERY_PROTOCOL_SUBSCRIBE_QUERY)
 		{
+            //printf("Got subscribe msg \n");
 			//subscribe query, from a node subscribing to a topic
-			int* addr = (int*)&data[1];
-			unsigned short* port = (unsigned short*)&data[5];
+            struct ps_subscribe_req_t* req = (struct ps_subscribe_req_t*)data;
 
 			char* topic = (char*)&data[7];
 
@@ -911,7 +1024,7 @@ int ps_node_spin(struct ps_node_t* node)
 			{
 				char* type = (char*)&data[strlen(topic) + 8];
 				char* node_name = type + 1 + strlen(type);
-				node->sub_cb(topic, type, node_name, 0);
+				node->sub_cb(topic, type, node_name, req);
 			}
 
 			//check if we have a sub matching that topic
@@ -943,7 +1056,7 @@ int ps_node_spin(struct ps_node_t* node)
 			//if we already have a sub for this, ignore
 			for (unsigned int i = 0; i < pub->num_clients; i++)
 			{
-				if (pub->clients[i].endpoint.port == *port && pub->clients[i].endpoint.address == *addr)
+				if (pub->clients[i].endpoint.port == req->port && pub->clients[i].endpoint.address == req->addr)
 				{
 					//printf("Got subscribe query from a current client, not advertising\n");
 					pub->clients[i].last_keepalive = GetTickCount64();
@@ -951,19 +1064,20 @@ int ps_node_spin(struct ps_node_t* node)
 				}
 				else if (i == pub->num_clients - 1)
 				{
-					printf("Got new subscribe query, advertising\n");
+					//printf("Got new subscribe query, advertising\n");
 					ps_node_advertise(pub);
 				}
 			}
 
 			if (pub->num_clients == 0)
 			{
-				printf("Got new subscribe query, advertising\n");
+				//printf("Got new subscribe query, advertising\n");
 				ps_node_advertise(pub);
 			}
 		}
 		else if (data[0] == PS_DISCOVERY_PROTOCOL_ADVERTISE)
 		{
+            //printf("Got advertise msg \n");
 			struct ps_advertise_req_t* p = (struct ps_advertise_req_t*)data;
 
 			char* topic = (char*)&data[sizeof(struct ps_advertise_req_t)];
@@ -981,6 +1095,7 @@ int ps_node_spin(struct ps_node_t* node)
 			struct ps_sub_t* sub = 0;
 			for (unsigned int i = 0; i < node->num_subs; i++)
 			{
+                //printf("%s\n", node->subs[i]->topic);
 				if (strcmp(node->subs[i]->topic, topic) == 0)
 				{
 					sub = node->subs[i];
@@ -989,13 +1104,20 @@ int ps_node_spin(struct ps_node_t* node)
 			}
 			if (sub == 0)
 			{
-				//printf("Got advertise notice, but it was for a topic we don't have\n");
+				//printf("Got advertise notice, but it was for a topic we don't have %s\n", topic);
 				continue;
 			}
 
 			if (sub->ignore_local && sub->node->port == p->port && sub->node->addr == p->addr)
 			{
 				printf("Got advertise notice, but it was for a local pub which we are set to ignore\n");
+				continue;
+			}
+
+			// check group id
+			if (sub->ignore_local && p->group_id != 0 && p->group_id == node->group_id)
+			{
+				printf("We are a member of this group, ignoring advertise");
 				continue;
 			}
 
@@ -1015,20 +1137,28 @@ int ps_node_spin(struct ps_node_t* node)
 				continue;
 			}
 
-
 			// todo subscribe to the most relevant protocol
 			// check if we are already getting data from this person, if so lets not send another request to their advertise
 
 			//printf("Got advertise notice for a topic we need\n");
-
+            // pick which protocol to subscribe with
 			struct ps_endpoint_t ep;
 			ep.address = p->addr;
 			ep.port = p->port;
-			ps_send_subscribe(sub, &ep);
+            if (sub->preferred_transport == PS_TRANSPORT_UDP || p->transports == PS_TRANSPORT_UDP)
+            {
+			    ps_send_subscribe(sub, &ep);
+            }
+            else
+            {
+                // for now we just assume TCP is the first transport
+                // todo support more transports
+                node->transports[0].subscribe(&node->transports[0], sub, &ep);
+            }
 		}
 		else if (data[0] == PS_DISCOVERY_PROTOCOL_UNSUBSCRIBE)
 		{
-			printf("Got unsubscribe request\n");
+			//printf("Got unsubscribe request\n");
 
 			int* addr = (int*)&data[1];
 			unsigned short* port = (unsigned short*)&data[5];

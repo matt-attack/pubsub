@@ -3,7 +3,8 @@
 
 #include "../high_level_api/Node.h"
 #include "../high_level_api/Logging.h"
-#include "../src/System.h"
+#include "../high_level_api/Spinners.h"
+#include <pubsub/System.h>
 
 #include "../msg/std_msgs__String.msg.h"
 
@@ -17,6 +18,7 @@ int main()
 
 	pubsub::Spinner spinner;
 	spinner.addNode(node);
+	spinner.start();
 
 	int i = 0;
 	while (ps_okay())

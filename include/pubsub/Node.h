@@ -6,6 +6,7 @@ extern "C"
 #endif
 
 #include <stdbool.h>
+#include <stdint.h>
 
 struct ps_sub_t;
 struct ps_pub_t;
@@ -18,9 +19,44 @@ typedef unsigned int ps_socket_t;
 typedef int ps_socket_t;
 #endif
 
+// defines a transport implementation
+//so when you request a subscription, you would request a transport type 
+//then the pub can either do it, or fall back to default UDP transport
+struct ps_event_set_t;
+struct ps_transport_t;
+struct ps_node_t;
+struct ps_endpoint_t;
+typedef void(*ps_transport_fn_pub_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher, struct ps_client_t* client, const void* message, uint32_t length);
+typedef void(*ps_transport_fn_spin_t)(struct ps_transport_t* transport, struct ps_node_t* node);
+typedef void(*ps_transport_fn_add_publisher_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher);
+typedef void(*ps_transport_fn_remove_publisher_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher);
+typedef void(*ps_transport_fn_subscribe_t)(struct ps_transport_t* transport, struct ps_sub_t* subscriber, struct ps_endpoint_t* ep);
+typedef void(*ps_transport_fn_unsubscribe_t)(struct ps_transport_t* transport, struct ps_sub_t* subscriber);
+typedef unsigned int(*ps_transport_fn_num_subscribers_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher);
+typedef unsigned int(*ps_transport_fn_add_wait_set_t)(struct ps_transport_t* transport, struct ps_event_set_t* events);
+typedef void(*ps_transport_fn_destroy_t)(struct ps_transport_t* transport);
+struct ps_transport_t
+{
+	unsigned short uuid;// unique id for this transport type, listed in advertisements for it
+    void* impl;
+	ps_transport_fn_pub_t pub;
+	ps_transport_fn_spin_t spin;
+	ps_transport_fn_num_subscribers_t subscriber_count;
+	ps_transport_fn_subscribe_t subscribe;
+	ps_transport_fn_unsubscribe_t unsubscribe;
+	ps_transport_fn_add_publisher_t add_pub;
+	ps_transport_fn_remove_publisher_t remove_pub;
+    ps_transport_fn_add_wait_set_t add_wait_set;
+    ps_transport_fn_destroy_t destroy;
+};
+
 typedef void(*ps_adv_cb_t)(const char* topic, const char* type, const char* node, const struct ps_advertise_req_t* data);
-typedef void(*ps_sub_cb_t)(const char* topic, const char* type, const char* node, void* data);
+typedef void(*ps_sub_cb_t)(const char* topic, const char* type, const char* node, const struct ps_subscribe_req_t* data);
 typedef void(*ps_msg_def_cb_t)(const struct ps_message_definition_t* definition);
+
+#ifndef PUBSUB_REAL_TIME
+#include <pubsub/Events.h>
+#endif
 struct ps_node_t
 {
 	const char* name;
@@ -39,6 +75,8 @@ struct ps_node_t
 	unsigned int addr;
 	unsigned int advertise_addr;// in network layout because we dont need it in host
 
+	unsigned int group_id; // indicates which group this node is a part of
+
 	int sub_index;
 
 	//optional callbacks
@@ -49,7 +87,21 @@ struct ps_node_t
 	//implementation data
 	unsigned long long _last_advertise;
 	unsigned long long _last_check;
+
+
+#ifndef PUBSUB_REAL_TIME
+    struct ps_event_set_t events;
+#endif
+
+	int supported_transports;
+
+#ifndef ARDUINO
+	unsigned int num_transports;
+	struct ps_transport_t* transports;
+#endif
 };
+
+void ps_node_add_transport(struct ps_node_t* node, struct ps_transport_t* transport);
 
 // describes where a message came from
 struct ps_msg_info_t
@@ -94,8 +146,19 @@ struct ps_advertise_req_t
 	char id;
 	int addr;
 	unsigned short port;
-	unsigned int transports;// bitmask showing supported protocols for this subscriber
+	unsigned int transports;// bitmask showing supported protocols for this publisher
 	unsigned int type_hash;// to see if the type is correct
+	unsigned int group_id;// unique (hopefully) id that indicates which process this node is a part of
+};
+#pragma pack(pop)
+
+#pragma pack(push)
+#pragma pack(1)
+struct ps_subscribe_req_t
+{
+  char id;
+  int addr;
+  unsigned short port;
 };
 #pragma pack(pop)
 
@@ -108,19 +171,6 @@ struct ps_subscribe_accept_t
 	//message definition goes here...
 };
 #pragma pack(pop)
-
-// defines a transport implementation
-//so when you request a subscription, you would request a transport type 
-//then the pub can either do it, or fall back to default UDP transport
-
-typedef void(*ps_transport_fn_pub_t)(const char* topic, const char* type, const char* node, void* data);
-typedef void(*ps_transport_fn_spin_t)(const char* topic, const char* type, const char* node, void* data);
-struct ps_transport_t
-{
-	unsigned short uuid;// unique id for this transport type, listed in advertisements for it
-	ps_transport_fn_pub_t pub;
-	ps_transport_fn_spin_t spin;
-};
 
 //not threadsafe, but thats obvious isnt it
 // set broadcast to true to use that for advertising instead of multicast
@@ -149,6 +199,7 @@ struct ps_subscriber_options
 	unsigned int skip;// skips to every nth message for throttling
 	ps_subscriber_fn_cb_t cb;
 	void* cb_data;
+    unsigned int preferred_transport;// falls back to udp otherwise
 };
 
 void ps_subscriber_options_init(struct ps_subscriber_options* options);
@@ -167,6 +218,20 @@ void ps_node_create_subscriber_cb(struct ps_node_t* node, const char* topic, con
 );
 
 int ps_node_spin(struct ps_node_t* node);
+
+// Functions to wait on a node
+#ifndef PUBSUB_REAL_TIME
+struct ps_event_set_t;
+// waits for an event in the node to trigger before returning
+// note this creates and destroys events so is probably not the fastest
+// way to wait, the functions below should be better
+// used to avoid polling spin
+int ps_node_wait(struct ps_node_t* node, unsigned int timeout_ms);
+
+// creates all the events that would need to be waited on for this node
+// returns the number added
+int ps_node_create_events(struct ps_node_t* node, struct ps_event_set_t* events);
+#endif
 
 int serialize_string(char* data, const char* str);
 
