@@ -9,7 +9,7 @@
 
 #include <pubsub/Net.h>
 
-void ps_sub_enqueue(struct ps_sub_t* sub, char* out_data, int data_size, const struct ps_msg_info_t* message_info)
+void ps_sub_enqueue(struct ps_sub_t* sub, void* out_data, int data_size, const struct ps_msg_info_t* message_info)
 {
   // maybe todo, this doesnt do fifo very correctly
   // only does first newest than two old ones

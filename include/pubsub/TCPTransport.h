@@ -12,6 +12,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifdef __unix__
+#include <signal.h>
+#endif
+
 /*
 
 typedef void(*ps_transport_fn_pub_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher, void* message);
@@ -82,7 +86,11 @@ void remove_client_socket(struct ps_tcp_transport_impl* transport, int socket, s
     }
   }
 
+#ifdef _WIN32
   closesocket(socket);
+#else
+  close(socket);
+#endif
 
   struct ps_tcp_client_t* old_clients = transport->clients;
   transport->num_clients -= 1;
@@ -343,7 +351,11 @@ void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_
       }
     }
 
+#ifdef _WIN32
     SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
+#else
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+#endif
 
     struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
@@ -423,16 +435,28 @@ void ps_tcp_transport_destroy(struct ps_transport_t* transport)
       free(impl->connections[i].packet_data);
     }
     ps_event_set_remove_socket(&impl->connections[i].subscriber->node->events, impl->connections[i].socket);
+#ifdef _WIN32
     closesocket(impl->connections[i].socket);
+#else
+    close(impl->connections[i].socket);
+#endif
   }
 
   for (int i = 0; i < impl->num_clients; i++)
   {
     ps_event_set_remove_socket(&impl->clients[i].publisher->node->events, impl->clients[i].socket);
+#ifdef _WIN32
     closesocket(impl->clients[i].socket);
+#else
+    close(impl->clients[i].socket);
+#endif
   }
 
+#ifdef _WIN32
   closesocket(impl->socket);
+#else
+  close(impl->socket);
+#endif
 
   if (impl->num_clients)
   {
@@ -449,6 +473,10 @@ void ps_tcp_transport_destroy(struct ps_transport_t* transport)
 
 void ps_tcp_transport_init(struct ps_transport_t* transport, struct ps_node_t* node)
 {
+#ifdef __unix__
+    signal(SIGPIPE, SIG_IGN);
+#endif
+
     transport->spin = ps_tcp_transport_spin;
     transport->subscribe = ps_tcp_transport_subscribe;
     transport->destroy = ps_tcp_transport_destroy;
