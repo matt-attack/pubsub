@@ -428,7 +428,7 @@ void ps_tcp_transport_destroy(struct ps_transport_t* transport)
 
   for (int i = 0; i < impl->num_clients; i++)
   {
-    //ps_event_set_add_socket(&subscriber->node->events, impl->client_sockets[i]);
+    //ps_event_set_remove_socket(&subscriber->node->events, impl->client_sockets[i]);
     closesocket(impl->clients[i].socket);
   }
 

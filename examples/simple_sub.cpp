@@ -16,7 +16,7 @@ int main()
 	}, 10);
 
 	pubsub::BlockingSpinner spinner;
-	spinner.addNode(node);
+	spinner.setNode(node);
 
 	spinner.wait();
 

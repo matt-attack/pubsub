@@ -26,10 +26,11 @@ static std::map<std::string, std::string> _remappings;
 // how intraprocess passing works
 class SubscriberBase;
 class PublisherBase;
-//static std::mutex _subscriber_mutex;
-//static std::multimap<std::string, SubscriberBase*> _subscribers;
+
+// this mutex protects both of the below
 static std::mutex _publisher_mutex;
 static std::multimap<std::string, PublisherBase*> _publishers;
+static std::multimap<std::string, SubscriberBase*> _subscribers;
 
 // this assumes topic and ns are properly checked
 // ns should not have a leading slash, topic should if it is absolute
@@ -295,6 +296,15 @@ public:
 		//add me to the publisher list
 		_publisher_mutex.lock();
 		_publishers.insert(std::pair<std::string, PublisherBase*>(remapped_topic_, this));
+
+        // look for any matching subscribers and add them to our list
+        auto iterpair = _subscribers.equal_range(topic);
+        for (auto it = iterpair.first; it != iterpair.second; ++it)
+        {
+          node.lock_.lock();
+          subs_.push_back(it->second);
+          node.lock_.unlock();
+        }
 		_publisher_mutex.unlock();
 	}
 
@@ -421,6 +431,8 @@ protected:
 			}
 		}
 
+        _subscribers.insert(std::pair<std::string, SubscriberBase*>(topic, sub));
+
 		_publisher_mutex.unlock();
 	}
 
@@ -441,6 +453,17 @@ protected:
 				it->second->GetNode()->lock_.unlock();
 			}
 		}
+
+        //remove me from the subscriber list
+        auto subiterpair = _subscribers.equal_range(topic);
+        for (auto it = subiterpair.first; it != subiterpair.second; ++it)
+        {
+          if (it->second == sub)
+          {
+            _subscribers.erase(it);
+            break;
+          }
+        }
 
 		_publisher_mutex.unlock();
 	}

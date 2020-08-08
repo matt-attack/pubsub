@@ -9,20 +9,18 @@ namespace pubsub
 {
 class BlockingSpinner
 {
-	std::vector<Node*> nodes_;
+	Node* node_;
 
 	bool running_;
 
 	std::thread thread_;
-	std::mutex list_mutex_;
 
-	ps_event_set_t events_;
 public:
 
 	// todo make it work with more than one thread
-	BlockingSpinner(int num_threads = 1) : running_(false)
+	BlockingSpinner(int num_threads = 1) : running_(false), node_(0)
 	{
-      ps_event_set_create(&events_);
+
 	}
 
 	void start()
@@ -32,32 +30,28 @@ public:
 		{
 			while (running_ && ps_okay())
 			{
-				list_mutex_.lock();
-				if (ps_event_set_count(&events_) == 0)
+				if (node_ == 0)
 				{
 					ps_sleep(10);
+                    continue;
 				}
 				else
 				{
-					ps_event_set_wait(&events_, 1000);
+                    ps_node_wait(node_->getNode(), 1000);
 				}
-				for (auto node : nodes_)
-				{
-					node->lock_.lock();
-					ps_node_spin(node->getNode());
+				node_->lock_.lock();
+				ps_node_spin(node_->getNode());
 
-					// todo how to make this not scale with subscriber count...
-					// though, it isnt very important here
-					// its probably worth more effort just make it not run any of this if we get no messages
-					// we got a message, now call a subscriber
-					for (size_t i = 0; i < node->subscribers_.size(); i++)
-					{
-						// this doesnt ensure switching subs, but works
-						while (node->subscribers_[i]->CallOne()) {};
-					}
-					node->lock_.unlock();
+				// todo how to make this not scale with subscriber count...
+				// though, it isnt very important here
+				// its probably worth more effort just make it not run any of this if we get no messages
+				// we got a message, now call a subscriber
+				for (size_t i = 0; i < node_->subscribers_.size(); i++)
+				{
+					// this doesnt ensure switching subs, but works
+					while (node_->subscribers_[i]->CallOne()) {};
 				}
-				list_mutex_.unlock();
+				node_->lock_.unlock();
 			}
 		});
 	}
@@ -68,18 +62,11 @@ public:
 		{
 			stop();
 		}
-
-		ps_event_set_destroy(&events_);
 	}
 
-	void addNode(Node& node)
+	void setNode(Node& node)
 	{
-		list_mutex_.lock();
-
-		// build a wait list for all nodes
-		ps_node_create_events(node.getNode(), &events_);
-		nodes_.push_back(&node);
-		list_mutex_.unlock();
+        node_ = &node;
 	}
 
 	void wait()
@@ -110,20 +97,20 @@ public:
 // So do your own loop if you need better
 class BlockingSpinnerWithTimers
 {
-	std::vector<Node*> nodes_;
+	Node* node_;
 
 	bool running_;
 
 	std::thread thread_;
 	std::mutex list_mutex_;
 
-	ps_event_set_t events_;
+	//ps_event_set_t events_;
 public:
 
 	// todo make it work with more than one thread
-	BlockingSpinnerWithTimers(int num_threads = 1) : running_(false)
+	BlockingSpinnerWithTimers(int num_threads = 1) : running_(false), node_(0)
 	{
-      ps_event_set_create(&events_);
+      //ps_event_set_create(&events_);
 	}
 
 	~BlockingSpinnerWithTimers()
@@ -134,17 +121,18 @@ public:
 		}
 
 		// close out any events
-		ps_event_set_destroy(&events_);
+		//ps_event_set_destroy(&events_);
 	}
 
-	void addNode(Node& node)
+	void setNode(Node& node)
 	{
-		list_mutex_.lock();
+        node_ = &node;
+		//list_mutex_.lock();
 
 		// build a wait list for all nodes
-		ps_node_create_events(node.getNode(), &events_);
-		nodes_.push_back(&node);
-		list_mutex_.unlock();
+		//ps_node_create_events(node.getNode(), &events_);
+		//nodes_.push_back(&node);
+		//list_mutex_.unlock();
 	}
 
 	void start()
@@ -156,10 +144,11 @@ public:
 			{
                 //printf("Entering thread\n");
 				list_mutex_.lock();
-				if (ps_event_set_count(&events_) == 0)
+				if (node_ == 0)//ps_event_set_count(&events_) == 0)
 				{
                     printf("Waiting for events\n");
 					ps_sleep(10);
+                    continue;
 				}
 				else
 				{
@@ -186,7 +175,8 @@ public:
                         //printf("setting timeout to %i\n", timeout);
 					}
 					list_mutex_.unlock();
-					ps_event_set_wait(&events_, timeout);
+                    ps_node_wait(node_->getNode(), timeout);
+					//ps_event_set_wait(&events_, timeout);
 					list_mutex_.lock();
 				}
 
@@ -205,21 +195,22 @@ public:
 				}
 
 				// check all nodes
-				for (auto node : nodes_)
+				//for (auto node : nodes_)
+                if (node_)
 				{
-					node->lock_.lock();
-					ps_node_spin(node->getNode());
+					node_->lock_.lock();
+					ps_node_spin(node_->getNode());
 
 					// todo how to make this not scale with subscriber count...
 					// though, it isnt very important here
 					// its probably worth more effort just make it not run any of this if we get no messages
 					// we got a message, now call a subscriber
-					for (size_t i = 0; i < node->subscribers_.size(); i++)
+					for (size_t i = 0; i < node_->subscribers_.size(); i++)
 					{
 						// this doesnt ensure switching subs, but works
-						while (node->subscribers_[i]->CallOne()) {};
+						while (node_->subscribers_[i]->CallOne()) {};
 					}
-					node->lock_.unlock();
+					node_->lock_.unlock();
 				}
 				list_mutex_.unlock();
 			}

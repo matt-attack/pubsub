@@ -17,7 +17,7 @@ int main()
 	pubsub::Publisher<std_msgs::Image> image_pub(node, "/image");
 
 	pubsub::BlockingSpinnerWithTimers spinner;
-	spinner.addNode(node);
+	spinner.setNode(node);
 
 	int i = 0;
 	spinner.addTimer(0.3333, [&]()
