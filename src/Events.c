@@ -1,4 +1,6 @@
-#include <pubsub/Events.h>
+#ifndef ARDUINO
+
+#include <../include/pubsub/Events.h>
 
 #include <stdbool.h>
 
@@ -181,3 +183,5 @@ void ps_event_set_wait(struct ps_event_set_t* set, unsigned int timeout_ms)
   }
 #endif
 }
+
+#endif

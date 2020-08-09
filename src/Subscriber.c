@@ -1,13 +1,13 @@
-#include <pubsub/Subscriber.h>
-#include <pubsub/Publisher.h>
-#include <pubsub/Node.h>
+#include <../include/pubsub/Subscriber.h>
+#include <../include/pubsub/Publisher.h>
+#include <../include/pubsub/Node.h>
 
 #include <stdio.h>
 #ifndef ANDROID
 #include <stdlib.h>
 #endif
 
-#include <pubsub/Net.h>
+#include <../include/pubsub/Net.h>
 
 void ps_sub_enqueue(struct ps_sub_t* sub, void* out_data, int data_size, const struct ps_msg_info_t* message_info)
 {

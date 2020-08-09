@@ -1,12 +1,12 @@
-#include <pubsub/Publisher.h>
-#include <pubsub/Node.h>
+#include <../include/pubsub/Publisher.h>
+#include <../include/pubsub/Node.h>
 
 #include <stdio.h>
 #ifndef ANDROID
 #include <stdlib.h>
 #endif
 
-#include <pubsub/Net.h>
+#include <../include/pubsub/Net.h>
 
 void ps_pub_publish_client(struct ps_pub_t* pub, struct ps_client_t* client, struct ps_msg_t* msg)
 {

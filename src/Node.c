@@ -1,11 +1,11 @@
-#include <pubsub/Node.h>
-#include <pubsub/Publisher.h>
-#include <pubsub/Subscriber.h>
-#include <pubsub/Serialization.h>
+#include <../include/pubsub/Node.h>
+#include <../include/pubsub/Publisher.h>
+#include <../include/pubsub/Subscriber.h>
+#include <../include/pubsub/Serialization.h>
 
 #include <stdio.h>
 
-#include <pubsub/Net.h>
+#include <../include/pubsub/Net.h>
 
 #include <string.h>
 
@@ -245,7 +245,9 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 
 #ifdef _WIN32
 	SetConsoleCtrlHandler(CtrlHandler, TRUE);
-#else
+#endif
+
+#ifdef __unix__
     signal(SIGINT, CtrlHandler);
 #endif
 
@@ -260,8 +262,10 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 	node->def_cb = 0;
 
 	node->supported_transports = PS_TRANSPORT_UDP;
+#ifndef PUBSUB_REAL_TIME
     node->num_transports = 0;
-
+#endif
+	
 	node->_last_advertise = 0;
 	node->_last_check = 0;
 
@@ -466,12 +470,12 @@ void ps_node_destroy(struct ps_node_t* node)
 		ps_sub_destroy(node->subs[i]);
 	}
 
+#ifndef PUBSUB_REAL_TIME
     for (unsigned int i = 0; i < node->supported_transports; i++)
     {
       node->transports[i].destroy(&node->transports[i]);
     }
 
-#ifndef PUBSUB_REAL_TIME
     ps_event_set_destroy(&node->events);
 #endif
 
@@ -704,6 +708,7 @@ int ps_node_create_events(struct ps_node_t* node, struct ps_event_set_t* events)
 }
 #endif
 
+#ifndef PUBSUB_REAL_TIME
 void ps_node_add_transport(struct ps_node_t* node, struct ps_transport_t* transport)
 {
   node->num_transports++;
@@ -713,6 +718,7 @@ void ps_node_add_transport(struct ps_node_t* node, struct ps_transport_t* transp
 
   node->supported_transports |= transport->uuid;
 }
+#endif
 
 //returns nonzero if we got a message
 int ps_node_spin(struct ps_node_t* node)
@@ -753,10 +759,12 @@ int ps_node_spin(struct ps_node_t* node)
 	}
 
     // check if any of our sockets are available
+	#ifndef PUBSUB_REAL_TIME
     for (unsigned int i = 0; i < node->num_transports; i++)
     {
       node->transports[i].spin(&node->transports[i], node);
     }
+	#endif 
 
 	// this block holds the update for one protocol
 	// other protocols can add to this
@@ -1145,6 +1153,7 @@ int ps_node_spin(struct ps_node_t* node)
 			struct ps_endpoint_t ep;
 			ep.address = p->addr;
 			ep.port = p->port;
+			#ifndef PUBSUB_REAL_TIME
             if (sub->preferred_transport == PS_TRANSPORT_UDP || p->transports == PS_TRANSPORT_UDP)
             {
 			    ps_send_subscribe(sub, &ep);
@@ -1155,6 +1164,9 @@ int ps_node_spin(struct ps_node_t* node)
                 // todo support more transports
                 node->transports[0].subscribe(&node->transports[0], sub, &ep);
             }
+			#else
+			ps_send_subscribe(sub, &ep);
+			#endif
 		}
 		else if (data[0] == PS_DISCOVERY_PROTOCOL_UNSUBSCRIBE)
 		{

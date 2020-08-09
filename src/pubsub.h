@@ -6,6 +6,6 @@
 #define PUBSUB_NO_ALT_PROTOCOLS
 #define PUBSUB_REAL_TIME
 
-#include "Node.h"
-#include "Subscriber.h"
-#include "Publisher.h"
+#include "../include/pubsub/Node.h"
+#include "../include/pubsub/Subscriber.h"
+#include "../include/pubsub/Publisher.h"

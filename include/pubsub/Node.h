@@ -54,7 +54,14 @@ typedef void(*ps_adv_cb_t)(const char* topic, const char* type, const char* node
 typedef void(*ps_sub_cb_t)(const char* topic, const char* type, const char* node, const struct ps_subscribe_req_t* data);
 typedef void(*ps_msg_def_cb_t)(const struct ps_message_definition_t* definition);
 
+// As a double check
+#ifdef ARDUINO
 #ifndef PUBSUB_REAL_TIME
+#define PUBSUB_REAL_TIME
+#endif
+#endif
+
+#ifndef PUBSUB_REAL_TIME 
 #include <pubsub/Events.h>
 #endif
 struct ps_node_t
@@ -101,7 +108,9 @@ struct ps_node_t
 #endif
 };
 
+#ifndef PUBSUB_REAL_TIME
 void ps_node_add_transport(struct ps_node_t* node, struct ps_transport_t* transport);
+#endif 
 
 // describes where a message came from
 struct ps_msg_info_t

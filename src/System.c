@@ -1,4 +1,4 @@
-#include <pubsub/System.h>
+#include <../include/pubsub/System.h>
 
 #ifdef _WIN32
 #include <Windows.h>
