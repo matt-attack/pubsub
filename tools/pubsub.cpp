@@ -169,7 +169,7 @@ int main(int num_args_real, char** args)
 	node.def_cb = [](const ps_message_definition_t* def)
 	{
 		//printf("got message definition info");
-		definition = *def;
+		ps_copy_message_definition(&definition, def);
 	};
 
 	// Query the other nodes in the network for their data

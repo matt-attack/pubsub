@@ -206,10 +206,10 @@ std::string generate(const char* definition, const char* name)
 		}
 	}
 
-	for (auto field : fields)
+	/*for (auto field : fields)
 	{
 		printf("Got field %s of type %s\n", field.name.c_str(), field.type.c_str());
-	}
+	}*/
 
 	// convert the name into a type
 	std::string type_name;
@@ -546,7 +546,7 @@ int main(int num_args, char** args)
 	// okay, read in each message file then lets generate things for it
 	for (int i = 1; i < num_args; i++)
 	{
-		printf("%s\n", args[i]);
+		//printf("%s\n", args[i]);
 		std::ifstream t(args[i], std::ios::binary);
 		std::string str;
 

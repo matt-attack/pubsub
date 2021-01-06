@@ -31,7 +31,7 @@ extern "C"
 	struct ps_field_t
 	{
 		ps_field_types type;
-		char* name;
+		const char* name;
 		unsigned int length;//length of the array, 0 if dynamic
 		unsigned short content_length;//number of fields inside this array
 	};
@@ -50,7 +50,7 @@ extern "C"
 	struct ps_message_definition_t
 	{
 		unsigned int hash;
-		char* name;
+		const char* name;
 		unsigned int num_fields;
 		struct ps_field_t* fields;
 		ps_fn_encode_t encode;
@@ -66,6 +66,8 @@ extern "C"
 	void ps_deserialize_print(const void* data, const struct ps_message_definition_t* definition);
 
 	void ps_free_message_definition(struct ps_message_definition_t* definition);
+
+	void ps_copy_message_definition(struct ps_message_definition_t* dst, const struct ps_message_definition_t* src);
 
 	void ps_print_definition(const struct ps_message_definition_t* definition);
 

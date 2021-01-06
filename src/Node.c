@@ -932,10 +932,13 @@ int ps_node_spin(struct ps_node_t* node)
 
 				// todo fix memory leak here
 				struct ps_message_definition_t def;
-				def.name = malloc(strlen(type) + 1);
-				strcpy(def.name, type);
+				char * name = malloc(strlen(type) + 1);
+				strcpy(name, type);
+				def.name = name;
 				ps_deserialize_message_definition(&data[1 + strlen(type) + 1], &def);
 				node->def_cb(&def);
+				// if they wanted to keep it, they should have made a copy. Free it.
+				ps_free_message_definition(&def);
 			}
 		}
 #ifndef PUBSUB_NO_ALT_PROTOCOLS
