@@ -30,6 +30,14 @@ public:
 		AddMulti(names, "Display this message.");
 	}
 
+    ~ArgParser()
+    {
+        for (auto& arg: arg_list_)
+        {
+            delete arg;
+        }
+    }
+
 	void AddMulti(std::vector<std::string> names, const std::string& description, const std::string& default_value = "")
 	{
 		Argument* a = new Argument;

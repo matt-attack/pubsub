@@ -7,7 +7,7 @@ void ps_sleep(unsigned int time_ms)
 	Sleep(time_ms);
 }
 
-unsigned long long GetTimeMs()
+uint64_t GetTimeMs()
 {
 	return GetTickCount64();
 }
@@ -18,12 +18,11 @@ void ps_sleep(unsigned int time_ms)
 	usleep(time_ms*1000);
 }
 
-unsigned long long GetTimeMs()
+uint64_t GetTimeMs()
 {
     struct timeval te; 
     gettimeofday(&te, 0); // get current time
-    long long milliseconds = te.tv_sec*1000LL + te.tv_usec/1000; // calculate milliseconds
-    // printf("milliseconds: %lld\n", milliseconds);
+    uint64_t milliseconds = te.tv_sec*1000LL + te.tv_usec/1000; // calculate milliseconds
     return milliseconds;
 }
 #endif
