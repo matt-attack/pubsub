@@ -520,7 +520,9 @@ std::string generate(const char* definition, const char* name)
 		output += "  }\n\n";
 	}
 	output += "  static const ps_message_definition_t* GetDefinition()\n  {\n";
-	output += "    return &" + type_name + "_def;\n  }\n";
+	output += "    return &" + type_name + "_def;\n  }\n\n";
+	output += "  ps_msg_t Encode() const\n  {\n";
+	output += "    return " + ns + "__" + raw_name + "_encode(0, this);\n  }\n";
 	output += "};\n";
 	output += "typedef std::shared_ptr<" + raw_name + "> " + raw_name + "SharedPtr;\n";
 	output += "}\n";
@@ -542,9 +544,14 @@ int main(int num_args, char** args)
 	// ex: string.msg std_msgs/String
 	//num_args = 2;
 	//args[1] = "C:\\Users\\space\\Desktop\\pubsub_proto\\PubSub\\msg\\std_msgs__Joy.txt";
+    if ((num_args-1)%2 != 0)
+    {
+        printf("Not enough arguments!");
+        return -1;
+    }
 
 	// okay, read in each message file then lets generate things for it
-	for (int i = 1; i < num_args; i++)
+	for (int i = 1; i < num_args; i+=3)
 	{
 		//printf("%s\n", args[i]);
 		std::ifstream t(args[i], std::ios::binary);
@@ -584,8 +591,7 @@ int main(int num_args, char** args)
 		std::string output = generate(str.c_str(), name.c_str());
 
 		// write it back to file
-		std::string out_name = args[i];
-		out_name += ".h";
+		std::string out_name = args[i+1];
 		std::ofstream o(out_name, std::ios::binary);
 		o << output;
 	}
