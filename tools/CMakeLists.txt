@@ -31,13 +31,13 @@ macro(generate_messages)
   set(MESSAGE_DEPS)
   foreach (_file ${ARG_FILES})
     add_custom_command(
-	  COMMAND $<TARGET_FILE:pubsub_msg_gen> ${_file} ../include/${PROJECT_NAME}/${_file}.h
+	  COMMAND $<TARGET_FILE:pubsub_msg_gen> ${_file} ${PROJECT_NAME} ../include/${PROJECT_NAME}/${_file}.h
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/${ARG_DIRECTORY}/
       DEPENDS ${PROJECT_SOURCE_DIR}/${ARG_DIRECTORY}/${_file} pubsub_msg_gen
-      OUTPUT ${PROJECT_SOURCE_DIR}/${ARG_DIRECTORY}/../include/${PROJECT_NAME}${_file}.h
+      OUTPUT ${PROJECT_SOURCE_DIR}/${ARG_DIRECTORY}/../include/${PROJECT_NAME}/${_file}.h
     )
 
-    set(MESSAGE_DEPS ${MESSAGE_DEPS} ${PROJECT_SOURCE_DIR}/${ARG_DIRECTORY}/../include/${PROJECT_NAME}${_file}.h)
+    set(MESSAGE_DEPS ${MESSAGE_DEPS} ${PROJECT_SOURCE_DIR}/${ARG_DIRECTORY}/../include/${PROJECT_NAME}/${_file}.h)
   endforeach()
 
   add_custom_target(${ARG_TARGET}
@@ -46,10 +46,10 @@ macro(generate_messages)
 endmacro()
 
 generate_messages(FILES 
-  std_msgs__Joy.msg
-  std_msgs__String.msg 
-  std_msgs__Float.msg
-  std_msgs__Image.msg
+  Joy.msg
+  String.msg 
+  Float.msg
+  Image.msg
 )
 
 

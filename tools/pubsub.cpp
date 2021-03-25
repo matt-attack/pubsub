@@ -497,7 +497,7 @@ int main(int num_args_real, char** args)
 
 				printf("Got message description, publishing...\n");
 				// print the message format as a string
-				ps_print_definition(&definition);
+				ps_print_definition(&definition, true);
 
 				return 0;
 			}

@@ -8,7 +8,7 @@
 
 #include <pubsub/TCPTransport.h>
 
-#include "../msg/std_msgs__String.msg.h"
+#include <pubsub/String.msg.h>
 
 
 int main()
@@ -21,12 +21,12 @@ int main()
     ps_node_add_transport(&node, &tcp_transport);
 
 	struct ps_pub_t string_pub;
-	ps_node_create_publisher(&node, "/data", &std_msgs__String_def, &string_pub, true);
+	ps_node_create_publisher(&node, "/data", &pubsub__String_def, &string_pub, true);
 
 	struct ps_pub_t other_pub;
 
 	// user is responsible for lifetime of the message they publish
-	struct std_msgs__String rmsg;
+	struct pubsub__String rmsg;
 	rmsg.value = "Hello";
 	//ps_msg_t msg = std_msgs__String_encode(&rmsg);
 	//ps_pub_publish(&string_pub, &msg);

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -69,9 +71,9 @@ extern "C"
 
 	void ps_copy_message_definition(struct ps_message_definition_t* dst, const struct ps_message_definition_t* src);
 
-	void ps_print_definition(const struct ps_message_definition_t* definition);
+	void ps_print_definition(const struct ps_message_definition_t* definition, bool print_name);
 
-	void ps_msg_alloc(unsigned int size, struct ps_msg_t* out_msg);
+	void ps_msg_alloc(unsigned int size, struct ps_allocator_t* allocator, struct ps_msg_t* out_msg);
 
 	void* ps_get_msg_start(const void* data);
 

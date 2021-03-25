@@ -5,13 +5,13 @@
 #include "../high_level_api/Spinners.h"
 #include <pubsub/System.h>
 
-#include "../msg/std_msgs__String.msg.h"
+#include <pubsub/String.msg.h>
 
 int main()
 {
 	pubsub::Node node("simple_subscriber");
 
-	pubsub::Subscriber<std_msgs::String> subscriber(node, "data", [](const std_msgs::StringSharedPtr& msg) {
+	pubsub::Subscriber<pubsub::msg::String> subscriber(node, "data", [](const pubsub::msg::StringSharedPtr& msg) {
 		printf("Got message %s\n", msg->value);
 	}, 10);
 

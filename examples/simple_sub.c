@@ -7,7 +7,7 @@
 #include <pubsub/System.h>
 #include <pubsub/TCPTransport.h>
 
-#include "../msg/std_msgs__String.msg.h"
+#include <pubsub/String.msg.h>
 
 int main()
 {
@@ -24,7 +24,7 @@ int main()
     struct ps_subscriber_options options;
     ps_subscriber_options_init(&options);
     options.preferred_transport = 1;// tcp yo
-    ps_node_create_subscriber_adv(&node, "/data", &std_msgs__String_def, &string_sub, &options);
+    ps_node_create_subscriber_adv(&node, "/data", &pubsub__String_def, &string_sub, &options);
 
 	//ps_node_create_subscriber(&node, "/data", &std_msgs__String_def, &string_sub, 10, false, 0, true);
 
@@ -35,8 +35,8 @@ int main()
 		ps_node_spin(&node);
 
 		// our sub has a message definition, so the queue contains real messages
-		struct std_msgs__String* data;
-		while (data = (struct std_msgs__String*)ps_sub_deque(&string_sub))
+		struct pubsub__String* data;
+		while (data = (struct pubsub__String*)ps_sub_deque(&string_sub))
 		{
 			// user is responsible for freeing the message and its arrays
 			printf("Got message: %s\n", data->value);

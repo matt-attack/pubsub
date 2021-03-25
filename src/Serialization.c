@@ -309,9 +309,12 @@ const char* TypeToString(ps_field_types type)
 	}
 }
 
-void ps_print_definition(const struct ps_message_definition_t* definition)
+void ps_print_definition(const struct ps_message_definition_t* definition, bool print_name)
 {
-	printf("%s\n\n", definition->name);
+    if (print_name)
+    {
+	    printf("%s\n\n", definition->name);
+    }
 	for (unsigned int i = 0; i < definition->num_fields; i++)
 	{
 		const char* type_name = "";
@@ -331,17 +334,24 @@ void ps_print_definition(const struct ps_message_definition_t* definition)
 	}
 }
 
-void ps_msg_alloc(unsigned int size, struct ps_msg_t* out_msg)
+void ps_msg_alloc(unsigned int size, struct ps_allocator_t* allocator, struct ps_msg_t* out_msg)
 {
 	out_msg->len = size;
-	out_msg->data = (void*)((char*)malloc(size + sizeof(struct ps_msg_header)));
+    if (allocator)
+    {
+	    out_msg->data = (void*)allocator->alloc(size + sizeof(struct ps_msg_header), allocator->context);
+    }
+    else
+    {
+        out_msg->data = (void*)((char*)malloc(size + sizeof(struct ps_msg_header)));
+    }
 }
 
 
 struct ps_msg_t ps_msg_cpy(const struct ps_msg_t* msg)
 {
 	struct ps_msg_t out;
-	ps_msg_alloc(msg->len, &out);
+	ps_msg_alloc(msg->len, 0, &out);
 	memcpy(ps_get_msg_start(out.data), ps_get_msg_start(msg->data), msg->len);
 	return out;
 }
