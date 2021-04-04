@@ -35,6 +35,7 @@ void print_help()
 		"      bw (topic name)\n"
 		"      info (topic name)\n"
 		"      show (topic name)\n"
+        "      echo (topic name)\n"
 		"      pub (topic name) (message)\n"
 		"   node -\n"
 		"      list\n"
@@ -188,6 +189,10 @@ int main(int num_args_real, char** args)
 
 		if (subverb == "list")
 		{
+			pubsub::ArgParser parser;
+            parser.SetUsage("Usage: info topic list\n\nLists all topics.");
+			parser.Parse(args, num_args, 2);
+
 			wait(&node);
 
 			printf("Topics:\n--------------\n");
@@ -209,12 +214,13 @@ int main(int num_args_real, char** args)
 		if (subverb == "echo")
 		{
 			pubsub::ArgParser parser;
+            parser.SetUsage("Usage: info topic echo TOPIC\n\nEchos a particular topic.");
 			parser.AddMulti({ "i" }, "Print info about the publisher with each message.");
 			parser.AddMulti({ "n" }, "Number of messages to echo.", "0");
 			parser.AddMulti({ "skip", "s" }, "Skip factor for the subscriber.", "0");
             parser.AddMulti({ "tcp" }, "Prefer the TCP transport.");
 
-			parser.Parse(args, num_args, 3);
+			parser.Parse(args, num_args, 2);
 
 			static bool print_info = parser.GetBool("i");
             double vn = parser.GetDouble("n");
@@ -346,7 +352,10 @@ int main(int num_args_real, char** args)
 		{
 			pubsub::ArgParser parser;
 			parser.AddMulti({ "w", "window" }, "Window size for averaging.", "100");
-
+            if (subverb == "hz")
+                parser.SetUsage("Usage: info topic hz TOPIC\n\nDetermines the rate of publication for a given topic.");
+            else
+                parser.SetUsage("Usage: info topic bw TOPIC\n\nDetermines the single subscriber bandwidth for a given topic.");
 			parser.Parse(args, num_args, 2);
 
 			// create a subscriber
@@ -434,6 +443,10 @@ int main(int num_args_real, char** args)
 		}
 		else if (subverb == "info")
 		{
+			pubsub::ArgParser parser;
+            parser.SetUsage("Usage: info topic info TOPIC\n\nGives details about a particular topic.");
+			parser.Parse(args, num_args, 2);
+
 			wait(&node);
 
 			auto info = _topics.find(topic);
@@ -463,6 +476,10 @@ int main(int num_args_real, char** args)
 		}
 		else if (subverb == "show")
 		{
+			pubsub::ArgParser parser;
+            parser.SetUsage("Usage: info topic show TOPIC\n\nPrints the message definition for a given topic.");
+			parser.Parse(args, num_args, 2);
+
 			// print out the message definition string for this topic
 			bool got_data = false;
 			while (ps_okay())
@@ -504,13 +521,19 @@ int main(int num_args_real, char** args)
 		}
 		else if (subverb == "pub")
 		{
-			std::string data = num_args > 4 ? "" : args[4];
-
 			pubsub::ArgParser parser;
 			parser.AddMulti({ "r", "rate" }, "Publish rate in Hz.", "1.0");
 			parser.AddMulti({ "l", "latch" }, "Latches the topic.", "true");
-
+            parser.SetUsage("Usage: info topic pub TOPIC MESSAGE\n\nPublishes a particular topic.");
 			parser.Parse(args, num_args, 2);
+
+            std::string data = parser.GetPositional(0);
+
+            if (!data.length())
+            {
+              printf("Not enough arguments.\n");
+              return 0;
+            }
 
 			double rate = parser.GetDouble("r");
 			bool latched = parser.GetBool("l");
@@ -598,11 +621,15 @@ int main(int num_args_real, char** args)
 	}
 	else if (verb == "node")
 	{
-		if (num_args == 3)
+		if (num_args >= 3)
 		{
 			std::string verb2 = args[2];
 			if (verb2 == "list")
 			{
+			    pubsub::ArgParser parser;
+                parser.SetUsage("Usage: info node list\n\nList all running nodes.");
+			    parser.Parse(args, num_args, 2);
+
 				wait(&node);
 
 				// build a list of nodes then spit them out
@@ -624,12 +651,22 @@ int main(int num_args_real, char** args)
 				return 0;
 			}
 		}
-		else if (num_args >= 4)
+		if (num_args >= 3)
 		{
 			std::string verb2 = args[2];
-			std::string node_name = args[3];
 			if (verb2 == "info")
 			{
+			    pubsub::ArgParser parser;
+                parser.SetUsage("Usage: info node info NODE\n\nPrints information about a given node.");
+			    parser.Parse(args, num_args, 2);
+
+                std::string node_name = parser.GetPositional(0);
+                if (!node_name.length())
+                {
+                  printf("Not enough arguments.\n");
+                  return 0;
+                }
+
 				wait(&node);
 
 				std::vector<std::string> subs;
@@ -692,6 +729,8 @@ int main(int num_args_real, char** args)
 	else
 	{
 		printf("ERROR: Unhandled verb %s\n", args[1]);
+
+        print_help();
 	}
 
 	// this destroys a node and everything inside of it
