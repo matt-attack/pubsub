@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../high_level_api/Node.h"
+#include <pubsub_cpp/Node.h>
 #include <pubsub/String.msg.h>
 
 #include <string>

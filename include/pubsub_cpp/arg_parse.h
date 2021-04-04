@@ -39,7 +39,9 @@ public:
         }
     }
 
-	void AddMulti(std::vector<std::string> names, const std::string& description, const std::string& default_value = "")
+	void AddMulti(std::vector<std::string> names,
+                  const std::string& description,
+                  const std::string& default_value = "")
 	{
 		Argument* a = new Argument;
 		a->default_value = default_value;
@@ -55,7 +57,9 @@ public:
 		}
 	}
 
-	void Add(const std::string& name, const std::string& description, const std::string& default_value = "")
+	void Add(const std::string& name,
+             const std::string& description,
+             const std::string& default_value = "")
 	{
 		Argument* a = new Argument;
 		a->description = description;

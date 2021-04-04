@@ -7,7 +7,7 @@
 #include <pubsub/TCPTransport.h>
 
 #include <pubsub_cpp/Time.h>
-#include "../high_level_api/Serialize.h"
+#include <pubsub_cpp/Serialize.h>
 
 #include <pubsub_cpp/arg_parse.h>
 
@@ -74,6 +74,471 @@ struct NodeInfo
 };
 
 std::map<std::string, NodeInfo> _nodes;
+
+int topic_list(int num_args, char** args, ps_node_t* node)
+{
+	pubsub::ArgParser parser;
+    parser.SetUsage("Usage: info topic list\n\nLists all topics.");
+	parser.Parse(args, num_args, 2);
+
+	wait(node);
+
+	printf("Topics:\n--------------\n");
+	for (auto topic : _topics)
+	{
+		std::cout << topic.first << "\n";
+	}
+	return 0;
+}
+
+int topic_info(int num_args, char** args, ps_node_t* node)
+{
+	pubsub::ArgParser parser;
+    parser.SetUsage("Usage: info topic info TOPIC\n\nGives details about a particular topic.");
+	parser.Parse(args, num_args, 2);
+
+	wait(node);
+
+    std::string topic = parser.GetPositional(0);
+    if (!topic.length())
+    {
+        printf("Not enough arguments.\n");
+        return 0;
+    }
+
+	auto info = _topics.find(topic);
+	if (info == _topics.end())
+	{
+		std::cout << "Topic " << topic << " not found!\n";
+		return 0;
+	}
+
+	std::cout << "Type: " << info->second.type << "\n";
+	std::cout << "Published by:\n";
+	for (auto pub : info->second.publishers)
+    {
+        int transports = _nodes[pub].transports;
+        std::string tps = "UDP";
+        if (transports & PS_TRANSPORT_TCP)
+        {
+            tps += ", TCP";
+        }
+		std::cout << " " << pub << " (" << tps <<")\n";
+    }
+
+	std::cout << "\nSubscribed by:\n";
+	for (auto sub : info->second.subscribers)
+		std::cout << " " << sub << "\n";
+
+    ps_node_destroy(node);
+	
+    return 0;
+}
+
+int topic_show(int num_args, char** args, ps_node_t* node)
+{
+	pubsub::ArgParser parser;
+    parser.SetUsage("Usage: info topic show TOPIC\n\n"
+                    "Prints the message definition for a given topic.");
+	parser.Parse(args, num_args, 2);
+
+    std::string topic = parser.GetPositional(0);
+    if (!topic.length())
+    {
+        printf("Not enough arguments.\n");
+        return 0;
+    }
+
+	// print out the message definition string for this topic
+	bool got_data = false;
+	while (ps_okay())
+	{
+		ps_node_wait(node, 1000);
+		ps_node_spin(node);
+
+		// spin until we get the topic
+		auto info = _topics.find(topic);
+		if (!got_data && info != _topics.end())
+		{
+			std::cout << "Topic " << topic << " found!\n";
+			//std::cout << info->first.c_str() << " " << info->second.type.c_str();
+			got_data = true;
+
+			//get the message definition from it
+			std::cout << "Querying for message definition...\n";
+			ps_node_query_message_definition(node, info->second.type.c_str());
+		}
+
+		if (!got_data)
+		{
+			//printf("Waiting for topic...\n");
+			continue;
+		}
+
+		if (!definition.num_fields)
+		{
+			//printf("Waiting for fields...\n");
+			continue;
+		}
+
+		// print the message format as a string
+		ps_print_definition(&definition, true);
+
+        ps_node_destroy(node);
+
+		return 0;
+	}
+}
+
+int topic_echo(int num_args, char** args, ps_node_t* _node)
+{
+    static ps_node_t* node = _node;
+	pubsub::ArgParser parser;
+    parser.SetUsage("Usage: info topic echo TOPIC\n\nEchos a particular topic.");
+	parser.AddMulti({ "i" }, "Print info about the publisher with each message.");
+	parser.AddMulti({ "n" }, "Number of messages to echo.", "0");
+	parser.AddMulti({ "skip", "s" }, "Skip factor for the subscriber.", "0");
+    parser.AddMulti({ "tcp" }, "Prefer the TCP transport.");
+
+	parser.Parse(args, num_args, 2);
+
+    std::string topic = parser.GetPositional(0);
+    if (!topic.length())
+    {
+        printf("Not enough arguments.\n");
+        return 0;
+    }
+
+	static bool print_info = parser.GetBool("i");
+    double vn = parser.GetDouble("n");
+    if (vn <= 0)
+    {
+        vn = 2147483647;
+    }
+	static unsigned long long int n = vn;
+	int skip = parser.GetDouble("s");
+    bool tcp = parser.GetBool("tcp");
+
+
+	// create a subscriber
+	static ps_sub_t sub;
+	static std::vector<std::pair<void*, ps_msg_info_t>> todo_msgs;
+
+	// subscribe to the topic and publish anything we get
+	static unsigned long long int count = 0;
+	bool subscribed = false;
+	while (ps_okay())
+	{
+		ps_node_wait(node, 1000);
+		ps_node_spin(node);
+
+		// spin until we get the topic
+		auto info = _topics.find(topic);
+		if (!subscribed && info != _topics.end())
+		{
+			std::cout << "Topic " << topic << " found!\n";
+			//std::cout << info->first.c_str() << " " <<  info->second.type.c_str();
+			subscribed = true;
+
+			struct ps_subscriber_options options;
+			ps_subscriber_options_init(&options);
+			options.skip = skip;
+			options.queue_size = 0;
+			options.want_message_def = true;
+			options.allocator = 0;
+			options.ignore_local = false;
+            options.preferred_transport = tcp ? 1 : 0;
+			options.cb = [](void* message, unsigned int size, void* data, const ps_msg_info_t* info)
+			{
+				if (todo_msgs.size() && sub.received_message_def.fields != 0)
+				{
+					for (auto msg : todo_msgs)
+					{
+						if (print_info)
+						{
+							const auto info = &msg.second;
+							for (auto& n : _nodes)
+							{
+								if (info->address == n.second.address
+									&& info->port == n.second.port)
+								{
+									std::cout << "Node: " << n.first << "\n";
+								}
+							}
+							// map the id to the node
+							std::cout << "From: "
+								<< ((info->address & 0xFF000000) >> 24) << "."
+								<< ((info->address & 0xFF0000) >> 16) << "."
+								<< ((info->address & 0xFF00) >> 8) << "."
+								<< ((info->address & 0xFF)) << ":" << info->port << "\n";
+							printf("-------------\n");
+						}
+						ps_deserialize_print(msg.first, &sub.received_message_def);
+						printf("-------------\n");
+						free(msg.first);
+						if (++count >= n)
+						{
+							//need to commit sodoku here..
+							// this destroys a node and everything inside of it
+							ps_node_destroy(node);
+							//return 0;
+							exit(0);
+						}
+					}
+					todo_msgs.clear();
+				}
+				// get and deserialize the messages
+				if (sub.received_message_def.fields == 0)
+				{
+					//printf("WARN: got message but no message definition yet...\n");
+					// queue it up, then print them out once I get it
+					todo_msgs.push_back({ message, *info });
+				}
+				else
+				{
+					if (print_info)
+					{
+						for (auto& n : _nodes)
+						{
+							if (info->address == n.second.address
+								&& info->port == n.second.port)
+							{
+								std::cout << "Node: " << n.first << "\n";
+							}
+						}
+						// map the id to the node
+						std::cout << "From: "
+							<< ((info->address & 0xFF000000) >> 24) << "."
+							<< ((info->address & 0xFF0000) >> 16) << "."
+							<< ((info->address & 0xFF00) >> 8) << "."
+							<< ((info->address & 0xFF)) << ":" << info->port << "\n";
+						printf("-------------\n");
+					}
+					ps_deserialize_print(message, &sub.received_message_def);
+					printf("-------------\n");
+					free(message);
+					if (++count >= n)
+					{
+						// need to commit sudoku here..
+						// this destroys a node and everything inside of it
+						ps_node_destroy(node);
+						//return 0;
+						exit(0);
+					}
+				}
+			};
+
+			ps_node_create_subscriber_adv(node, info->first.c_str(), 0, &sub, &options);
+		}
+	}
+}
+
+int topic_pub(int num_args, char** args, ps_node_t* node)
+{
+    pubsub::ArgParser parser;
+	parser.AddMulti({ "r", "rate" }, "Publish rate in Hz.", "1.0");
+	parser.AddMulti({ "l", "latch" }, "Latches the topic.", "true");
+    parser.SetUsage("Usage: info topic pub TOPIC MESSAGE\n\nPublishes a particular topic.");
+	parser.Parse(args, num_args, 2);
+
+    std::string topic = parser.GetPositional(0);
+
+    if (!topic.length())
+    {
+        printf("Not enough arguments.\n");
+        return 0;
+    }
+
+	double rate = parser.GetDouble("r");
+	bool latched = parser.GetBool("l");
+
+	//ok, lets get the topic type and publish at 1 Hz for the moment
+	ps_pub_t pub;
+	ps_msg_t msg;
+	msg.data = 0;
+
+	// subscribe to the topic and publish anything we get
+	bool got_data = false;
+	bool got_message = false;
+	while (ps_okay())
+	{
+		ps_node_spin(node);
+
+		// spin until we get the topic
+		auto info = _topics.find(topic);
+		if (!got_data && info != _topics.end())
+		{
+			std::cout << "Topic " << topic << " found!\n";
+			std::cout << "Type: " << " " << info->second.type.c_str() << "\n";
+			got_data = true;
+
+			//get the message definition from it
+			std::cout << "Querying for message definition...\n";
+			ps_node_query_message_definition(node, info->second.type.c_str());
+		}
+
+		if (!got_data)
+		{
+			//printf("Waiting for topic...\n");
+			continue;
+		}
+
+		if (!definition.num_fields)
+		{
+			//printf("Waiting for fields...\n");
+			continue;
+		}
+		else if (msg.data == 0)
+		{
+			printf("Found message description, publishing...\n");
+			// encode the message according to the definition and create the publisher
+			ps_node_create_publisher(node, info->first.c_str(), &definition, &pub, latched);
+
+			// then actually serialize the message
+			// build the input string from arguments
+			std::string input;
+			for (int i = 4; i < num_args; i++)
+			{
+				input += args[i];
+				input += ' ';
+			}
+			Value out;
+
+			try
+			{
+				parse(input, out);
+			}
+			catch (std::string error)
+			{
+				printf("Failure parsing message value: %s", error.c_str());
+				return -1;
+			}
+
+			try
+			{
+				msg = serialize_value(out, definition);
+			}
+			catch (std::string error)
+			{
+				printf("Serializing failed: %s", error.c_str());
+				return -1;
+			}
+		}
+
+		//publish
+		// copy the message
+		ps_msg_t cpy = ps_msg_cpy(&msg);
+		ps_pub_publish(&pub, &cpy);
+		ps_sleep(1000.0 / rate);
+	}
+
+    ps_node_destroy(node);
+
+    return 0;
+}
+
+int node_list(int num_args, char** args, ps_node_t* node)
+{
+    pubsub::ArgParser parser;
+    parser.SetUsage("Usage: info node list\n\nList all running nodes.");
+    parser.Parse(args, num_args, 2);
+
+	wait(node);
+
+	// build a list of nodes then spit them out
+	std::map<std::string, int> nodes;
+	for (auto& topic : _topics)
+	{
+		for (auto sub : topic.second.subscribers)
+			nodes[sub] = 1;
+
+		for (auto pub : topic.second.publishers)
+			nodes[pub] = 1;
+	}
+
+	std::cout << "Nodes:\n------------\n";
+	for (auto node : nodes)
+	{
+		std::cout << " " << node.first << "\n";
+	}
+
+    ps_node_destroy(node);
+	return 0;
+}
+
+int node_info(int num_args, char** args, ps_node_t* node)
+{
+	pubsub::ArgParser parser;
+    parser.SetUsage("Usage: info node info NODE\n\n"
+                    "Prints information about a given node.");
+	parser.Parse(args, num_args, 2);
+
+    std::string node_name = parser.GetPositional(0);
+    if (!node_name.length())
+    {
+        printf("Not enough arguments.\n");
+        return 0;
+    }
+
+	wait(node);
+
+	std::vector<std::string> subs;
+	std::vector<std::string> pubs;
+
+	for (auto& topic : _topics)
+	{
+		for (auto sub : topic.second.subscribers)
+			if (sub == node_name)
+				subs.push_back(topic.first);
+
+		for (auto pub : topic.second.publishers)
+			if (pub == node_name)
+				pubs.push_back(topic.first);
+	}
+
+	std::cout << "Node: " << node_name << "\n";
+
+
+	// print port info if we got it
+	if (_nodes.find(node_name) != _nodes.end())
+	{
+		NodeInfo info = _nodes[node_name];
+		std::cout << " Address: "
+			<< ((info.address & 0xFF000000) >> 24) << "."
+			<< ((info.address & 0xFF0000) >> 16) << "."
+			<< ((info.address & 0xFF00) >> 8) << "."
+			<< ((info.address & 0xFF)) << ":" << info.port << "\n";
+        int transports = info.transports;
+        std::string tps = "UDP";
+        if (transports & PS_TRANSPORT_TCP)
+        {
+            tps += ", TCP";
+        }
+        std::cout << " Transports: " << tps << "\n";
+	}
+
+	if (subs.size() == 0 && pubs.size() == 0)
+	{
+		std::cout << "Could not find any subs or pubs for this node. Is it up?\n";
+		return 0;
+	}
+
+	std::cout << "\nSubscribers:\n-------\n";
+	for (auto sub : subs)
+	{
+		std::cout << " " << sub << "\n";
+	}
+
+	std::cout << "\nPublishers:\n-------\n";
+	for (auto pub : pubs)
+	{
+		std::cout << " " << pub << "\n";
+	}
+
+    ps_node_destroy(node);
+	
+    return 0;
+}
 
 int main(int num_args_real, char** args)
 {
@@ -176,31 +641,20 @@ int main(int num_args_real, char** args)
 	// Query the other nodes in the network for their data
 	ps_node_system_query(&node);
 
+	if (num_args < 3)
+	{
+		printf("Not enough arguments");
+		return 0;
+	}
+
 	std::string verb = args[1];
 	if (verb == "topic")
 	{
-		if (num_args < 3)
-		{
-			printf("Not enough arguments");
-			return 0;
-		}
-
 		std::string subverb = args[2];
 
 		if (subverb == "list")
 		{
-			pubsub::ArgParser parser;
-            parser.SetUsage("Usage: info topic list\n\nLists all topics.");
-			parser.Parse(args, num_args, 2);
-
-			wait(&node);
-
-			printf("Topics:\n--------------\n");
-			for (auto topic : _topics)
-			{
-				std::cout << topic.first << "\n";
-			}
-			return 0;
+            return topic_list(num_args, args, &node);
 		}
 
 		if (num_args < 4)
@@ -213,140 +667,7 @@ int main(int num_args_real, char** args)
 
 		if (subverb == "echo")
 		{
-			pubsub::ArgParser parser;
-            parser.SetUsage("Usage: info topic echo TOPIC\n\nEchos a particular topic.");
-			parser.AddMulti({ "i" }, "Print info about the publisher with each message.");
-			parser.AddMulti({ "n" }, "Number of messages to echo.", "0");
-			parser.AddMulti({ "skip", "s" }, "Skip factor for the subscriber.", "0");
-            parser.AddMulti({ "tcp" }, "Prefer the TCP transport.");
-
-			parser.Parse(args, num_args, 2);
-
-			static bool print_info = parser.GetBool("i");
-            double vn = parser.GetDouble("n");
-            if (vn <= 0)
-            {
-              vn = 2147483647;
-            }
-			static unsigned long long int n = vn;
-			int skip = parser.GetDouble("s");
-            bool tcp = parser.GetBool("tcp");
-
-
-			// create a subscriber
-			static ps_sub_t sub;
-			static std::vector<std::pair<void*, ps_msg_info_t>> todo_msgs;
-
-			// subscribe to the topic and publish anything we get
-			static unsigned long long int count = 0;
-			bool subscribed = false;
-			while (ps_okay())
-			{
-				ps_node_wait(&node, 1000);
-				ps_node_spin(&node);
-
-				// spin until we get the topic
-				auto info = _topics.find(topic);
-				if (!subscribed && info != _topics.end())
-				{
-					std::cout << "Topic " << topic << " found!\n";
-					//std::cout << info->first.c_str() << " " <<  info->second.type.c_str();
-					subscribed = true;
-
-					struct ps_subscriber_options options;
-					ps_subscriber_options_init(&options);
-
-					options.skip = skip;
-					options.queue_size = 0;
-					options.want_message_def = true;
-					options.allocator = 0;
-					options.ignore_local = false;
-                    options.preferred_transport = tcp ? 1 : 0;
-					options.cb = [](void* message, unsigned int size, void* data, const ps_msg_info_t* info)
-					{
-						if (todo_msgs.size() && sub.received_message_def.fields != 0)
-						{
-							for (auto msg : todo_msgs)
-							{
-								if (print_info)
-								{
-									const auto info = &msg.second;
-									for (auto& n : _nodes)
-									{
-										if (info->address == n.second.address
-											&& info->port == n.second.port)
-										{
-											std::cout << "Node: " << n.first << "\n";
-										}
-									}
-									// map the id to the node
-									std::cout << "From: "
-										<< ((info->address & 0xFF000000) >> 24) << "."
-										<< ((info->address & 0xFF0000) >> 16) << "."
-										<< ((info->address & 0xFF00) >> 8) << "."
-										<< ((info->address & 0xFF)) << ":" << info->port << "\n";
-									printf("-------------\n");
-								}
-								ps_deserialize_print(msg.first, &sub.received_message_def);
-								printf("-------------\n");
-								free(msg.first);
-								if (++count >= n)
-								{
-									//need to commit sodoku here..
-									// this destroys a node and everything inside of it
-									ps_node_destroy(&node);
-									//return 0;
-									exit(0);
-								}
-							}
-							todo_msgs.clear();
-						}
-
-						// get and deserialize the messages
-						if (sub.received_message_def.fields == 0)
-						{
-							//printf("WARN: got message but no message definition yet...\n");
-							// queue it up, then print them out once I get it
-							todo_msgs.push_back({ message, *info });
-						}
-						else
-						{
-							if (print_info)
-							{
-								for (auto& n : _nodes)
-								{
-									if (info->address == n.second.address
-										&& info->port == n.second.port)
-									{
-										std::cout << "Node: " << n.first << "\n";
-									}
-								}
-								// map the id to the node
-								std::cout << "From: "
-									<< ((info->address & 0xFF000000) >> 24) << "."
-									<< ((info->address & 0xFF0000) >> 16) << "."
-									<< ((info->address & 0xFF00) >> 8) << "."
-									<< ((info->address & 0xFF)) << ":" << info->port << "\n";
-								printf("-------------\n");
-							}
-							ps_deserialize_print(message, &sub.received_message_def);
-							printf("-------------\n");
-
-							free(message);
-							if (++count >= n)
-							{
-								// need to commit sodoku here..
-								// this destroys a node and everything inside of it
-								ps_node_destroy(&node);
-								//return 0;
-								exit(0);
-							}
-						}
-					};
-
-					ps_node_create_subscriber_adv(&node, info->first.c_str(), 0, &sub, &options);
-				}
-			}
+            return topic_echo(num_args, args, &node);
 		}
 		else if (subverb == "hz" || subverb == "bw")
 		{
@@ -443,180 +764,15 @@ int main(int num_args_real, char** args)
 		}
 		else if (subverb == "info")
 		{
-			pubsub::ArgParser parser;
-            parser.SetUsage("Usage: info topic info TOPIC\n\nGives details about a particular topic.");
-			parser.Parse(args, num_args, 2);
-
-			wait(&node);
-
-			auto info = _topics.find(topic);
-			if (info == _topics.end())
-			{
-				std::cout << "Topic " << topic << " not found!\n";
-				return 0;
-			}
-
-			std::cout << "Type: " << info->second.type << "\n";
-			std::cout << "Published by:\n";
-			for (auto pub : info->second.publishers)
-            {
-                int transports = _nodes[pub].transports;
-                std::string tps = "UDP";
-                if (transports & PS_TRANSPORT_TCP)
-                {
-                    tps += ", TCP";
-                }
-				std::cout << " " << pub << " (" << tps <<")\n";
-            }
-
-			std::cout << "\nSubscribed by:\n";
-			for (auto sub : info->second.subscribers)
-				std::cout << " " << sub << "\n";
-			return 0;
+            return topic_info(num_args, args, &node);
 		}
 		else if (subverb == "show")
 		{
-			pubsub::ArgParser parser;
-            parser.SetUsage("Usage: info topic show TOPIC\n\nPrints the message definition for a given topic.");
-			parser.Parse(args, num_args, 2);
-
-			// print out the message definition string for this topic
-			bool got_data = false;
-			while (ps_okay())
-			{
-				ps_node_wait(&node, 1000);
-				ps_node_spin(&node);
-
-				// spin until we get the topic
-				auto info = _topics.find(topic);
-				if (!got_data && info != _topics.end())
-				{
-					std::cout << "Topic " << topic << " found!\n";
-					//std::cout << info->first.c_str() << " " << info->second.type.c_str();
-					got_data = true;
-
-					//get the message definition from it
-					std::cout << "Querying for message definition...\n";
-					ps_node_query_message_definition(&node, info->second.type.c_str());
-				}
-
-				if (!got_data)
-				{
-					//printf("Waiting for topic...\n");
-					continue;
-				}
-
-				if (!definition.num_fields)
-				{
-					//printf("Waiting for fields...\n");
-					continue;
-				}
-
-				printf("Got message description, publishing...\n");
-				// print the message format as a string
-				ps_print_definition(&definition, true);
-
-				return 0;
-			}
+            return topic_show(num_args, args, &node);
 		}
 		else if (subverb == "pub")
 		{
-			pubsub::ArgParser parser;
-			parser.AddMulti({ "r", "rate" }, "Publish rate in Hz.", "1.0");
-			parser.AddMulti({ "l", "latch" }, "Latches the topic.", "true");
-            parser.SetUsage("Usage: info topic pub TOPIC MESSAGE\n\nPublishes a particular topic.");
-			parser.Parse(args, num_args, 2);
-
-            std::string data = parser.GetPositional(0);
-
-            if (!data.length())
-            {
-              printf("Not enough arguments.\n");
-              return 0;
-            }
-
-			double rate = parser.GetDouble("r");
-			bool latched = parser.GetBool("l");
-
-			//ok, lets get the topic type and publish at 1 Hz for the moment
-			ps_pub_t pub;
-			ps_msg_t msg;
-			msg.data = 0;
-
-			// subscribe to the topic and publish anything we get
-			bool got_data = false;
-			bool got_message = false;
-			while (ps_okay())
-			{
-				ps_node_spin(&node);
-
-				// spin until we get the topic
-				auto info = _topics.find(topic);
-				if (!got_data && info != _topics.end())
-				{
-					std::cout << "Topic " << topic << " found!\n";
-					std::cout << "Type: " << " " << info->second.type.c_str() << "\n";
-					got_data = true;
-
-					//get the message definition from it
-					std::cout << "Querying for message definition...\n";
-					ps_node_query_message_definition(&node, info->second.type.c_str());
-				}
-
-				if (!got_data)
-				{
-					//printf("Waiting for topic...\n");
-					continue;
-				}
-
-				if (!definition.num_fields)
-				{
-					//printf("Waiting for fields...\n");
-					continue;
-				}
-				else if (msg.data == 0)
-				{
-					printf("Found message description, publishing...\n");
-					// encode the message according to the definition and create the publisher
-					ps_node_create_publisher(&node, info->first.c_str(), &definition, &pub, latched);
-
-					// then actually serialize the message
-					// build the input string from arguments
-					std::string input;
-					for (int i = 4; i < num_args; i++)
-					{
-						input += args[i];
-						input += ' ';
-					}
-					Value out;
-
-					try
-					{
-						parse(input, out);
-					}
-					catch (std::string error)
-					{
-						printf("Failure parsing message value: %s", error.c_str());
-						return -1;
-					}
-
-					try
-					{
-						msg = serialize_value(out, definition);
-					}
-					catch (std::string error)
-					{
-						printf("Serializing failed: %s", error.c_str());
-						return -1;
-					}
-				}
-
-				//publish
-				// copy the message
-				ps_msg_t cpy = ps_msg_cpy(&msg);
-				ps_pub_publish(&pub, &cpy);
-				ps_sleep(1000.0 / rate);
-			}
+			return topic_pub(num_args, args, &node);
 		}
 	}
 	else if (verb == "node")
@@ -626,103 +782,11 @@ int main(int num_args_real, char** args)
 			std::string verb2 = args[2];
 			if (verb2 == "list")
 			{
-			    pubsub::ArgParser parser;
-                parser.SetUsage("Usage: info node list\n\nList all running nodes.");
-			    parser.Parse(args, num_args, 2);
-
-				wait(&node);
-
-				// build a list of nodes then spit them out
-				std::map<std::string, int> nodes;
-				for (auto& topic : _topics)
-				{
-					for (auto sub : topic.second.subscribers)
-						nodes[sub] = 1;
-
-					for (auto pub : topic.second.publishers)
-						nodes[pub] = 1;
-				}
-
-				std::cout << "Nodes:\n------------\n";
-				for (auto node : nodes)
-				{
-					std::cout << " " << node.first << "\n";
-				}
-				return 0;
+                return node_list(num_args, args, &node);
 			}
-		}
-		if (num_args >= 3)
-		{
-			std::string verb2 = args[2];
-			if (verb2 == "info")
+			else if (verb2 == "info")
 			{
-			    pubsub::ArgParser parser;
-                parser.SetUsage("Usage: info node info NODE\n\nPrints information about a given node.");
-			    parser.Parse(args, num_args, 2);
-
-                std::string node_name = parser.GetPositional(0);
-                if (!node_name.length())
-                {
-                  printf("Not enough arguments.\n");
-                  return 0;
-                }
-
-				wait(&node);
-
-				std::vector<std::string> subs;
-				std::vector<std::string> pubs;
-
-				for (auto& topic : _topics)
-				{
-					for (auto sub : topic.second.subscribers)
-						if (sub == node_name)
-							subs.push_back(topic.first);
-
-					for (auto pub : topic.second.publishers)
-						if (pub == node_name)
-							pubs.push_back(topic.first);
-				}
-
-				std::cout << "Node: " << node_name << "\n";
-
-
-				// print port info if we got it
-				if (_nodes.find(node_name) != _nodes.end())
-				{
-					NodeInfo info = _nodes[node_name];
-					std::cout << " Address: "
-						<< ((info.address & 0xFF000000) >> 24) << "."
-						<< ((info.address & 0xFF0000) >> 16) << "."
-						<< ((info.address & 0xFF00) >> 8) << "."
-						<< ((info.address & 0xFF)) << ":" << info.port << "\n";
-
-                    int transports = info.transports;
-                    std::string tps = "UDP";
-                    if (transports & PS_TRANSPORT_TCP)
-                    {
-                        tps += ", TCP";
-                    }
-                    std::cout << " Transports: " << tps << "\n";
-				}
-
-				if (subs.size() == 0 && pubs.size() == 0)
-				{
-					std::cout << "Could not find any subs or pubs for this node. Is it up?\n";
-					return 0;
-				}
-
-				std::cout << "\nSubscribers:\n-------\n";
-				for (auto sub : subs)
-				{
-					std::cout << " " << sub << "\n";
-				}
-
-				std::cout << "\nPublishers:\n-------\n";
-				for (auto pub : pubs)
-				{
-					std::cout << " " << pub << "\n";
-				}
-				return 0;
+                return node_info(num_args, args, &node);
 			}
 		}
 	}

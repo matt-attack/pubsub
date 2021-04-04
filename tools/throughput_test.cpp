@@ -1,8 +1,8 @@
 #include <cstdlib>
 #include <stdio.h>
 
-#include "../high_level_api/Node.h"
-#include "../high_level_api/Spinners.h"
+#include <pubsub_cpp/Node.h>
+#include <pubsub_cpp/Spinners.h>
 #include <pubsub/System.h>
 
 #include <pubsub/String.msg.h>
