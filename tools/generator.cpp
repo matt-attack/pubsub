@@ -233,6 +233,7 @@ std::string generate(const char* definition, const char* name)
 	// add header guard
 	output += "#pragma once\n\n";
 
+	output += "#include <pubsub/Serialization.h>\n";
 	output += "#include <stdint.h>\n";
 	output += "#include <string.h>\n\n";
 
@@ -524,7 +525,9 @@ std::string generate(const char* definition, const char* name)
 	output += "  static const ps_message_definition_t* GetDefinition()\n  {\n";
 	output += "    return &" + type_name + "_def;\n  }\n\n";
 	output += "  ps_msg_t Encode() const\n  {\n";
-	output += "    return " + ns + "__" + raw_name + "_encode(0, this);\n  }\n";
+	output += "    return " + ns + "__" + raw_name + "_encode(0, this);\n  }\n\n";
+	output += "  static " + raw_name + "* Decode(const void* data)\n  {\n";
+	output += "    return (" + raw_name + "*)" + ns + "__" + raw_name + "_decode(data, &ps_default_allocator);\n  }\n";// + ns + "__" + raw_name + "_encode(0, this);\n  }\n";
 	output += "};\n";
 	output += "typedef std::shared_ptr<" + raw_name + "> " + raw_name + "SharedPtr;\n";
 	output += "}\n";

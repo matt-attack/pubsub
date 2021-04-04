@@ -28,6 +28,7 @@ struct ps_node_t;
 struct ps_endpoint_t;
 struct ps_client_t;
 struct ps_subscribe_req_t;
+struct ps_allocator_t;
 typedef void(*ps_transport_fn_pub_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher, struct ps_client_t* client, const void* message, uint32_t length);
 typedef void(*ps_transport_fn_spin_t)(struct ps_transport_t* transport, struct ps_node_t* node);
 typedef void(*ps_transport_fn_add_publisher_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher);
@@ -110,14 +111,6 @@ struct ps_msg_info_t
 {
 	unsigned int address;
 	unsigned int port;
-};
-
-//todo move elsewhere probably
-struct ps_allocator_t
-{
-	void*(*alloc)(unsigned int size, void* context);
-	void(*free)(void*);
-	void* context;
 };
 
 //todo move elsewhere probably

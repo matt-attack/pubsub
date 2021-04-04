@@ -7,6 +7,15 @@ extern "C"
 {
 #endif
 
+    struct ps_allocator_t
+    {
+	    void*(*alloc)(unsigned int size, void* context);
+	    void(*free)(void*);
+	    void* context;
+    };
+
+    extern struct ps_allocator_t ps_default_allocator;
+
 	enum ps_field_types
 	{
 		FT_Int8 = 0,
