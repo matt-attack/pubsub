@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C"
 {
@@ -31,7 +33,7 @@ extern "C"
 	struct ps_field_t
 	{
 		ps_field_types type;
-		char* name;
+		const char* name;
 		unsigned int length;//length of the array, 0 if dynamic
 		unsigned short content_length;//number of fields inside this array
 	};
@@ -50,7 +52,7 @@ extern "C"
 	struct ps_message_definition_t
 	{
 		unsigned int hash;
-		char* name;
+		const char* name;
 		unsigned int num_fields;
 		struct ps_field_t* fields;
 		ps_fn_encode_t encode;
@@ -67,9 +69,11 @@ extern "C"
 
 	void ps_free_message_definition(struct ps_message_definition_t* definition);
 
-	void ps_print_definition(const struct ps_message_definition_t* definition);
+	void ps_copy_message_definition(struct ps_message_definition_t* dst, const struct ps_message_definition_t* src);
 
-	void ps_msg_alloc(unsigned int size, struct ps_msg_t* out_msg);
+	void ps_print_definition(const struct ps_message_definition_t* definition, bool print_name);
+
+	void ps_msg_alloc(unsigned int size, struct ps_allocator_t* allocator, struct ps_msg_t* out_msg);
 
 	void* ps_get_msg_start(const void* data);
 

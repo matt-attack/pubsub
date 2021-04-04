@@ -22,6 +22,7 @@ class ArgParser
 	std::vector<Argument*> arg_list_;
 	std::map<std::string, Argument*> args_;
 	std::vector<std::string> positional_;
+    std::string usage_;
 public:
 
 	ArgParser()
@@ -30,7 +31,17 @@ public:
 		AddMulti(names, "Display this message.");
 	}
 
-	void AddMulti(std::vector<std::string> names, const std::string& description, const std::string& default_value = "")
+    ~ArgParser()
+    {
+        for (auto& arg: arg_list_)
+        {
+            delete arg;
+        }
+    }
+
+	void AddMulti(std::vector<std::string> names,
+                  const std::string& description,
+                  const std::string& default_value = "")
 	{
 		Argument* a = new Argument;
 		a->default_value = default_value;
@@ -46,7 +57,9 @@ public:
 		}
 	}
 
-	void Add(const std::string& name, const std::string& description, const std::string& default_value = "")
+	void Add(const std::string& name,
+             const std::string& description,
+             const std::string& default_value = "")
 	{
 		Argument* a = new Argument;
 		a->description = description;
@@ -67,9 +80,10 @@ public:
 			{
 				s = s.substr(2);
 
+                // -- is invalid with single character options
 				if (s.length() == 1)
 				{
-					printf("Invalid argument %s", s.c_str());
+					printf("invalid option '%s'\n", s.c_str());
 					continue;
 				}
 
@@ -82,7 +96,7 @@ public:
 
 				if (args_.find(s) == args_.end())
 				{
-					printf("Warning: Unused argument %s", s.c_str());
+					PrintInvalid(s);
 					continue;
 				}
 
@@ -108,7 +122,7 @@ public:
 
 				if (args_.find(s) == args_.end())
 				{
-					printf("Warning: Unused argument %s", s.c_str());
+                    PrintInvalid(s);
 					continue;
 				}
 
@@ -131,11 +145,21 @@ public:
 		return;
 	}
 
+    void SetUsage(const std::string& text)
+    {
+        usage_ = text;
+    }
+
 	void PrintHelp()
 	{
+        if (usage_.length())
+        {
+            printf("%s\n\n", usage_.c_str());
+        }
+
 		for (auto& ii : arg_list_)
 		{
-			std::string line = ii->names.front().length() > 1 ? "--" : "-";
+			std::string line = ii->names.front().length() > 1 ? " --" : " -";
 			line += ii->names.front();
 			int spaces = 13 - line.length();
 			for (int i = 0; i < spaces; i++)
@@ -149,9 +173,9 @@ public:
 			for (size_t i = 1; i < ii->names.size(); i++)
 			{
 				if (ii->names[i].length() == 1)
-					line += "  -" + ii->names[i] + "\n";
+					line += "   -" + ii->names[i] + "\n";
 				else
-					line += " --" + ii->names[i] + "\n";
+					line += "  --" + ii->names[i] + "\n";
 			}
 			printf("%s", line.c_str());
 		}
@@ -188,6 +212,13 @@ public:
 		}
 		return std::atof(ar->value.c_str());
 	}
+private:
+
+    void PrintInvalid(const std::string& option)
+    {
+       printf("unrecognized option '%s'\nTry --help for more information.\n", option.c_str());
+       exit(-1);
+    }
 };
 
 }

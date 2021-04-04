@@ -112,7 +112,7 @@ ps_msg_t serialize_value(const Value& value, const ps_message_definition_t& defi
 	}
 
 	//allocate message
-	ps_msg_alloc(message_size, &msg);
+	ps_msg_alloc(message_size, 0, &msg);
 
 	// finally serialize
 	char* pos = (char*)ps_get_msg_start(msg.data);

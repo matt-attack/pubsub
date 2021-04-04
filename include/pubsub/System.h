@@ -1,5 +1,5 @@
 #pragma once
-
+#include <inttypes.h>
 #ifdef __cplusplus
 extern "C"
 {
@@ -7,7 +7,7 @@ extern "C"
 
 void ps_sleep(unsigned int time_ms);
 
-unsigned long long GetTimeMs();
+uint64_t GetTimeMs();
 
 #ifdef __cplusplus
 }

@@ -14,12 +14,17 @@ namespace pubsub
 class Duration
 {
 public:
-	unsigned long long usec;
+	uint64_t usec;
 
 	Duration()
 	{
 
 	}
+
+    Duration(uint64_t usec_)
+    {
+      usec = usec_;
+    }
 
 	Duration(double seconds)
 		: usec(seconds*1000000.0)
@@ -27,7 +32,7 @@ public:
 
 	}
 
-	Duration(unsigned int sec, unsigned int usec)
+	Duration(uint32_t sec, uint32_t usec)
 		: usec(sec * 1000000 + usec)
 	{
 
@@ -52,22 +57,22 @@ public:
 class Time
 {
 public:
-	unsigned long long usec;
+	uint64_t usec;
 
 	Time()
 	{
 
 	}
 
-	Time(unsigned long long usec)
+	Time(uint64_t usec)
 		: usec(usec)
 	{
 
 	}
 
 
-	Time(unsigned int sec, unsigned int usec)
-		: usec(sec*1000000 + usec)
+	Time(uint32_t sec, uint32_t usec)
+		: usec(static_cast<uint64_t>(sec)*1000000 + static_cast<uint64_t>(usec))
 	{
 
 	}
@@ -99,7 +104,7 @@ public:
 	static Time now()
 	{
 #ifdef _WIN32
-		static unsigned long long start = 0;
+		static uint64_t start = 0;
 		if (!start)
 		{
 			/* FILETIME of Jan 1 1970 00:00:00. */
@@ -115,14 +120,14 @@ public:
 			ularge.HighPart = file_time.dwHighDateTime;
 
 			// the file_time is in units of 100 nanoseconds
-			start = ((unsigned long long)(system_time.wMilliseconds * 1000)) + ((ularge.QuadPart - epoch) / 10ULL);
+			start = ((uint64_t)(system_time.wMilliseconds * 1000)) + ((ularge.QuadPart - epoch) / 10ULL);
 
 			// subtract out uptime
 			start -= GetTickCount64() * 1000;
 		}
-		long long start_sec = start / 1000000;
-		unsigned long long count = GetTickCount64();// todo use higher accuracy timer
-		unsigned long long usec = count * 1000 + start;
+		uint64_t start_sec = start / 1000000;
+		uint64_t count = GetTickCount64();// todo use higher accuracy timer
+		uint64_t usec = count * 1000 + start;
 		return Time(usec);
 #else
 		struct timeval tv;
@@ -139,7 +144,7 @@ public:
 
 	std::string toString()
 	{
-      time_t t = usec / 100000;// toSec();
+      time_t t = usec / 1000000;// toSec();
 
 	  std::string str = ctime(&t);
       str.pop_back();

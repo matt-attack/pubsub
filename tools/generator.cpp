@@ -206,10 +206,13 @@ std::string generate(const char* definition, const char* name)
 		}
 	}
 
-	for (auto field : fields)
+	/*for (auto field : fields)
 	{
 		printf("Got field %s of type %s\n", field.name.c_str(), field.type.c_str());
-	}
+	}*/
+
+	std::string raw_name = split(name, '_').back();
+    std::string ns = std::string(name).substr(0, std::string(name).find_last_of('_')-1);
 
 	// convert the name into a type
 	std::string type_name;
@@ -314,7 +317,7 @@ std::string generate(const char* definition, const char* name)
 		output += "struct ps_msg_t " + type_name + "_encode(struct ps_allocator_t* allocator, const void* msg)\n{\n";
 		output += "  int len = sizeof(struct " + type_name + ");\n";
 		output += "  struct ps_msg_t omsg;\n";
-		output += "  ps_msg_alloc(len, &omsg);\n";
+		output += "  ps_msg_alloc(len, allocator, &omsg);\n";
 		output += "  memcpy(ps_get_msg_start(omsg.data), msg, len);\n";
 		output += "  return omsg;\n}\n";
 	}
@@ -393,7 +396,7 @@ std::string generate(const char* definition, const char* name)
 		}
 		output += "  len -= " + std::to_string(n_str) + "*sizeof(char*);\n";
 		output += "  struct ps_msg_t omsg;\n";
-		output += "  ps_msg_alloc(len, &omsg);\n";
+		output += "  ps_msg_alloc(len, allocator, &omsg);\n";
 		output += "  char* start = (char*)ps_get_msg_start(omsg.data);\n";
 		for (size_t i = 0; i < fields.size(); i++)
 		{
@@ -426,11 +429,10 @@ std::string generate(const char* definition, const char* name)
 	output += "struct ps_message_definition_t " + type_name + "_def = { ";
 	output += std::to_string(hash) + ", \"" + name + "\", " + std::to_string(field_count) + ", " + type_name + "_fields, " + type_name + "_encode, " + type_name + "_decode };\n";
 
-	std::string ns = "std_msgs";//todo parse me out
-	std::string raw_name = split(name, '_').back();
 	output += "\n#ifdef __cplusplus\n";
 	output += "#include <memory>\n";
 	output += "namespace " + ns + "\n{\n";
+    output += "namespace msg\n{\n";
 	output += "struct " + raw_name + ": public " + type_name + "\n{\n";
 	// create destructor
 	bool added_destructor = false;
@@ -520,9 +522,12 @@ std::string generate(const char* definition, const char* name)
 		output += "  }\n\n";
 	}
 	output += "  static const ps_message_definition_t* GetDefinition()\n  {\n";
-	output += "    return &" + type_name + "_def;\n  }\n";
+	output += "    return &" + type_name + "_def;\n  }\n\n";
+	output += "  ps_msg_t Encode() const\n  {\n";
+	output += "    return " + ns + "__" + raw_name + "_encode(0, this);\n  }\n";
 	output += "};\n";
 	output += "typedef std::shared_ptr<" + raw_name + "> " + raw_name + "SharedPtr;\n";
+	output += "}\n";
 	output += "}\n";
 	output += "#endif\n";
 	//printf("Output:\n%s", output.c_str());
@@ -542,11 +547,16 @@ int main(int num_args, char** args)
 	// ex: string.msg std_msgs/String
 	//num_args = 2;
 	//args[1] = "C:\\Users\\space\\Desktop\\pubsub_proto\\PubSub\\msg\\std_msgs__Joy.txt";
+    if ((num_args-1)%3 != 0)
+    {
+        printf("Not enough arguments!");
+        return -1;
+    }
 
 	// okay, read in each message file then lets generate things for it
-	for (int i = 1; i < num_args; i++)
+	for (int i = 1; i < num_args; i+=3)
 	{
-		printf("%s\n", args[i]);
+		//printf("%s\n", args[i]);
 		std::ifstream t(args[i], std::ios::binary);
 		std::string str;
 
@@ -580,12 +590,11 @@ int main(int num_args, char** args)
 		}
 		file_name = file_name.substr(file_name.find_last_of('/') + 1);
 		// remove everything after the .
-		std::string name = file_name.substr(0, file_name.find_first_of('.'));
+		std::string name = std::string(args[i+1]) + "__" + file_name.substr(0, file_name.find_first_of('.'));
 		std::string output = generate(str.c_str(), name.c_str());
 
 		// write it back to file
-		std::string out_name = args[i];
-		out_name += ".h";
+		std::string out_name = args[i+2];
 		std::ofstream o(out_name, std::ios::binary);
 		o << output;
 	}

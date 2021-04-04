@@ -55,6 +55,25 @@ int ps_serialize_message_definition(void* start, const struct ps_message_definit
 	return cur - (char*)start;
 }
 
+void ps_copy_message_definition(struct ps_message_definition_t* dst, const struct ps_message_definition_t* src)
+{
+	dst->num_fields = src->num_fields;
+	dst->hash = src->hash;
+	dst->fields = (struct ps_field_t*)malloc(sizeof(struct ps_field_t)*dst->num_fields);
+	char* name = (char*)malloc(strlen(src->name)+1);
+	strcpy(name, src->name);
+	dst->name = name;
+	for (unsigned int i = 0; i < dst->num_fields; i++)
+	{
+		dst->fields[i].type = src->fields[i].type;
+		dst->fields[i].length = src->fields[i].length;
+		dst->fields[i].content_length = src->fields[i].content_length;
+		char* name = (char*)malloc(strlen(src->fields[i].name) + 1);
+		strcpy(name, src->fields[i].name);
+		dst->fields[i].name = name;
+	}
+}
+
 void ps_deserialize_message_definition(const void * start, struct ps_message_definition_t * definition)
 {
 	//ok, write out number of fields
@@ -71,8 +90,9 @@ void ps_deserialize_message_definition(const void * start, struct ps_message_def
 
 	// read in the name
 	int len = strlen(cur);
-	definition->name = malloc(len + 1);
-	strcpy(definition->name, cur);
+	char* name = malloc(len + 1);
+	strcpy(name, cur);
+	definition->name = name;
 	cur += len + 1;
 	for (unsigned int i = 0; i < definition->num_fields; i++)
 	{
@@ -81,20 +101,21 @@ void ps_deserialize_message_definition(const void * start, struct ps_message_def
 		definition->fields[i].length = f->length;
 		definition->fields[i].content_length = f->content_length;
 		//need to allocate the name
-		definition->fields[i].name = (char*)malloc(strlen(f->name) + 1);
-		strcpy(definition->fields[i].name, f->name);
-
-		cur += 1 + 4 + 2 + strlen(f->name) + 1;
+		int len = strlen(f->name);
+		char* field_name = (char*)malloc(len + 1);
+		strcpy(field_name, f->name);
+		definition->fields[i].name = field_name;
+		cur += 1 + 4 + 2 + len + 1;
 	}
 }
 
 void ps_free_message_definition(struct ps_message_definition_t * definition)
 {
-	free(definition->name);
+	free((void*)definition->name);
 
 	for (unsigned int i = 0; i < definition->num_fields; i++)
 	{
-		free(definition->fields[i].name);
+		free((void*)definition->fields[i].name);
 	}
 	free(definition->fields);
 }
@@ -288,9 +309,12 @@ const char* TypeToString(ps_field_types type)
 	}
 }
 
-void ps_print_definition(const struct ps_message_definition_t* definition)
+void ps_print_definition(const struct ps_message_definition_t* definition, bool print_name)
 {
-	printf("%s\n\n", definition->name);
+    if (print_name)
+    {
+	    printf("%s\n\n", definition->name);
+    }
 	for (unsigned int i = 0; i < definition->num_fields; i++)
 	{
 		const char* type_name = "";
@@ -310,17 +334,24 @@ void ps_print_definition(const struct ps_message_definition_t* definition)
 	}
 }
 
-void ps_msg_alloc(unsigned int size, struct ps_msg_t* out_msg)
+void ps_msg_alloc(unsigned int size, struct ps_allocator_t* allocator, struct ps_msg_t* out_msg)
 {
 	out_msg->len = size;
-	out_msg->data = (void*)((char*)malloc(size + sizeof(struct ps_msg_header)));
+    if (allocator)
+    {
+	    out_msg->data = (void*)allocator->alloc(size + sizeof(struct ps_msg_header), allocator->context);
+    }
+    else
+    {
+        out_msg->data = (void*)((char*)malloc(size + sizeof(struct ps_msg_header)));
+    }
 }
 
 
 struct ps_msg_t ps_msg_cpy(const struct ps_msg_t* msg)
 {
 	struct ps_msg_t out;
-	ps_msg_alloc(msg->len, &out);
+	ps_msg_alloc(msg->len, 0, &out);
 	memcpy(ps_get_msg_start(out.data), ps_get_msg_start(msg->data), msg->len);
 	return out;
 }
