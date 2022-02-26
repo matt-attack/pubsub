@@ -331,6 +331,11 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
 			ps_node_create_subscriber_adv(node, info->first.c_str(), 0, &sub, &options);
 		}
 	}
+
+    if (subscribed)
+    {
+        ps_sub_destroy(&sub);
+    }
 }
 
 int topic_pub(int num_args, char** args, ps_node_t* node)

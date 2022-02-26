@@ -312,7 +312,7 @@ std::string generate(const char* definition, const char* name)
 		output += "  struct " + type_name + "* out = (struct " + type_name + "*)allocator->alloc(sizeof(" + type_name + "), allocator->context);\n";
 		output += "  *out = *(" + type_name + "*)data;\n";
 		output += "  return out;\n";
-		output += "\n}\n\n";
+		output += "}\n\n";
 
 		// now for encode
 		output += "struct ps_msg_t " + type_name + "_encode(struct ps_allocator_t* allocator, const void* msg)\n{\n";

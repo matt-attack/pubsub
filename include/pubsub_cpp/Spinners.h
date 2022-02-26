@@ -184,7 +184,7 @@ public:
 				for (auto& timer : timers_)
 				{
 					Time now = Time::now();
-					if (now > timer.next_trigger)
+					if (now >= timer.next_trigger)
 					{
 						// so either trigger at least 2 ms from now or at the next desired time
 						// this makes sure we dont develop a backlog
