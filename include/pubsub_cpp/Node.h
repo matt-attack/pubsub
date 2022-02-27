@@ -402,6 +402,14 @@ public:
 	{
 		return ps_pub_get_subscriber_count(&publisher_);
 	}
+
+	void addCustomEndpoint(const int ip_addr, const short port, const unsigned int stream_id)
+	{
+		ps_endpoint_t endpoint;
+		endpoint.address = ip_addr;
+		endpoint.port = port;
+		ps_pub_add_endpoint_client(&publisher_, &endpoint, stream_id);
+	}
 };
 
 class Spinner;

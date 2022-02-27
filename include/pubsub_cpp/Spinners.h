@@ -104,6 +104,14 @@ class BlockingSpinnerWithTimers
 	std::thread thread_;
 	std::mutex list_mutex_;
 
+	struct Timer
+	{
+		Time next_trigger;
+		Duration period;
+		std::function<void()> fn;
+	};
+	std::vector<Timer> timers_;
+
 	//ps_event_set_t events_;
 public:
 
@@ -217,18 +225,11 @@ public:
 		});
 	}
 
-	struct Timer
-	{
-		Time next_trigger;
-		Duration period;
-		std::function<void()> fn;
-	};
-	std::vector<Timer> timers_;
 	void addTimer(double period, std::function<void()> cb)
 	{
 		Timer t;
 		t.period = Duration(period);
-		t.next_trigger = Time::now() + t.period;
+		t.next_trigger = Time::now();
 		t.fn = cb;
 		list_mutex_.lock();
 		timers_.push_back(t);

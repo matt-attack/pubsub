@@ -378,20 +378,16 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 		exit(EXIT_FAILURE);
 	}
 
-	if (broadcast)
+	// Enable broadcast on all sockets just in case
+	if (setsockopt(node->mc_socket, SOL_SOCKET, SO_BROADCAST, (char *)&opt, sizeof(opt)) < 0)
 	{
-		// Enable broadcast on all sockets just in case
-		int opt = 1;
-		if (setsockopt(node->mc_socket, SOL_SOCKET, SO_BROADCAST, (char *)&opt, sizeof(opt)) < 0)
-		{
-			perror("setsockopt broadcast mc");
-			exit(EXIT_FAILURE);
-		}
-		if (setsockopt(node->socket, SOL_SOCKET, SO_BROADCAST, (char *)&opt, sizeof(opt)) < 0)
-		{
-			perror("setsockopt broadcast");
-			exit(EXIT_FAILURE);
-		}
+		perror("setsockopt broadcast mc");
+		exit(EXIT_FAILURE);
+	}
+	if (setsockopt(node->socket, SOL_SOCKET, SO_BROADCAST, (char *)&opt, sizeof(opt)) < 0)
+	{
+		perror("setsockopt broadcast");
+		exit(EXIT_FAILURE);
 	}
 
 	// bind to port
@@ -552,6 +548,8 @@ void ps_node_create_subscriber_adv(struct ps_node_t* node, const char* topic, co
 		sub->cb = options->cb;
 		sub->cb_data = options->cb_data;
 		sub->queue_size = 0;
+		sub->queue_len = 0;
+		sub->queue_start = 0;
 		sub->queue = 0;
 	}
 	else
@@ -563,6 +561,7 @@ void ps_node_create_subscriber_adv(struct ps_node_t* node, const char* topic, co
 
 		// allocate queue data
 		sub->queue_len = 0;
+		sub->queue_start = 0;
 		sub->queue_size = queue_size;
 		sub->queue = (void**)malloc(sizeof(void*)*queue_size);
 
@@ -1270,11 +1269,12 @@ int ps_node_spin(struct ps_node_t* node)
 			for (unsigned int c = 0; c < node->pubs[i]->num_clients; c++)
 			{
 				struct ps_client_t* client = &node->pubs[i]->clients[c];
-				if (client->last_keepalive + 120 * 1000 < now)
+				// ignore clients with a last keepalive of 0, that signifies that this is a permanent fake client
+				if (client->last_keepalive != 0 && client->last_keepalive + 120 * 1000 < now)
 				{
 					printf("Client has timed out, unsubscribing...");
 					// remove the client
-					struct ps_client_t cl = *client;
+					struct ps_client_t cl = *client;// make a copy since the old pointer will soon disappear
 					ps_pub_remove_client(node->pubs[i], &cl);
 				}
 			}

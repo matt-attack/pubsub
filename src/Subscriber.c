@@ -22,11 +22,16 @@ void ps_sub_enqueue(struct ps_sub_t* sub, void* out_data, int data_size, const s
   }
   else if (sub->queue_size == sub->queue_len)
   {
-    sub->queue[sub->queue_size - 1] = out_data;
+    // we'll replace the item at the back by shifting the queue around
+    free(sub->queue[sub->queue_start]);
+    // add at the front
+    sub->queue[--sub->queue_start] = out_data;
   }
   else
   {
-    sub->queue[sub->queue_len++] = out_data;
+    // add to the front
+    sub->queue_len++;
+    sub->queue[--sub->queue_start] = out_data;
   }
 }
 
@@ -104,10 +109,11 @@ void ps_sub_destroy(struct ps_sub_t* sub)
 	free(old_subs);
 
 	//free any queued up messages and our queue
-	for (int i = 0; i < sub->queue_size; i++)
+	for (int i = 0; i < sub->queue_len; i++)
 	{
-		if (sub->queue[i] != 0)
-			free(sub->queue[i]);
+		int index = (sub->queue_start + i)%sub->queue_size;
+		if (sub->queue[index] != 0)
+			free(sub->queue[index]);
 	}
 	free(sub->queue);
 }
@@ -119,8 +125,11 @@ void* ps_sub_deque(struct ps_sub_t* sub)
 		//printf("Warning: dequeued when there was nothing in queue\n");
 		return 0;
 	}
+
+	// we are dequeueing, so remove the newest first (from the front)
+	sub->queue_len--;
 	
-	void* data = sub->queue[--sub->queue_len];
-	sub->queue[sub->queue_len] = 0;
+	void* data = sub->queue[sub->queue_start];
+	sub->queue[sub->queue_start++] = 0;
 	return data;
 }

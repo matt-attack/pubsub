@@ -8,7 +8,7 @@
 
 #pragma pack(push)
 #pragma pack(1)
-struct def_header
+struct msg_definition_header
 {
 	unsigned int hash;
 	unsigned int num_fields;
@@ -29,11 +29,11 @@ struct field
 int ps_serialize_message_definition(void* start, const struct ps_message_definition_t* definition)
 {
 	//ok, write out number of fields
-	struct def_header* hdr = (struct def_header*)start;
+	struct msg_definition_header* hdr = (struct msg_definition_header*)start;
 	hdr->hash = definition->hash;
 	hdr->num_fields = definition->num_fields;
 
-	char* cur = ((char*)start) + sizeof(struct def_header);
+	char* cur = ((char*)start) + sizeof(struct msg_definition_header);
 
 	// now write in the name
 	cur += serialize_string(cur, definition->name);
@@ -77,7 +77,7 @@ void ps_copy_message_definition(struct ps_message_definition_t* dst, const struc
 void ps_deserialize_message_definition(const void * start, struct ps_message_definition_t * definition)
 {
 	//ok, write out number of fields
-	struct def_header* hdr = (struct def_header*)start;
+	struct msg_definition_header* hdr = (struct msg_definition_header*)start;
 	definition->hash = hdr->hash;
 	definition->num_fields = hdr->num_fields;
 	definition->decode = 0;
@@ -86,7 +86,7 @@ void ps_deserialize_message_definition(const void * start, struct ps_message_def
 
 	definition->fields = (struct ps_field_t*)malloc(sizeof(struct ps_field_t)*definition->num_fields);
 
-	char* cur = ((char*)start) + sizeof(struct def_header);
+	char* cur = ((char*)start) + sizeof(struct msg_definition_header);
 
 	// read in the name
 	int len = strlen(cur);

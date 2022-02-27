@@ -67,6 +67,8 @@ struct ps_tcp_transport_impl
 {
   int socket;
 
+  struct ps_node_t* node;
+
   struct ps_tcp_client_t* clients;
   int num_clients;
 
@@ -434,7 +436,7 @@ void ps_tcp_transport_destroy(struct ps_transport_t* transport)
     {
       free(impl->connections[i].packet_data);
     }
-    ps_event_set_remove_socket(&impl->connections[i].subscriber->node->events, impl->connections[i].socket);
+    ps_event_set_remove_socket(&impl->node->events, impl->connections[i].socket);
 #ifdef _WIN32
     closesocket(impl->connections[i].socket);
 #else
@@ -444,7 +446,7 @@ void ps_tcp_transport_destroy(struct ps_transport_t* transport)
 
   for (int i = 0; i < impl->num_clients; i++)
   {
-    ps_event_set_remove_socket(&impl->clients[i].publisher->node->events, impl->clients[i].socket);
+    ps_event_set_remove_socket(&impl->node->events, impl->clients[i].socket);
 #ifdef _WIN32
     closesocket(impl->clients[i].socket);
 #else
@@ -487,6 +489,8 @@ void ps_tcp_transport_init(struct ps_transport_t* transport, struct ps_node_t* n
 
     impl->num_clients = 0;
     impl->num_connections = 0;
+
+    impl->node = node;
 
     impl->socket = socket(AF_INET, SOCK_STREAM, 0);
 
