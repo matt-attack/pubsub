@@ -120,153 +120,167 @@ void ps_free_message_definition(struct ps_message_definition_t * definition)
 	free(definition->fields);
 }
 
-const char* ps_deserialize_internal(const char* data, const struct ps_field_t* fields, int num_fields, int indentation)
+struct ps_deserialize_iterator ps_deserialize_start(const char* msg, const struct ps_message_definition_t* definition)
 {
-	//ok, lets work our way through this
-	for (int i = 0; i < num_fields; i++)
+	struct ps_deserialize_iterator iter;
+	iter.next_field_index = 0;
+	iter.next_position = msg;
+	iter.fields = definition->fields;
+	iter.num_fields = definition->num_fields;
+	return iter;
+}
+
+// takes in a deserialize iterator and returns pointer to the data and the current field
+const char* ps_deserialize_iterate(struct ps_deserialize_iterator* iter, const struct ps_field_t** f, uint32_t* l)
+{
+	if (iter->next_field_index == iter->num_fields)
 	{
-		const struct ps_field_t* field = &fields[i];
-		if (field->type == FT_String)
+		return 0;
+	}
+	
+	const struct ps_field_t* field = &iter->fields[iter->next_field_index++];
+	*f = field;
+	
+	const char* position = iter->next_position;
+	
+	// now advance next position by the field size
+	if (field->type == FT_String)
+	{
+		uint32_t len = strlen(position);
+		*l = len;
+		iter->next_position += len + 1;
+	}
+	else if (field->type == FT_Array)
+	{
+		// iterate again, todo show this recursion somehow in the iter
+		// okay, lets just not allow struct arrays in arrays for now?
+		// TODO, i dont think this is even implemented in code gen
+	}
+	else
+	{
+		int field_size = 0;
+		if (field->type == FT_Int8 || field->type == FT_UInt8)
 		{
-			// for now lets just null terminate strings
-			printf("%s: %s\n", field->name, data);
-			data += strlen(data) + 1;
+			field_size = 1;
 		}
-		else if (field->type == FT_Array)
+		else if (field->type == FT_Int16 || field->type == FT_UInt16)
 		{
-			// RECURSE!
-			data = ps_deserialize_internal(data, &fields[i + 1], field->content_length, indentation + 1);
+			field_size = 2;
+		}
+		else if (field->type == FT_Int32 || field->type == FT_UInt32 || field->type == FT_Float32)
+		{
+			field_size = 4;
+		}
+		else if (field->type == FT_Int64 || field->type == FT_UInt64 || field->type == FT_Float64)
+		{
+			field_size = 8;
+		}
+		
+		// now handle length
+		if (field->length > 0)
+		{
+			iter->next_position += field_size*field->length;
+			*l = field->length;
 		}
 		else
 		{
-			//print fields
+			// dynamic array
+			uint32_t length = *(uint32_t*)position;
+			iter->next_position += 4;
+			*l = length;
+			position += 4;// skip over the length for the end user
+			iter->next_position += length*field_size;
+		}
+	}
+	return position;
+}
+
+void ps_deserialize_print(const void * data, const struct ps_message_definition_t* definition)
+{
+	struct ps_deserialize_iterator iter = ps_deserialize_start(data, definition);
+	const struct ps_field_t* field; uint32_t length; const char* ptr;
+	while (ptr = ps_deserialize_iterate(&iter, &field, &length))
+	{
+		if (field->type == FT_String)
+		{
+			// strings are already null terminated
+			printf("%s: %s\n", field->name, ptr);
+		}
+		else
+		{
 			if (field->length == 1)
+			{
+				printf("%s: ", field->name);
+			}
+			else
+			{
+				printf("%s: [", field->name);
+			}
+
+			for (unsigned int i = 0; i < length; i++)
 			{
 				// non dynamic types 
 				switch (field->type)
 				{
 				case FT_Int8:
-					printf("%i", (int)*(int8_t*)data);
-					data += 1;
+					printf("%i", (int)*(int8_t*)ptr);
+					ptr += 1;
 					break;
 				case FT_Int16:
-					printf("%s: %i\n", field->name, (int)*(int16_t*)data);
-					data += 2;
+					printf("%i", (int)*(int16_t*)ptr);
+					ptr += 2;
 					break;
 				case FT_Int32:
-					printf("%s: %i\n", field->name, (int)*(int32_t*)data);
-					data += 4;
+					printf("%i", (int)*(int32_t*)ptr);
+					ptr += 4;
 					break;
 				case FT_Int64:
-					printf("%s: %li\n", field->name, (long int)*(int64_t*)data);
-					data += 8;
+					printf("%li", (long int)*(int64_t*)ptr);
+					ptr += 8;
 					break;
 				case FT_UInt8:
-					printf("%i", (int)*(uint8_t*)data);
-					data += 1;
+					printf("%i", (int)*(uint8_t*)ptr);
+					ptr += 1;
 					break;
 				case FT_UInt16:
-					printf("%s: %i\n", field->name, (int)*(uint16_t*)data);
-					data += 2;
+					printf("%i", (int)*(uint16_t*)ptr);
+					ptr += 2;
 					break;
 				case FT_UInt32:
-					printf("%s: %i\n", field->name, (unsigned int)*(uint32_t*)data);
-					data += 4;
+					printf("%i", (unsigned int)*(uint32_t*)ptr);
+					ptr += 4;
 					break;
 				case FT_UInt64:
-					printf("%s: %li\n", field->name, (unsigned long int)*(uint64_t*)data);
-					data += 8;
+					printf("%li", (unsigned long int)*(uint64_t*)ptr);
+					ptr += 8;
 					break;
 				case FT_Float32:
-					printf("%s: %f\n", field->name, *(float*)data);
-					data += 4;
+					printf("%f", *(float*)ptr);
+					ptr += 4;
 					break;
 				case FT_Float64:
-					printf("%s: %lf\n", field->name, *(double*)data);
-					data += 8;
+					printf("%lf", *(double*)ptr);
+					ptr += 8;
 					break;
 				default:
 					printf("ERROR: unhandled field type when parsing....\n");
 				}
-			}
-			else if (field->length > 1 || field->length == 0)//print arrays
-			{
-				unsigned int length = field->length;
-				if (length == 0)
+
+				if (field->length == 1)
 				{
-					//read in the length
-					length = *(uint32_t*)data;
-					data += 4;
+					printf("\n");
 				}
-				printf("%s: [", field->name);
-
-				for (unsigned int i = 0; i < length; i++)
+				else if (i == length - 1)
 				{
-					// non dynamic types 
-					switch (field->type)
-					{
-					case FT_Int8:
-						printf("%i", (int)*(int8_t*)data);
-						data += 1;
-						break;
-					case FT_Int16:
-						printf("%i", (int)*(int16_t*)data);
-						data += 2;
-						break;
-					case FT_Int32:
-						printf("%i", (int)*(int32_t*)data);
-						data += 4;
-						break;
-					case FT_Int64:
-						printf("%li", (long int)*(int64_t*)data);
-						data += 8;
-						break;
-					case FT_UInt8:
-						printf("%i", (int)*(uint8_t*)data);
-						data += 1;
-						break;
-					case FT_UInt16:
-						printf("%i", (int)*(uint16_t*)data);
-						data += 2;
-						break;
-					case FT_UInt32:
-						printf("%i", (unsigned int)*(uint32_t*)data);
-						data += 4;
-						break;
-					case FT_UInt64:
-						printf("%li", (unsigned long int)*(uint64_t*)data);
-						data += 8;
-						break;
-					case FT_Float32:
-						printf("%f", *(float*)data);
-						data += 4;
-						break;
-					case FT_Float64:
-						printf("%lf", *(double*)data);
-						data += 8;
-						break;
-					default:
-						printf("ERROR: unhandled field type when parsing....\n");
-					}
-
-					if (i == length - 1)
-					{
-						printf("]\n");
-					}
-					else
-					{
-						printf(", ");
-					}
+					printf("]\n");
+				}
+				else
+				{
+					printf(", ");
 				}
 			}
 		}
 	}
-	return data;
-}
-
-void ps_deserialize_print(const void * data, const struct ps_message_definition_t* definition)
-{
-	ps_deserialize_internal((char*)data, definition->fields, definition->num_fields, 0);
 }
 
 void* ps_get_msg_start(const void* data)

@@ -892,7 +892,7 @@ int ps_node_spin(struct ps_node_t* node)
 			}
 			if (pub == 0)
 			{
-				printf("Got subscribe request, but it was for a topic we don't have\n");
+				printf("Got subscribe request, but it was for a topic we don't have '%s'\n", topic);
 				continue;
 			}
 
@@ -1179,7 +1179,7 @@ int ps_node_spin(struct ps_node_t* node)
 			}
 			if (pub == 0)
 			{
-				printf("Got unsubscribe request, but it was for a topic we don't have\n");
+				printf("Got unsubscribe request, but it was for a topic we don't have '%s'\n", topic);
 				continue;
 			}
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C"
@@ -75,6 +76,19 @@ extern "C"
 	// print out the deserialized contents of the message to console, for rostopic echo like implementations
 	// in yaml format
 	void ps_deserialize_print(const void* data, const struct ps_message_definition_t* definition);
+	
+	struct ps_deserialize_iterator
+	{
+		const char* next_position;
+		int next_field_index;
+	
+		int num_fields;
+		const struct ps_field_t* fields;
+	};
+	
+	struct ps_deserialize_iterator ps_deserialize_start(const char* msg, const struct ps_message_definition_t* definition);
+	
+	const char* ps_deserialize_iterate(struct ps_deserialize_iterator* iter, const struct ps_field_t** f, uint32_t* l);
 
 	void ps_free_message_definition(struct ps_message_definition_t* definition);
 
