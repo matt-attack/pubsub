@@ -76,8 +76,11 @@ void ps_sub_destroy(struct ps_sub_t* sub)
 	*addr = sub->node->addr;
 	unsigned short* port = (unsigned short*)&data[5];
 	*port = sub->node->port;
-
-	int off = 7;
+	
+	unsigned int* stream_id = (unsigned int*)&data[7];
+	*stream_id = sub->sub_id;
+	
+	int off = 11;
 	off += serialize_string(&data[off], sub->topic);
 	off += serialize_string(&data[off], sub->type ? sub->type->name : "");
 

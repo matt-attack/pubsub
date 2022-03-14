@@ -1098,64 +1098,67 @@ int ps_node_spin(struct ps_node_t* node)
 			for (unsigned int i = 0; i < node->num_subs; i++)
 			{
                 //printf("%s\n", node->subs[i]->topic);
-				if (strcmp(node->subs[i]->topic, topic) == 0)
+				if (strcmp(node->subs[i]->topic, topic) != 0)
 				{
 					sub = node->subs[i];
-					break;
+					continue;
 				}
-			}
-			if (sub == 0)
-			{
-				//printf("Got advertise notice, but it was for a topic we don't have %s\n", topic);
-				continue;
-			}
+				
+				sub = node->subs[i];
+			
+				if (sub == 0)
+				{
+					//printf("Got advertise notice, but it was for a topic we don't have %s\n", topic);
+					continue;
+				}
 
-			if (sub->ignore_local && sub->node->port == p->port && sub->node->addr == p->addr)
-			{
-				printf("Got advertise notice, but it was for a local pub which we are set to ignore\n");
-				continue;
-			}
+				if (sub->ignore_local && sub->node->port == p->port && sub->node->addr == p->addr)
+				{
+					printf("Got advertise notice, but it was for a local pub which we are set to ignore\n");
+					continue;
+				}
 
-			// check group id
-			if (sub->ignore_local && p->group_id != 0 && p->group_id == node->group_id)
-			{
-				printf("We are a member of this group, ignoring advertise");
-				continue;
-			}
+				// check group id
+				if (sub->ignore_local && p->group_id != 0 && p->group_id == node->group_id)
+				{
+					printf("We are a member of this group, ignoring advertise");
+					continue;
+				}
 
-			// now check that the type matches or we are dynamic...
-			char* type = (char*)&data[strlen(topic) + sizeof(struct ps_advertise_req_t) + 1];
-			if (sub->type != 0 && strcmp(type, sub->type->name) != 0)
-			{
-				printf("The types didnt match! Ignoring\n");
-				continue;
-			}
+				// now check that the type matches or we are dynamic...
+				char* type = (char*)&data[strlen(topic) + sizeof(struct ps_advertise_req_t) + 1];
+				if (sub->type != 0 && strcmp(type, sub->type->name) != 0)
+				{
+					printf("The types didnt match! Ignoring\n");
+					continue;
+				}
 
-			//check hashes
-			if (sub->type != 0 && p->type_hash != sub->type->hash)
-			{
-				// its an error for type mistmatch
-				printf("ERROR: Type hash mismatch on %s", type);
-				continue;
-			}
+				//check hashes
+				if (sub->type != 0 && p->type_hash != sub->type->hash)
+				{
+					// its an error for type mistmatch
+					printf("ERROR: Type hash mismatch on %s", type);
+					continue;
+				}
 
-			// todo subscribe to the most relevant protocol
-			// check if we are already getting data from this person, if so lets not send another request to their advertise
+				// todo subscribe to the most relevant protocol
+				// check if we are already getting data from this person, if so lets not send another request to their advertise
 
-			//printf("Got advertise notice for a topic we need\n");
-            // pick which protocol to subscribe with
-			struct ps_endpoint_t ep;
-			ep.address = p->addr;
-			ep.port = p->port;
-            if (sub->preferred_transport == PS_TRANSPORT_UDP || p->transports == PS_TRANSPORT_UDP)
-            {
-			    ps_send_subscribe(sub, &ep);
-            }
-            else
-            {
-                // for now we just assume TCP is the first transport
-                // todo support more transports
-                node->transports[0].subscribe(&node->transports[0], sub, &ep);
+				//printf("Got advertise notice for a topic we need\n");
+            	// pick which protocol to subscribe with
+				struct ps_endpoint_t ep;
+				ep.address = p->addr;
+				ep.port = p->port;
+            	if (sub->preferred_transport == PS_TRANSPORT_UDP || p->transports == PS_TRANSPORT_UDP)
+            	{
+			    	ps_send_subscribe(sub, &ep);
+            	}
+            	else
+            	{
+                	// for now we just assume TCP is the first transport
+                	// todo support more transports
+                	node->transports[0].subscribe(&node->transports[0], sub, &ep);
+            	}
             }
 		}
 		else if (data[0] == PS_DISCOVERY_PROTOCOL_UNSUBSCRIBE)
@@ -1164,8 +1167,10 @@ int ps_node_spin(struct ps_node_t* node)
 
 			int* addr = (int*)&data[1];
 			unsigned short* port = (unsigned short*)&data[5];
+			
+			unsigned int* stream_id = (unsigned int*)&data[7];
 
-			char* topic = (char*)&data[7];
+			char* topic = (char*)&data[11];
 
 			//check if we have a sub matching that topic
 			struct ps_pub_t* pub = 0;
@@ -1187,6 +1192,7 @@ int ps_node_spin(struct ps_node_t* node)
 			struct ps_client_t client;
 			client.endpoint.address = *addr;
 			client.endpoint.port = *port;
+			client.stream_id = *stream_id;
 			ps_pub_remove_client(pub, &client);
 		}
 		else if (data[0] == PS_DISCOVERY_PROTOCOL_QUERY_ALL)

@@ -49,7 +49,8 @@ bool ps_pub_add_client(struct ps_pub_t* pub, const struct ps_client_t* client)
 	for (unsigned int i = 0; i < pub->num_clients; i++)
 	{
 		if (pub->clients[i].endpoint.address == client->endpoint.address
-			&& pub->clients[i].endpoint.port == client->endpoint.port)
+			&& pub->clients[i].endpoint.port == client->endpoint.port
+			&& pub->clients[i].stream_id == client->stream_id)
 		{
 			//printf("We already have this client, ignoring request\n");
 			return false;
@@ -94,7 +95,8 @@ void ps_pub_remove_client(struct ps_pub_t* pub, const struct ps_client_t* client
 	for (unsigned int i = 0; i < pub->num_clients; i++)
 	{
 		if (pub->clients[i].endpoint.address == client->endpoint.address
-			&& pub->clients[i].endpoint.port == client->endpoint.port)
+			&& pub->clients[i].endpoint.port == client->endpoint.port
+			&& pub->clients[i].stream_id == client->stream_id)
 		{
 			printf("Found the client, removing it\n");
 			found = true;
@@ -115,7 +117,8 @@ void ps_pub_remove_client(struct ps_pub_t* pub, const struct ps_client_t* client
 	for (unsigned int i = 0; i < pub->num_clients+1; i++)
 	{
 		if (old_clients[i].endpoint.address == client->endpoint.address
-			&& old_clients[i].endpoint.port == client->endpoint.port)
+			&& old_clients[i].endpoint.port == client->endpoint.port
+			&& old_clients[i].stream_id == client->stream_id)
 		{
 
 		}
