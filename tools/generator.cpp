@@ -469,7 +469,8 @@ std::string generate(const char* definition, const char* name)
 			}
 			else if (fields[i].array_size == 0)
 			{
-				output += "    " + fields[i].name + " = new " + fields[i].getBaseType() + "[obj." + fields[i].name + "_length*sizeof(" + fields[i].getBaseType() + ")];\n";
+				output += "    " + fields[i].name + " = (" + fields[i].getBaseType() + "*)malloc(obj." + fields[i].name + "_length*sizeof(" + fields[i].getBaseType() + "));\n";
+				//output += "    " + fields[i].name + " = new " + fields[i].getBaseType() + "[obj." + fields[i].name + "_length*sizeof(" + fields[i].getBaseType() + ")];\n";
 				output += "    " + fields[i].name + "_length = obj." + fields[i].name + "_length;\n";
 				output += "    memcpy(" + fields[i].name + ", obj." + fields[i].name + ", obj." + fields[i].name + "_length*sizeof(" + fields[i].getBaseType() + "));\n";
 			}
@@ -484,6 +485,14 @@ std::string generate(const char* definition, const char* name)
 		output += "  " + raw_name + "& operator=(const " + raw_name + "& obj)\n  {\n";
 		for (size_t i = 0; i < fields.size(); i++)
 		{
+			if (fields[i].type == "string" || fields[i].array_size == 0)
+			{
+				output += "    if (this->" + fields[i].name + ")\n";
+				output += "      free(this->" + fields[i].name + ");\n";
+			}
+		}
+		for (size_t i = 0; i < fields.size(); i++)
+		{
 			if (fields[i].type == "string")
 			{
 				output += "    " + fields[i].name + " = new char[strlen(obj." + fields[i].name + ") + 1];\n";
@@ -491,7 +500,8 @@ std::string generate(const char* definition, const char* name)
 			}
 			else if (fields[i].array_size == 0)
 			{
-				output += "    " + fields[i].name + " = new " + fields[i].getBaseType() + "[obj." + fields[i].name + "_length*sizeof(" + fields[i].getBaseType() + ")];\n";
+				output += "    " + fields[i].name + " = (" + fields[i].getBaseType() + "*)malloc(obj." + fields[i].name + "_length*sizeof(" + fields[i].getBaseType() + "));\n";
+				//output += "    " + fields[i].name + " = new " + fields[i].getBaseType() + "[obj." + fields[i].name + "_length*sizeof(" + fields[i].getBaseType() + ")];\n";
 				output += "    " + fields[i].name + "_length = obj." + fields[i].name + "_length;\n";
 				output += "    memcpy(" + fields[i].name + ", obj." + fields[i].name + ", obj." + fields[i].name + "_length*sizeof(" + fields[i].getBaseType() + "));\n";
 			}
@@ -546,7 +556,7 @@ int main(int num_args, char** args)
 	//ok, so this reads in a list of files then converts those all to header files which define serialization and the
 	//message definition
 
-	// takes in first, the message file, then the message name w/ namespace
+	// takes in first, the message file, then the message name w/ namespace, then file to output to
 	// ex: string.msg std_msgs/String
 	//num_args = 2;
 	//args[1] = "C:\\Users\\space\\Desktop\\pubsub_proto\\PubSub\\msg\\std_msgs__Joy.txt";

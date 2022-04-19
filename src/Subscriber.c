@@ -16,6 +16,13 @@ void ps_sub_enqueue(struct ps_sub_t* sub, void* out_data, int data_size, const s
   //add it to the fifo packet queue which always shows the n most recent packets
   //most recent is always first
   //so lets push to the front (highest open index or highest if full)
+  
+  int new_start = sub->queue_start - 1;
+  if (new_start < 0)
+  {
+  	new_start += sub->queue_size;
+  }
+  
   if (sub->queue_size == 0)
   {
     sub->cb(out_data, data_size, sub->cb_data, message_info);
@@ -25,13 +32,15 @@ void ps_sub_enqueue(struct ps_sub_t* sub, void* out_data, int data_size, const s
     // we'll replace the item at the back by shifting the queue around
     free(sub->queue[sub->queue_start]);
     // add at the front
-    sub->queue[--sub->queue_start] = out_data;
+    sub->queue[new_start] = out_data;
+    sub->queue_start = new_start;
   }
   else
   {
     // add to the front
     sub->queue_len++;
-    sub->queue[--sub->queue_start] = out_data;
+    sub->queue[new_start] = out_data;
+    sub->queue_start = new_start;
   }
 }
 
@@ -85,16 +94,23 @@ void ps_sub_destroy(struct ps_sub_t* sub)
 	off += serialize_string(&data[off], sub->type ? sub->type->name : "");
 
 	int sent_bytes = sendto(sub->node->socket, (const char*)data, off, 0, (struct sockaddr*)&address, sizeof(struct sockaddr_in));
+	
+	// unsubcribe from all other transports
+	for (int i = 0; i < sub->node->num_transports; i++)
+	{
+		sub->node->transports[i].unsubscribe(&sub->node->transports[i], sub);
+    }
 
 	//remove it from my list of subs
 	sub->node->num_subs--;
-	struct ps_sub_t** old_subs = sub->node->subs;
     if (sub->node->num_subs == 0)
     {
+      free(sub->node->subs);
       sub->node->subs = 0;
     }
     else
     {
+	  struct ps_sub_t** old_subs = sub->node->subs;
 	  sub->node->subs = (struct ps_sub_t**)malloc(sizeof(struct ps_sub_t*)*sub->node->num_subs);
 	  int ind = 0;
 	  for (unsigned int i = 0; i < sub->node->num_subs+1; i++)
@@ -108,8 +124,8 @@ void ps_sub_destroy(struct ps_sub_t* sub)
           sub->node->subs[ind++] = old_subs[i];
 		}
 	  }
+      free(old_subs);
     }
-	free(old_subs);
 
 	//free any queued up messages and our queue
 	for (int i = 0; i < sub->queue_len; i++)
@@ -133,6 +149,13 @@ void* ps_sub_deque(struct ps_sub_t* sub)
 	sub->queue_len--;
 	
 	void* data = sub->queue[sub->queue_start];
-	sub->queue[sub->queue_start++] = 0;
+	sub->queue[sub->queue_start] = 0;
+	
+	int new_start = sub->queue_start+1;
+	if (new_start >= sub->queue_size)
+	{
+		new_start -= sub->queue_size;
+	}
+	sub->queue_start = new_start;
 	return data;
 }

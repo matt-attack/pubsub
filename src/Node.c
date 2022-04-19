@@ -1153,6 +1153,10 @@ int ps_node_spin(struct ps_node_t* node)
             	{
 			    	ps_send_subscribe(sub, &ep);
             	}
+            	else if (node->num_transports == 0)
+            	{
+            		printf("ERROR: Transport mismatch. Do not have desired transport.\n");
+            	}
             	else
             	{
                 	// for now we just assume TCP is the first transport

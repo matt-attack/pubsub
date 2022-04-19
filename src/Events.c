@@ -28,6 +28,7 @@ void ps_event_set_create(struct ps_event_set_t* set)
 
   struct epoll_event event;
   event.events = EPOLLIN;
+  event.data.ptr = 0;
   epoll_ctl(set->fd, EPOLL_CTL_ADD, set->event_fd, &event);
 #endif
 }
@@ -73,6 +74,7 @@ void ps_event_set_add_socket(struct ps_event_set_t* set, int socket)
 #else
   struct epoll_event event;
   event.events = EPOLLIN;
+  event.data.ptr = 0;
   epoll_ctl(set->fd, EPOLL_CTL_ADD, socket, &event);
   set->num_events++;
 #endif

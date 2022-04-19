@@ -61,6 +61,10 @@ struct ps_tcp_client_t
   bool needs_removal;
 
   struct ps_pub_t* publisher;
+  
+  int current_packet_size;
+  int desired_packet_size;
+  char* packet_data;
 };
 
 struct ps_tcp_transport_impl
@@ -132,8 +136,13 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
     {
       impl->clients[i] = old_sockets[i];
     }
-    impl->clients[impl->num_clients-1].socket = socket;
-    impl->clients[impl->num_clients - 1].needs_removal = false;
+    struct ps_tcp_client_t* new_client = &impl->clients[impl->num_clients - 1];
+    new_client->socket = socket;
+    new_client->socket = socket;
+    new_client->needs_removal = false;
+    new_client->current_packet_size = 0;
+    new_client->desired_packet_size = 0;
+    new_client->packet_data = 0;
 
     // set non-blocking
 #ifdef _WIN32
@@ -171,57 +180,100 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
       struct ps_client_t client;
       client.endpoint.address = impl->clients[i].socket;
       client.endpoint.port = 255;// p->port;
+      client.stream_id = 0;
       ps_pub_remove_client(impl->clients[i].publisher, &client);// todo this is probably unsafe....
 
       remove_client_socket(impl, impl->clients[i].socket, impl->clients[i].publisher->node);
 
       i = i - 1;
-      return;
+      break;
     }
   }
 
   // update our sockets yo
   for (int i = 0; i < impl->num_clients; i++)
   {
-    // check for new data
+    struct ps_tcp_client_t* client = &impl->clients[i];
+    // check for new data and add it to the packet if present
     char buf[1500];
-    int len = recv(impl->clients[i].socket, buf, 1500, 0);
-    if (len > 0)
+    // if we havent gotten a header yet, just check for that
+    if (client->desired_packet_size == 0)
     {
-      //printf("Read %i bytes from client '%s'\n", len, &buf[5]);
-
-      const char* topic = &buf[5+4];
-      // check if this matches any of our publishers
-      for (unsigned int pi = 0; pi < node->num_pubs; pi++)
+      const int header_size = 5;
+      int len = recv(client->socket, buf, header_size, MSG_PEEK);
+      if (len < header_size)
       {
-        struct ps_pub_t* pub = node->pubs[pi];
-        if (strcmp(topic, pub->topic) == 0)
+        continue;// no header yet
+      }
+
+      char message_type = buf[0];// not used atm
+
+      // we actually got the header! start looking for the message
+      len = recv(client->socket, buf, header_size, 0);
+      //connection->packet_type = message_type;
+      //client->waiting_for_header = false;
+      client->desired_packet_size = *(int*)&buf[1];
+      //printf("Incoming message with %i bytes\n", client->desired_packet_size);
+      client->packet_data = (char*)malloc(client->desired_packet_size);
+
+      client->current_packet_size = 0;
+	}
+    else // read in the message
+    {
+      int remaining_size = client->desired_packet_size - client->current_packet_size;
+      // check for new messages and read until we hit packet size
+      int len = recv(client->socket, &client->packet_data[client->current_packet_size], remaining_size, 0);
+      if (len > 0)
+      {
+        //printf("Read %i bytes of message\n", len);
+        client->current_packet_size += len;
+
+        if (client->current_packet_size == client->desired_packet_size)
         {
-          unsigned int skip = *(unsigned int*)&buf[5];
-          // send response and start publishing
-          struct ps_client_t client;
-          client.endpoint.address = impl->clients[i].socket;
-          client.endpoint.port = 255;// p->port;
-          client.last_keepalive = 10000000000000;//GetTickCount64();// use the current time stamp
-          client.sequence_number = 0;
-          client.stream_id = 0;
-          client.modulo = skip > 0 ? skip + 1 : 0;
-          client.transport = transport;
+          printf("message finished\n");
+          
+          if (true)// todo look at message id
+          {
+          	// its a subscribe
+          	const char* topic = &client->packet_data[4];
+            // check if this matches any of our publishers
+            for (unsigned int pi = 0; pi < node->num_pubs; pi++)
+            {
+              struct ps_pub_t* pub = node->pubs[pi];
+              if (strcmp(topic, pub->topic) == 0)
+              {
+                uint32_t skip = *(uint32_t*)&client->packet_data[0];
+                // send response and start publishing
+                struct ps_client_t sub_client;
+                sub_client.endpoint.address = client->socket;
+                sub_client.endpoint.port = 255;// p->port;
+                sub_client.last_keepalive = 10000000000000;//GetTickCount64();// use the current time stamp
+                sub_client.sequence_number = 0;
+                sub_client.stream_id = 0;
+                sub_client.modulo = skip > 0 ? skip + 1 : 0;
+                sub_client.transport = transport;
 
-          impl->clients[i].publisher = pub;
+                impl->clients[i].publisher = pub;
 
-          //printf("Got subscribe request, adding client if we haven't already\n");
-          ps_pub_add_client(pub, &client);
+                printf("Got subscribe request, adding client if we haven't already\n");
+                ps_pub_add_client(pub, &sub_client);
 
-          // send the client the acknowledgement and message definition
-          int8_t packet_type = 0x03;//message definition
-          send(impl->clients[i].socket, (char*)&packet_type, 1, 0);
+                // send the client the acknowledgement and message definition
+                int8_t packet_type = 0x03;//message definition
+                send(impl->clients[i].socket, (char*)&packet_type, 1, 0);
 
-          char buf[1500];
-          int length = ps_serialize_message_definition((void*)buf, pub->message_definition);
-          send(impl->clients[i].socket, (char*)&length, 4, 0);
-          send(impl->clients[i].socket, buf, length, 0);
-          break;
+                char buf[1500];
+                int length = ps_serialize_message_definition((void*)buf, pub->message_definition);
+                send(impl->clients[i].socket, (char*)&length, 4, 0);
+                send(impl->clients[i].socket, buf, length, 0);
+                break;
+              }
+            }
+          }
+
+          free(client->packet_data);
+
+          client->desired_packet_size = 0;
         }
       }
     }
@@ -315,7 +367,7 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
   // the client packs the socket id in the addr
   int socket = client->endpoint.address;
 
-  printf("publishing tcp\n");
+  //printf("publishing tcp\n");
   // a packet is an int length followed by data
   int8_t packet_type = 0x02;//message
   if (send(socket, (char*)&packet_type, 1, 0) < 0)
@@ -328,7 +380,7 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
       if (impl->clients[i].socket == socket)
       {
         impl->clients[i].needs_removal = true;
-        return;// we already have it in the list
+        break;
       }
     }
 
@@ -343,11 +395,13 @@ void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_
 {
     struct ps_tcp_transport_impl* impl = (struct ps_tcp_transport_impl*)transport->impl;
 
-    // check if we already have a sub with this endpoint
+    // check if we already have a sub for this subscriber with this endpoint
     // if so, ignore it
     for (int i = 0; i < impl->num_connections; i++)
     {
-      if (impl->connections[i].endpoint.port == ep->port && impl->connections[i].endpoint.address == ep->address)
+      if (impl->connections[i].endpoint.port == ep->port &&
+          impl->connections[i].endpoint.address == ep->address &&
+          impl->connections[i].subscriber->sub_id == subscriber->sub_id)
       {
         return;
       }
@@ -374,16 +428,16 @@ void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_
     // a packet is an int length followed by data
     int8_t packet_type = 0x01;//subscribe
     send(sock, (char*)&packet_type, 1, 0);
-
-    // make the request
-    int32_t length = 0;
-    char buffer[500];
-    length += strlen(subscriber->topic)+1 + 4;
-    strcpy(buffer, subscriber->topic);
+    
+    int32_t length = strlen(subscriber->topic) + 1 + 4;
     send(sock, (char*)&length, 4, 0);
-    unsigned int skip = subscriber->skip;
+    
+    // make the request
+    char buffer[500];
+    strcpy(buffer, subscriber->topic);
+    uint32_t skip = subscriber->skip;
     send(sock, (char*)&skip, 4, 0);
-    send(sock, buffer, length, 0);
+    send(sock, buffer, length-4, 0);
 
     // add the socket to the list of connections
     impl->num_connections++;
@@ -421,6 +475,52 @@ void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_
 	if (impl->num_connections - 1)
 	{
        free(old_connections);
+	}
+}
+
+void ps_tcp_transport_unsubscribe(struct ps_transport_t* transport, struct ps_sub_t* subscriber)
+{
+    struct ps_tcp_transport_impl* impl = (struct ps_tcp_transport_impl*)transport->impl;
+    
+	// remove all transports which reference this subscriber
+	int num_to_remove = 0;
+	for (int i = 0; i < impl->num_connections; i++)
+	{
+		if (impl->connections[i].subscriber == subscriber)
+		{
+			num_to_remove++;
+		}
+	}
+	
+	printf("Removing %i tcp subs\n", num_to_remove);
+	if (num_to_remove > 0)
+	{
+	  // Free our subscribers and any buffers
+	  int iter = 0;
+	  int new_size = impl->num_connections - num_to_remove;
+	  struct ps_tcp_transport_connection* new_connections = new_size == 0 ? 0 : (struct ps_tcp_transport_connection*)malloc(sizeof(struct ps_tcp_transport_connection)*new_size);
+      for (int i = 0; i < impl->num_connections; i++)
+      {
+      	if (impl->connections[i].subscriber != subscriber)
+      	{
+      		new_connections[iter++] = impl->connections[i];
+      		continue;
+      	}
+      	
+        if (!impl->connections[i].waiting_for_header)
+        {
+          free(impl->connections[i].packet_data);
+        }
+        ps_event_set_remove_socket(&impl->node->events, impl->connections[i].socket);
+#ifdef _WIN32
+        closesocket(impl->connections[i].socket);
+#else
+        close(impl->connections[i].socket);
+#endif
+      }
+      impl->num_connections = new_size;
+      free(impl->connections);
+      impl->connections = new_connections;
 	}
 }
 
@@ -481,6 +581,7 @@ void ps_tcp_transport_init(struct ps_transport_t* transport, struct ps_node_t* n
 
     transport->spin = ps_tcp_transport_spin;
     transport->subscribe = ps_tcp_transport_subscribe;
+    transport->unsubscribe = ps_tcp_transport_unsubscribe;
     transport->destroy = ps_tcp_transport_destroy;
     transport->pub = ps_tcp_transport_pub;
     transport->uuid = 1;
