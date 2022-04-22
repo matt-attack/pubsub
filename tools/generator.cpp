@@ -166,6 +166,21 @@ std::string generate(const char* definition, const char* name)
 		{
 			line = line.substr(0, p);
 		}
+		
+		// now strip any leading whitespace
+		std::string cp;
+		for (int i = 0; i < line.length(); i++)
+		{
+			if (line[i] != ' ' && line[i] != '\t')
+			{
+				for (; i < line.length(); i++)
+				{
+					cp += line[i];
+				}
+				break;
+			}
+		}
+		line = cp;
 	}
 
 	// also generate the has while we are at it
@@ -338,7 +353,7 @@ std::string generate(const char* definition, const char* name)
 			else if (fields[i].array_size == 0)
 			{
 				output += "  int len_" + fields[i].name + " = *(uint32_t*)p;\n";
-				output += "  p += len_" + fields[i].name + ";\n";
+				output += "  p += len_" + fields[i].name + "*sizeof(" + fields[i].getBaseType() + ");\n";
 				output += "  p += 4;\n";// add size of length
 			}
 			else
@@ -357,7 +372,7 @@ std::string generate(const char* definition, const char* name)
 				output += "  out->" + fields[i].name + " = ("+fields[i].getBaseType()+"*)allocator->alloc(len_" + fields[i].name + "*sizeof(" + fields[i].getBaseType() + "), allocator->context);\n";
 				output += "  p += 4;\n";// move past the length
 				output += "  memcpy(out->" + fields[i].name + ", p, len_" + fields[i].name + "*sizeof(" + fields[i].getBaseType() + "));\n";// is memcpy faster in this case?
-				output += "  p += len_" + fields[i].name + ";\n";
+				output += "  p += len_" + fields[i].name + "*sizeof(" + fields[i].getBaseType() + ");\n";
 			}
 			else if (fields[i].type != "string")
 			{
@@ -391,7 +406,7 @@ std::string generate(const char* definition, const char* name)
 			}
 			else if (fields[i].array_size == 0)
 			{
-				output += "  len += msg->" + fields[i].name + "_length;\n";
+				output += "  len += msg->" + fields[i].name + "_length*sizeof(" + fields[i].getBaseType() + ");\n";
 				n_str++;
 			}
 		}
@@ -575,19 +590,19 @@ int main(int num_args, char** args)
 
 		t.seekg(0, std::ios::end);
 		str.reserve(t.tellg());
-		t.seekg(3, std::ios::beg);
+		t.seekg(0, std::ios::beg);
 
 		str.assign((std::istreambuf_iterator<char>(t)),
 			std::istreambuf_iterator<char>());
 
-		// todo remove a BOM if there is one
-		/*if (str.length() >= 3 && str[0] == 0xEF
-			&& str[1] == 0xBB && str[2] == 0xBF)
+		// remove a BOM if there is one
+		if (str.length() >= 3 && str[0] == '\357'
+			&& str[1] == '\273' && str[2] == '\277')
 		{
-			//str[0] = ' ';
-			//str[1] = ' ';
-			//str[2] = ' ';
-		}*/
+			str[0] = ' ';
+			str[1] = ' ';
+			str[2] = ' ';
+		}
 
 		//str = str.substr(3);
 

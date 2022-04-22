@@ -98,6 +98,11 @@ void remove_client_socket(struct ps_tcp_transport_impl* transport, int socket, s
   close(socket);
 #endif
 
+  if (transport->clients[i].packet_data)
+  {
+    free(transport->clients[i].packet_data);
+  }
+
   struct ps_tcp_client_t* old_clients = transport->clients;
   transport->num_clients -= 1;
 
@@ -112,7 +117,7 @@ void remove_client_socket(struct ps_tcp_transport_impl* transport, int socket, s
       transport->clients[j] = old_clients[j];
     }
 
-    for (int j = i + 1; j < transport->num_clients; j++)
+    for (int j = i + 1; j <= transport->num_clients; j++)
     {
       transport->clients[j - 1] = old_clients[j];
     }
@@ -272,7 +277,7 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
           }
 
           free(client->packet_data);
-
+          client->packet_data = 0;
           client->desired_packet_size = 0;
         }
       }

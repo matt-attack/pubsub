@@ -1,5 +1,5 @@
 
-uint16 num_points
+uint32 num_points
 
 # Point type, right now limited to a set list
 # 0 = x,y,z
