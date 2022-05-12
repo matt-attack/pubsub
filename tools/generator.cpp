@@ -21,12 +21,21 @@ std::vector<std::string> split(const std::string& data, char c)
 	return lines;
 }
 
+struct enumeration
+{
+	std::string name;
+	std::string value;
+	int field_num;
+};
+
 struct field
 {
 	std::string name;
 	std::string type;
 
 	int array_size;
+	
+	std::string flag;
 
 	std::string serialize()
 	{
@@ -83,6 +92,19 @@ struct field
 
 		return "invalid";
 	}
+	
+	std::string getFlags()
+	{
+		if (flag == "enum")
+			return "FF_ENUM";
+		if (flag == "bitmask")
+			return "FF_BITMASK";
+		if (flag == "")
+			return "FF_NONE";
+		
+		printf("ERROR: Invalid flag %s\n", flag.c_str());
+		return "invalid";
+	}
 
 	std::string getTypeEnum()
 	{
@@ -131,7 +153,7 @@ struct field
 		{
 			return "FT_Float64";
 		}
-
+		printf("ERROR: Invalid type %s\n", type.c_str());
 		return "invalid";
 	}
 };
@@ -140,8 +162,9 @@ std::string generate(const char* definition, const char* name)
 {
 	std::string output;
 
-	// first parse out the fields
+	// first parse out the fields and enums
 	std::vector<field> fields;
+	std::vector<enumeration> enumerations;
 
 	// remove any windows line extensions
 	std::string cleaned;
@@ -199,7 +222,7 @@ std::string generate(const char* definition, const char* name)
 		{
 			continue;
 		}
-		else if (words.size() >= 2)
+		else if (words.size() == 2)
 		{
 			std::string name = words[1];
 			std::string type = words[0];
@@ -219,12 +242,49 @@ std::string generate(const char* definition, const char* name)
 			// also fill in array size
 			fields.push_back({ name, type, size});
 		}
+		// a line with flags maybe?
+		else if (words.size() == 3)
+		{
+			std::string flag = words[0];
+			std::string type = words[1];
+			std::string name = words[2];
+			
+			int size = 1;
+			if (name.substr(name.size() - 2) == "[]")
+			{
+				size = 0;
+				name = name.substr(0, name.length() - 2);
+			}
+			else if (name.find('[') != -1)
+			{
+				int index = name.find('[');
+				size = std::stoi(name.substr(index + 1));
+				name = name.substr(0, index);
+			}
+			// also fill in array size
+			fields.push_back({ name, type, size, flag});
+		}
+		else
+		{
+			// this is either an enum or an error
+			auto equals = split(line, '=');
+			if (equals.size() == 2)
+			{
+				// its an enum!
+				//printf("it was an enum: %s=%s\n", equals[0].c_str(), equals[1].c_str());
+				enumerations.push_back({equals[0], equals[1], (int)fields.size()});
+			}
+			else
+			{
+				printf("WARNING: Unexpectedly formatted line in message.\n");
+			}
+		}
 	}
 
-	/*for (auto field : fields)
+	for (auto field : fields)
 	{
-		printf("Got field %s of type %s\n", field.name.c_str(), field.type.c_str());
-	}*/
+		//printf("Got field %s of type %s\n", field.name.c_str(), field.type.c_str());
+	}
 
 	std::string raw_name = split(name, '_').back();
     std::string ns = std::string(name).substr(0, std::string(name).find_last_of('_')-1);
@@ -253,6 +313,7 @@ std::string generate(const char* definition, const char* name)
 	output += "#include <string.h>\n\n";
 
 	// now that we have these, generate stuff!, start with the struct
+	output += "#pragma pack(push, 1)\n";
 	output += "struct " + type_name + "\n{\n";
 	for (auto& field : fields)
 	{
@@ -271,19 +332,31 @@ std::string generate(const char* definition, const char* name)
 		}
 	}
 	output += "};\n\n";
+	output += "#pragma pack(pop)\n";
 
 	// then generate the message definition data
 	//ps_field_t std_msgs_String_fields[] = { { FT_String, "value", 1, 0 } };
 	//ps_message_definition_t std_msgs_String_def = { 123456789, "std_msgs/String", 1, std_msgs_String_fields };
 
 	// generate the fields
-	output += "struct ps_field_t " + type_name + "_fields[] = {\n";
+	output += "struct ps_msg_field_t " + type_name + "_fields[] = {\n";
 	for (auto& field : fields)
 	{
-		output += "  { " + field.getTypeEnum() + ", \"" + field.name + "\", ";
+		output += "  { " + field.getTypeEnum() + ", " + field.getFlags() + ", \"" + field.name + "\", ";
 		output += std::to_string(field.array_size) + ", 0 }, \n";// todo use for array types
 	}
 	output += "};\n\n";
+	
+	// generate enum metadata
+	if (enumerations.size())
+	{
+		output += "struct ps_msg_enum_t " + type_name + "_enums[] = {\n";
+		for (auto& e: enumerations)
+		{
+			output += "  {\"" + e.name + "\", " + e.value + ", " + std::to_string(e.field_num) + "},\n";
+		}
+		output += "};\n\n";
+	}
 
 	// okay, generate encoding/decoding
 	// for the moment, we can just copy it to decode, if its just a packed struct
@@ -443,13 +516,41 @@ std::string generate(const char* definition, const char* name)
 	// generate the actual message definition
 	int field_count = fields.size();
 	output += "struct ps_message_definition_t " + type_name + "_def = { ";
-	output += std::to_string(hash) + ", \"" + name + "\", " + std::to_string(field_count) + ", " + type_name + "_fields, " + type_name + "_encode, " + type_name + "_decode };\n";
+	if (enumerations.size() == 0)
+	{
+		output += std::to_string(hash) + ", \"" + name + "\", " + std::to_string(field_count) + ", " + type_name + "_fields, " + type_name + "_encode, " + type_name + "_decode, 0, 0 };\n";
+	}
+	else
+	{
+		output += std::to_string(hash) + ", \"" + name + "\", " + std::to_string(field_count) + ", " + type_name + "_fields, " + type_name + "_encode, " + type_name + "_decode, " + std::to_string(enumerations.size()) + ", " + type_name + "_enums };\n";
+	}
 
 	output += "\n#ifdef __cplusplus\n";
 	output += "#include <memory>\n";
 	output += "namespace " + ns + "\n{\n";
     output += "namespace msg\n{\n";
 	output += "struct " + raw_name + ": public " + type_name + "\n{\n";
+	
+	// add any enumerations
+	if (enumerations.size() > 0)
+	{
+		output += "  enum\n  {\n";
+		for (int i = 0; i < enumerations.size(); i++)
+		{
+			auto en = enumerations[i];
+			output += "    ";
+			output += en.name;
+			output += " = ";
+			output += en.value;
+			if (i != enumerations.size() - 1)
+			{
+				output += ",";
+			}
+			output += "\n";
+		}
+		output += "  };\n\n";
+	}
+	
 	// create destructor
 	bool added_destructor = false;
 	for (size_t i = 0; i < fields.size(); i++)
@@ -557,6 +658,20 @@ std::string generate(const char* definition, const char* name)
 	output += "typedef std::shared_ptr<" + raw_name + "> " + raw_name + "SharedPtr;\n";
 	output += "}\n";
 	output += "}\n";
+	// add any enumerations for C
+	if (enumerations.size() > 0)
+	{
+		output += "#else\n";
+		for (int i = 0; i < enumerations.size(); i++)
+		{
+			auto en = enumerations[i];
+			output += "#define ";
+			output += en.name;
+			output += " ";
+			output += en.value;
+			output += "\n";
+		}
+	}
 	output += "#endif\n";
 	//printf("Output:\n%s", output.c_str());
 

@@ -173,6 +173,8 @@ struct ps_subscribe_accept_t
 // set 
 void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool broadcast);
 
+void ps_node_init_ex(struct ps_node_t* node, const char* name, const char* ip, bool broadcast, bool setup_ctrl_c_handler);
+
 void ps_node_create_publisher(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type, struct ps_pub_t* pub, bool latched);
 
 void ps_node_create_subscriber(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,

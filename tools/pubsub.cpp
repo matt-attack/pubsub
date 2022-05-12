@@ -645,10 +645,16 @@ int main(int num_args_real, char** args)
 
 	// Query the other nodes in the network for their data
 	ps_node_system_query(&node);
+	
+	if (strcmp(args[1], "--help") == 0 || strcmp(args[1], "-h") == 0)
+	{
+		print_help();
+		return 0;
+	}
 
 	if (num_args < 3)
 	{
-		printf("Not enough arguments");
+		printf("Not enough arguments\n");
 		return 0;
 	}
 
@@ -664,7 +670,7 @@ int main(int num_args_real, char** args)
 
 		if (num_args < 4)
 		{
-			printf("Not enough arguments");
+			printf("Not enough arguments\n");
 			return 0;
 		}
 

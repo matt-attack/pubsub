@@ -241,13 +241,22 @@ char* GetPrimaryIp()
 
 void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool broadcast)
 {
+	ps_node_init_ex(node, name, ip, broadcast, true);
+}
+
+void ps_node_init_ex(struct ps_node_t* node, const char* name, const char* ip, bool broadcast,
+  bool setup_ctrl_c_handler)
+{
 	networking_init();
 
+	if (setup_ctrl_c_handler)
+	{
 #ifdef _WIN32
-	SetConsoleCtrlHandler(CtrlHandler, TRUE);
+		SetConsoleCtrlHandler(CtrlHandler, TRUE);
 #else
-    signal(SIGINT, CtrlHandler);
+		signal(SIGINT, CtrlHandler);
 #endif
+	}
 
 	node->name = name;
 	node->num_pubs = 0;
@@ -260,7 +269,8 @@ void ps_node_init(struct ps_node_t* node, const char* name, const char* ip, bool
 	node->def_cb = 0;
 
 	node->supported_transports = PS_TRANSPORT_UDP;
-    node->num_transports = 0;
+	node->num_transports = 0;
+	node->transports = 0;
 
 	node->_last_advertise = 0;
 	node->_last_check = 0;
@@ -479,6 +489,11 @@ void ps_node_destroy(struct ps_node_t* node)
 	close(node->mc_socket);
 #endif
 
+	if (node->transports)
+	{
+		free(node->transports);
+	}
+
 	node->socket = node->mc_socket = 0;
 	node->num_pubs = node->num_subs = 0;
 }
@@ -534,7 +549,7 @@ void ps_node_create_subscriber_adv(struct ps_node_t* node, const char* topic, co
 	sub->allocator = allocator;
 	sub->ignore_local = options->ignore_local;
 	sub->skip = options->skip;
-    sub->preferred_transport = options->preferred_transport;
+	sub->preferred_transport = options->preferred_transport;
 
 	sub->want_message_definition = type ? options->want_message_def : true;
 	sub->received_message_def.fields = 0;
@@ -705,12 +720,12 @@ int ps_node_create_events(struct ps_node_t* node, struct ps_event_set_t* events)
 
 void ps_node_add_transport(struct ps_node_t* node, struct ps_transport_t* transport)
 {
-  node->num_transports++;
-  // todo dont hack here
-  node->transports = (struct ps_transport_t*)malloc(sizeof(struct ps_transport_t)*node->num_transports);
-  node->transports[0] = *transport;
+	node->num_transports++;
+	// todo dont hack here
+	node->transports = (struct ps_transport_t*)malloc(sizeof(struct ps_transport_t)*node->num_transports);
+	node->transports[0] = *transport;
 
-  node->supported_transports |= transport->uuid;
+	node->supported_transports |= transport->uuid;
 }
 
 //returns nonzero if we got a message
@@ -751,11 +766,11 @@ int ps_node_spin(struct ps_node_t* node)
 		}
 	}
 
-    // check if any of our sockets are available
-    for (unsigned int i = 0; i < node->num_transports; i++)
-    {
-      node->transports[i].spin(&node->transports[i], node);
-    }
+	// check if any of our sockets are available
+	for (unsigned int i = 0; i < node->num_transports; i++)
+	{
+		node->transports[i].spin(&node->transports[i], node);
+	}
 
 	// this block holds the update for one protocol
 	// other protocols can add to this
