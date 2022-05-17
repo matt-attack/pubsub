@@ -65,6 +65,10 @@ struct ps_tcp_client_t
   int current_packet_size;
   int desired_packet_size;
   char* packet_data;
+  
+  char* queued_message;
+  int queued_message_length;
+  int queued_message_written;
 };
 
 struct ps_tcp_transport_impl
@@ -101,6 +105,11 @@ void remove_client_socket(struct ps_tcp_transport_impl* transport, int socket, s
   if (transport->clients[i].packet_data)
   {
     free(transport->clients[i].packet_data);
+  }
+  
+  if (transport->clients[i].queued_message)
+  {
+    free(transport->clients[i].queued_message);
   }
 
   struct ps_tcp_client_t* old_clients = transport->clients;
@@ -148,6 +157,7 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
     new_client->current_packet_size = 0;
     new_client->desired_packet_size = 0;
     new_client->packet_data = 0;
+    new_client->queued_message = 0;
 
     // set non-blocking
 #ifdef _WIN32
@@ -201,6 +211,25 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
     struct ps_tcp_client_t* client = &impl->clients[i];
     
     // check if we have any sends left to complete
+    if (client->queued_message != 0)
+    {
+      int to_send = client->queued_message_length - client->queued_message_written;
+      int sent = send(client->socket, &client->queued_message[client->queued_message_written], to_send, 0);
+      if (sent > 0)
+      {
+        client->queued_message_written += sent;
+      }
+      else if (sent < 0 && errno != EAGAIN)
+      {
+        client->needs_removal = true;
+      }
+    	
+      if (client->queued_message_written == client->queued_message_length)
+      {
+        free(client->queued_message);
+        client->queued_message = 0;
+      }
+    }
     
     // check for new data and add it to the packet if present
     char buf[1500];
@@ -375,97 +404,91 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
   // the client packs the socket id in the addr
   int socket = client->endpoint.address;
   
-  // so, this is a terrible fix but works for the moment
-  // note this can BLOCK until the message is completely sent
-
-  // a packet is an int length followed by data
-  int8_t packet_type = 0x02;//message
-  int sent = 0;
-  while (sent < 1)
+  // okay, so new version, if any write fails (EAGAIN or < expected size)
+  // we make a copy of the entire message and store it on that client to try and send again in our update loop
+  // if we get into this function and this client already has a queued message, just drop this one
+  struct ps_tcp_client_t* tclient = 0;
+  for (int i = 0; i < impl->num_clients; i++)
   {
-  	int c = send(socket, (char*)&packet_type, 1, 0);
-  	if (c < 0)
+    if (impl->clients[i].socket == socket)
     {
-      if (errno == EAGAIN)
-      {
-        continue;
-      }
-      //perror("send error, removing socket");
-      // remove this socket
-      // add this to the list of clients to remove if it doesnt exist
-      for (int i = 0; i < impl->num_clients; i++)
-      {
-        if (impl->clients[i].socket == socket)
-        {
-          impl->clients[i].needs_removal = true;
-          break;
-        }
-      }
-
-      return;
-    }
-  
-    sent += c;
-  }
-
-  // if length fails to send, just give up on this particular message for the moment
-  sent = 0;
-  while (sent < 4)
-  {
-  	int c = send(socket, ((char*)&length) + sent, 4-sent, 0);
-  	if (c < 0)
-    {
-      if (errno == EAGAIN)
-      {
-        continue;
-      }
-      
-      //perror("send error, removing socket");
-      // remove this socket
-      // add this to the list of clients to remove if it doesnt exist
-      for (int i = 0; i < impl->num_clients; i++)
-      {
-        if (impl->clients[i].socket == socket)
-        {
-          impl->clients[i].needs_removal = true;
-          break;
-        }
-      }
-
-      return;
-    }
-  
-    sent += c;
+      tclient = &impl->clients[i];
+      break;
+    }  
   }
   
-  sent = 0;
-  while (sent < length)
+  if (tclient->queued_message != 0)
   {
-    int c = send(socket, ((char*)ps_get_msg_start(message)) + sent, length-sent, 0);
-  	if (c < 0)
-    {
-      if (errno == EAGAIN)
-      {
-        continue;
-      }
-      
-      //perror("send error, removing socket");
-      // remove this socket
-      // add this to the list of clients to remove if it doesnt exist
-      for (int i = 0; i < impl->num_clients; i++)
-      {
-        if (impl->clients[i].socket == socket)
-        {
-          impl->clients[i].needs_removal = true;
-          break;
-        }
-      }
-
-      return;
-    }
-  
-    sent += c;
+  	printf("dropped message\n");
+  	return;// drop it, we have one queued already
   }
+  
+  // try and write, if any of these fail, make a copy
+  uint8_t packet_type = 0x02;
+  int c = send(socket, (char*)&packet_type, 1, 0);
+  if (c == 0)
+  {
+    tclient->queued_message_written = 0;
+    goto FAILCOPY;
+  }
+  if (c < 0)
+  {
+    if (errno == EAGAIN)
+    {
+      tclient->queued_message_written = 0;
+      goto FAILCOPY;
+    }
+    goto FAILDISCONNECT;
+  }
+  
+  c = send(socket, (char*)&length, 4, 0);
+  if (c < 4 && c > 0)
+  {
+    tclient->queued_message_written = c + 1;
+    goto FAILCOPY;
+  }
+  if (c < 0)
+  {
+    if (errno == EAGAIN)
+    {
+      tclient->queued_message_written = c + 1;
+      goto FAILCOPY;
+    }
+    goto FAILDISCONNECT;
+  }
+  
+    
+  c = send(socket, (char*)ps_get_msg_start(message), length, 0);
+  if (c < length && c > 0)
+  {
+    tclient->queued_message_written = c + 5;
+    goto FAILCOPY;
+  }
+  if (c < 0)
+  {
+    if (errno == EAGAIN)
+    {
+      tclient->queued_message_written = c + 5;
+      goto FAILCOPY;
+    }
+    goto FAILDISCONNECT;
+  }
+  return;
+  
+  char* data;
+FAILDISCONNECT:
+  tclient->needs_removal = true;
+  return;
+  
+FAILCOPY:
+  data = (char*)malloc(length + 4 + 1);
+  data[0] = 0x02;
+  *((int*)&data[1]) = length;
+  memcpy(&data[5], ps_get_msg_start(message), length);
+  
+  tclient->queued_message = data;
+  tclient->queued_message_length = length + 5;
+  return;
 }
 
 void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_t* subscriber, struct ps_endpoint_t* ep)
