@@ -199,6 +199,9 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
   for (int i = 0; i < impl->num_clients; i++)
   {
     struct ps_tcp_client_t* client = &impl->clients[i];
+    
+    // check if we have any sends left to complete
+    
     // check for new data and add it to the packet if present
     char buf[1500];
     // if we havent gotten a header yet, just check for that
@@ -371,29 +374,98 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
 
   // the client packs the socket id in the addr
   int socket = client->endpoint.address;
+  
+  // so, this is a terrible fix but works for the moment
+  // note this can BLOCK until the message is completely sent
 
-  //printf("publishing tcp\n");
   // a packet is an int length followed by data
   int8_t packet_type = 0x02;//message
-  if (send(socket, (char*)&packet_type, 1, 0) < 0)
+  int sent = 0;
+  while (sent < 1)
   {
-    //perror("send error, removing socket");
-    // remove this socket
-    // add this to the list of clients to remove if it doesnt exist
-    for (int i = 0; i < impl->num_clients; i++)
+  	int c = send(socket, (char*)&packet_type, 1, 0);
+  	if (c < 0)
     {
-      if (impl->clients[i].socket == socket)
+      if (errno == EAGAIN)
       {
-        impl->clients[i].needs_removal = true;
-        break;
+        continue;
       }
-    }
+      //perror("send error, removing socket");
+      // remove this socket
+      // add this to the list of clients to remove if it doesnt exist
+      for (int i = 0; i < impl->num_clients; i++)
+      {
+        if (impl->clients[i].socket == socket)
+        {
+          impl->clients[i].needs_removal = true;
+          break;
+        }
+      }
 
-    return;
+      return;
+    }
+  
+    sent += c;
   }
 
-  send(socket, (char*)&length, 4, 0);
-  send(socket, (char*)ps_get_msg_start(message), length, 0);
+  // if length fails to send, just give up on this particular message for the moment
+  sent = 0;
+  while (sent < 4)
+  {
+  	int c = send(socket, ((char*)&length) + sent, 4-sent, 0);
+  	if (c < 0)
+    {
+      if (errno == EAGAIN)
+      {
+        continue;
+      }
+      
+      //perror("send error, removing socket");
+      // remove this socket
+      // add this to the list of clients to remove if it doesnt exist
+      for (int i = 0; i < impl->num_clients; i++)
+      {
+        if (impl->clients[i].socket == socket)
+        {
+          impl->clients[i].needs_removal = true;
+          break;
+        }
+      }
+
+      return;
+    }
+  
+    sent += c;
+  }
+  
+  sent = 0;
+  while (sent < length)
+  {
+    int c = send(socket, ((char*)ps_get_msg_start(message)) + sent, length-sent, 0);
+  	if (c < 0)
+    {
+      if (errno == EAGAIN)
+      {
+        continue;
+      }
+      
+      //perror("send error, removing socket");
+      // remove this socket
+      // add this to the list of clients to remove if it doesnt exist
+      for (int i = 0; i < impl->num_clients; i++)
+      {
+        if (impl->clients[i].socket == socket)
+        {
+          impl->clients[i].needs_removal = true;
+          break;
+        }
+      }
+
+      return;
+    }
+  
+    sent += c;
+  }
 }
 
 void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_t* subscriber, struct ps_endpoint_t* ep)
