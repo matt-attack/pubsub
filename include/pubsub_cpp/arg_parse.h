@@ -212,6 +212,16 @@ public:
 		}
 		return std::atof(ar->value.c_str());
 	}
+	
+	std::string GetString(const std::string& arg)
+	{
+		auto& ar = args_[arg];
+		if (ar->present == false)
+		{
+			return ar->default_value;
+		}
+		return ar->value;
+	}
 private:
 
     void PrintInvalid(const std::string& option)

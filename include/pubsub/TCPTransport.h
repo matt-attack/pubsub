@@ -228,6 +228,8 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
       {
         free(client->queued_message);
         client->queued_message = 0;
+        
+        ps_event_set_remove_socket_write(&node->events, client->socket);
       }
     }
     
@@ -488,6 +490,7 @@ FAILCOPY:
   
   tclient->queued_message = data;
   tclient->queued_message_length = length + 5;
+  ps_event_set_add_socket_write(&publisher->node->events, socket);
   return;
 }
 
