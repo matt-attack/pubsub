@@ -946,10 +946,7 @@ int ps_node_spin(struct ps_node_t* node)
 
 				// todo fix memory leak here
 				struct ps_message_definition_t def;
-				char * name = malloc(strlen(type) + 1);
-				strcpy(name, type);
-				def.name = name;
-				ps_deserialize_message_definition(&data[1 + strlen(type) + 1], &def);
+				ps_deserialize_message_definition(&data[1], &def);
 				node->def_cb(&def);
 				// if they wanted to keep it, they should have made a copy. Free it.
 				ps_free_message_definition(&def);
@@ -1276,7 +1273,6 @@ int ps_node_spin(struct ps_node_t* node)
 			data[0] = PS_UDP_PROTOCOL_MESSAGE_DEFINITION;
 
 			int off = 1;
-			off += serialize_string(&data[off], def->name);
 			off += ps_serialize_message_definition(&data[off], def);
 
 			//also add other info...

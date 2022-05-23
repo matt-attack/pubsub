@@ -251,7 +251,7 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
       len = recv(client->socket, buf, header_size, 0);
       //connection->packet_type = message_type;
       //client->waiting_for_header = false;
-      client->desired_packet_size = *(int*)&buf[1];
+      client->desired_packet_size = *(uint32_t*)&buf[1];
       //printf("Incoming message with %i bytes\n", client->desired_packet_size);
       client->packet_data = (char*)malloc(client->desired_packet_size);
 
@@ -302,7 +302,7 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
                 send(impl->clients[i].socket, (char*)&packet_type, 1, 0);
 
                 char buf[1500];
-                int length = ps_serialize_message_definition((void*)buf, pub->message_definition);
+                int32_t length = ps_serialize_message_definition((void*)buf, pub->message_definition);
                 send(impl->clients[i].socket, (char*)&length, 4, 0);
                 send(impl->clients[i].socket, buf, length, 0);
                 break;
@@ -338,7 +338,7 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
       len = recv(connection->socket, buf, header_size, 0);
       connection->packet_type = message_type;
       connection->waiting_for_header = false;
-      connection->packet_size = *(int*)&buf[1];
+      connection->packet_size = *(uint32_t*)&buf[1];
       //printf("Incoming message with %i bytes\n", impl->connections[i].packet_size);
       connection->packet_data = (char*)malloc(connection->packet_size);
 
@@ -347,6 +347,7 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
     else // read in the message
     {
       int remaining_size = connection->packet_size - connection->current_size;
+      
       // check for new messages and read until we hit packet size
       int len = recv(connection->socket, &connection->packet_data[connection->current_size], remaining_size, 0);
       if (len > 0)
@@ -370,28 +371,34 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
             connection->waiting_for_header = true;
             return;
           }
-
-          // decode and add it to the queue
-          struct ps_msg_info_t message_info;
-          message_info.address = connection->endpoint.address;
-          message_info.port = connection->endpoint.port;
-
-          void* out_data;
-          if (connection->subscriber->type)
+          else if (connection->packet_type == 0x2)
           {
-            out_data = connection->subscriber->type->decode(connection->packet_data, connection->subscriber->allocator);
-            free(connection->packet_data);
+            // decode and add it to the queue
+            struct ps_msg_info_t message_info;
+            message_info.address = connection->endpoint.address;
+            message_info.port = connection->endpoint.port;
+
+            void* out_data;
+            if (connection->subscriber->type)
+            {
+              out_data = connection->subscriber->type->decode(connection->packet_data, connection->subscriber->allocator);
+              free(connection->packet_data);
+            }
+            else
+            {
+              out_data = connection->packet_data;
+            }
+
+            ps_sub_enqueue(connection->subscriber,
+              out_data,
+              connection->packet_size,
+              &message_info);
           }
           else
           {
-            out_data = connection->packet_data;
-          }
-
-          ps_sub_enqueue(connection->subscriber,
-            out_data,
-            connection->packet_size,
-            &message_info);
-
+            // unhandled packet id
+            free(connection->packet_data);
+          }          
           connection->waiting_for_header = true;
         }
       }
@@ -435,7 +442,7 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
   }
   if (c < 0)
   {
-    if (errno == EAGAIN)
+    if (errno == EAGAIN || errno == EWOULDBLOCK)
     {
       tclient->queued_message_written = 0;
       goto FAILCOPY;
@@ -444,14 +451,14 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
   }
   
   c = send(socket, (char*)&length, 4, 0);
-  if (c < 4 && c > 0)
+  if (c < 4 && c >= 0)
   {
     tclient->queued_message_written = c + 1;
     goto FAILCOPY;
   }
   if (c < 0)
   {
-    if (errno == EAGAIN)
+    if (errno == EAGAIN || errno == EWOULDBLOCK)
     {
       tclient->queued_message_written = c + 1;
       goto FAILCOPY;
@@ -461,14 +468,14 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
   
     
   c = send(socket, (char*)ps_get_msg_start(message), length, 0);
-  if (c < length && c > 0)
+  if (c < length && c >= 0)
   {
     tclient->queued_message_written = c + 5;
     goto FAILCOPY;
   }
   if (c < 0)
   {
-    if (errno == EAGAIN)
+    if (errno == EAGAIN || errno == EWOULDBLOCK)
     {
       tclient->queued_message_written = c + 5;
       goto FAILCOPY;
@@ -485,7 +492,7 @@ FAILDISCONNECT:
 FAILCOPY:
   data = (char*)malloc(length + 4 + 1);
   data[0] = 0x02;
-  *((int*)&data[1]) = length;
+  *((uint32_t*)&data[1]) = length;
   memcpy(&data[5], ps_get_msg_start(message), length);
   
   tclient->queued_message = data;
