@@ -416,34 +416,56 @@ std::string generate(const char* definition, const char* name)
 		output += "void* " + type_name + "_decode(const void* data, struct ps_allocator_t* allocator)\n{\n";
 		output += "  char* p = (char*)data;\n";
 		output += "  int len = sizeof(struct "+type_name+");\n";
-		for (size_t i = 0; i < fields.size(); i++)
-		{
-			if (fields[i].type == "string")
-			{
-				output += "  int len_" + fields[i].name + " = strlen(p) + 1; \n";
-				output += "  p += len_" + fields[i].name + ";\n";
-			}
-			else if (fields[i].array_size == 0)
-			{
-				output += "  int len_" + fields[i].name + " = *(uint32_t*)p;\n";
-				output += "  p += len_" + fields[i].name + "*sizeof(" + fields[i].getBaseType() + ");\n";
-				output += "  p += 4;\n";// add size of length
-			}
-			else
-			{
-				output += "  p += sizeof(" + fields[i].getBaseType() + ");\n";
-			}
-		}
-		output += "  p = (char*)data;\n";// start from beginning again
 		output += "  struct "+type_name+"* out = (struct " + type_name + "*)allocator->alloc(len, allocator->context);\n";
 		// for now lets just decode non strings
 		for (size_t i = 0; i < fields.size(); i++)
 		{
-			if (fields[i].array_size == 0)
+			if (fields[i].type == "string")
 			{
+				if (fields[i].array_size == 1)
+				{
+					output += "  int len_" + fields[i].name + " = strlen(p) + 1; \n";
+					output += "  out->" + fields[i].name + " = (char*)allocator->alloc(len_" + fields[i].name + ", allocator->context);\n";
+					output += "  memcpy(out->" + fields[i].name + ", p, len_" + fields[i].name + ");\n";// is memcpy faster in this case?
+					output += "  p += len_" + fields[i].name + ";\n";
+				}
+				else
+				{
+					if (fields[i].array_size == 0)
+					{
+						output += "  int num_" + fields[i].name + " = *(uint32_t*)p;\n";
+						output += "  p += 4;\n";// add size of length
+					}
+					else
+					{
+						output += "  int num_" + fields[i].name + " = " + std::to_string(fields[i].array_size) + ";\n";
+					}
+					
+					output += "  out->" + fields[i].name + "_length = num_" + fields[i].name + ";\n";
+					output += "  out->" + fields[i].name + " = (char**)malloc(sizeof(char*)*num_" + fields[i].name + ");\n";
+					
+					// allocate the array
+					// need to do it!
+					// first, read the number of strings, then read each string
+					output += "  for (int i = 0; i < num_" + fields[i].name + "; i++) {\n";
+					output += "    int len = *(uint32_t*)p;\n";
+					output += "    p += 4;\n";// add size of length
+					// now read and allocate each string
+					output += "    out->" + fields[i].name + "[i] = (char*)malloc(len);\n";
+					output += "    memcpy(out->" + fields[i].name + "[i], p, len);\n";
+					output += "    p += len;\n";
+					output += "  }\n";
+				}
+			}
+			else if (fields[i].array_size == 0)
+			{
+				output += "  int len_" + fields[i].name + " = *(uint32_t*)p;\n";
+				//output += "  p += len_" + fields[i].name + "*sizeof(" + fields[i].getBaseType() + ");\n";
+				output += "  p += 4;\n";// add size of length
+				
 				output += "  out->" + fields[i].name + "_length = len_" + fields[i].name + ";\n";
 				output += "  out->" + fields[i].name + " = ("+fields[i].getBaseType()+"*)allocator->alloc(len_" + fields[i].name + "*sizeof(" + fields[i].getBaseType() + "), allocator->context);\n";
-				output += "  p += 4;\n";// move past the length
+				//output += "  p += 4;\n";// move past the length
 				output += "  memcpy(out->" + fields[i].name + ", p, len_" + fields[i].name + "*sizeof(" + fields[i].getBaseType() + "));\n";// is memcpy faster in this case?
 				output += "  p += len_" + fields[i].name + "*sizeof(" + fields[i].getBaseType() + ");\n";
 			}
@@ -451,13 +473,6 @@ std::string generate(const char* definition, const char* name)
 			{
 				output += "  out->" + fields[i].name + " = *((" + fields[i].getBaseType() + "*)p);\n";
 				output += "  p += sizeof(" + fields[i].getBaseType() + ");\n";
-			}
-			else
-			{
-				// need to allocate the string somehow...
-				output += "  out->" + fields[i].name + " = (char*)allocator->alloc(len_" + fields[i].name + ", allocator->context);\n";
-				output += "  memcpy(out->" + fields[i].name + ", p, len_" + fields[i].name + ");\n";// is memcpy faster in this case?
-				output += "  p += len_" + fields[i].name + ";\n";
 			}
 		}
 		output += "  return (void*)out;\n";
@@ -467,15 +482,37 @@ std::string generate(const char* definition, const char* name)
 		output += "struct ps_msg_t " + type_name + "_encode(struct ps_allocator_t* allocator, const void* data)\n{\n";
 		output += "  const struct " + type_name + "* msg = (const struct " + type_name + "*)data;\n";
 		output += "  int len = sizeof(struct " + type_name + ");\n";
-		output += "  // for each string, add their length\n";
+		output += "  // calculate the encoded length of the message\n";
 		int n_str = 0;
 		for (size_t i = 0; i < fields.size(); i++)
 		{
 			if (fields[i].type == "string")
 			{
-				output += "  int len_" + fields[i].name + " = strlen(msg->" + fields[i].name + ") + 1; \n";
-				output += "  len += len_" + fields[i].name + ";\n";
-				n_str++;
+				if (fields[i].array_size == 1)
+				{
+					output += "  int len_" + fields[i].name + " = strlen(msg->" + fields[i].name + ") + 1; \n";
+					output += "  len += len_" + fields[i].name + ";\n";
+					n_str++;
+				}
+				else
+				{
+					if (fields[i].array_size == 0)
+					{
+						output += "  int num_" + fields[i].name + " = msg->" + fields[i].name + "_length;\n";// for the moment
+					}
+					else
+					{
+						output += "  int num_" + fields[i].name + " = " + std::to_string(fields[i].array_size) + ";\n";
+					}
+					
+					// allocate the array
+					// need to do it!
+					// first, read the number of strings, then read each string
+					output += "  for (int i = 0; i < num_" + fields[i].name + "; i++) {\n";
+					output += "    len += strlen(msg->" + fields[i].name + "[i]) + 4 + 1;\n";
+					output += "  }\n";
+					n_str++;
+				}
 			}
 			else if (fields[i].array_size == 0)
 			{
@@ -491,8 +528,34 @@ std::string generate(const char* definition, const char* name)
 		{
 			if (fields[i].type == "string")
 			{
-				output += "  strcpy(start, msg->" + fields[i].name + ");\n";
-				output += "  start += len_" + fields[i].name + ";\n";
+				if (fields[i].array_size == 1)
+				{
+					output += "  strcpy(start, msg->" + fields[i].name + ");\n";
+					output += "  start += len_" + fields[i].name + ";\n";
+				}
+				else
+				{
+					// now encode it
+					if (fields[i].array_size == 0)
+					{
+						// encode the array legnth
+						output += "  *(uint32_t*)start = msg->" + fields[i].name + "_length;\n";
+						output += "  start += 4;\n";
+						output += "  for (int i = 0; i < msg->" + fields[i].name + "_length; i++)\n  {\n";
+					}
+					else
+					{
+						output += "  for (int i = 0; i < " + std::to_string(fields[i].array_size) + "; i++)\n  {\n";
+					}
+					
+					// now encode each string
+					output += "    int len = strlen(msg->" + fields[i].name + "[i]) + 1;\n"; 
+					output += "    *(uint32_t*)start = len;\n";
+					output += "    start += 4;\n";
+					output += "    memcpy(start, msg->" + fields[i].name + "[i], len);\n";
+					output += "    start += len;\n";
+					output += "  }\n";
+				}
 			}
 			else if (fields[i].array_size == 0)
 			{
@@ -562,6 +625,20 @@ std::string generate(const char* definition, const char* name)
 				added_destructor = true;
 				output += "  ~" + raw_name + "()\n  {\n";
 			}
+			if (fields[i].type == "string" && fields[i].array_size != 1)
+			{
+				if (fields[i].array_size == 0)
+				{
+					output += "    for (int i = 0; i < this->" + fields[i].name + "_length; i++)\n    {\n";
+				}
+				else
+				{
+					output += "    for (int i = 0; i < " + std::to_string(fields[i].array_size) + "; i++)\n    {\n";
+				}
+				
+				output += "      delete[] this->" + fields[i].name + "[i];\n";
+				output += "    }\n";
+			}
 			output += "    if (this->" + fields[i].name + ")\n";
 			output += "      free(this->" + fields[i].name + ");\n";
 		}
@@ -603,6 +680,20 @@ std::string generate(const char* definition, const char* name)
 		{
 			if (fields[i].type == "string" || fields[i].array_size == 0)
 			{
+				if (fields[i].type == "string" && fields[i].array_size != 1)
+				{
+					if (fields[i].array_size == 0)
+					{
+						output += "    for (int i = 0; i < this->" + fields[i].name + "_length; i++)\n    {\n";
+					}
+					else
+					{
+						output += "    for (int i = 0; i < " + std::to_string(fields[i].array_size) + "; i++)\n    {\n";
+					}
+				
+					output += "      delete[] this->" + fields[i].name + "[i];\n";
+					output += "    }\n";
+				}
 				output += "    if (this->" + fields[i].name + ")\n";
 				output += "      free(this->" + fields[i].name + ");\n";
 			}
@@ -639,6 +730,10 @@ std::string generate(const char* definition, const char* name)
 			if (fields[i].type == "string")
 			{
 				output += "    " + fields[i].name + " = 0;\n";
+				if (fields[i].array_size == 0)
+				{
+					output += "    " + fields[i].name + "_length = 0;\n";
+				}
 			}
 			else if (fields[i].array_size == 0)
 			{

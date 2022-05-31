@@ -56,6 +56,7 @@ struct ps_transport_t
 typedef void(*ps_adv_cb_t)(const char* topic, const char* type, const char* node, const struct ps_advertise_req_t* data);
 typedef void(*ps_sub_cb_t)(const char* topic, const char* type, const char* node, const struct ps_subscribe_req_t* data);
 typedef void(*ps_msg_def_cb_t)(const struct ps_message_definition_t* definition);
+typedef void(*ps_param_change_cb_t)(const char* name, double value);
 
 #ifndef PUBSUB_REAL_TIME
 #include <pubsub/Events.h>
@@ -86,6 +87,7 @@ struct ps_node_t
 	ps_adv_cb_t adv_cb;
 	ps_sub_cb_t sub_cb;
 	ps_msg_def_cb_t def_cb;
+	ps_param_change_cb_t param_cb;
 
 	//implementation data
 	unsigned long long _last_advertise;
@@ -252,6 +254,9 @@ enum
 	PS_UDP_PROTOCOL_SUBSCRIBE_ACCEPT = 4,
 	PS_UDP_PROTOCOL_SUBSCRIBE_REQUEST = 1,
 	PS_UDP_PROTOCOL_MESSAGE_DEFINITION = 8,
+	
+	PS_UDP_PROTOCOL_PARAM_CHANGE = 10,
+	PS_UDP_PROTOCOL_PARAM_ACK = 11
 };
 
 enum

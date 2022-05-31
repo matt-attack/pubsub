@@ -239,17 +239,13 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
 			std::cout << "Topic " << topic << " found!\n";
 			//std::cout << info->first.c_str() << " " <<  info->second.type.c_str();
 			subscribed = true;
-
-			struct ps_subscriber_options options;
-			ps_subscriber_options_init(&options);
-			options.skip = skip;
-			options.queue_size = 0;
-			options.want_message_def = true;
-			options.allocator = 0;
-			options.ignore_local = false;
-            options.preferred_transport = tcp ? 1 : 0;
-			options.cb = [](void* message, unsigned int size, void* data, const ps_msg_info_t* info)
+			
+			// override this to handle latched messages properly
+			node->def_cb = [](const ps_message_definition_t* def)
 			{
+				//printf("got message definition info");
+				ps_copy_message_definition(&definition, def);
+				
 				if (todo_msgs.size() && sub.received_message_def.fields != 0)
 				{
 					for (auto msg : todo_msgs)
@@ -287,6 +283,18 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
 					}
 					todo_msgs.clear();
 				}
+			};
+
+			struct ps_subscriber_options options;
+			ps_subscriber_options_init(&options);
+			options.skip = skip;
+			options.queue_size = 0;
+			options.want_message_def = true;
+			options.allocator = 0;
+			options.ignore_local = false;
+            options.preferred_transport = tcp ? 1 : 0;
+			options.cb = [](void* message, unsigned int size, void* data, const ps_msg_info_t* info)
+			{
 				// get and deserialize the messages
 				if (sub.received_message_def.fields == 0)
 				{

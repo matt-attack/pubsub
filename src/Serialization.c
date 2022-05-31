@@ -200,9 +200,30 @@ const char* ps_deserialize_iterate(struct ps_deserialize_iterator* iter, const s
 	// now advance next position by the field size
 	if (field->type == FT_String)
 	{
-		uint32_t len = strlen(position);
-		*l = len;
-		iter->next_position += len + 1;
+		if (field->length == 1)
+		{
+			uint32_t len = strlen(position);
+			*l = len;
+			iter->next_position += len + 1;
+		}
+		else
+		{
+			int len = field->length;
+			if (field->length == 0)
+			{
+				len = (int)*(uint32_t*)position;
+				position += 4;
+				*l = len;
+				iter->next_position += 4;
+			}
+			
+			for (int i = 0; i < len; i++)
+			{
+				int len = (int)*(uint32_t*)iter->next_position;
+				iter->next_position += 4;
+				iter->next_position += len;
+			}
+		}
 	}
 	else if (field->type == FT_Array)
 	{
@@ -259,7 +280,28 @@ void ps_deserialize_print(const void * data, const struct ps_message_definition_
 		if (field->type == FT_String)
 		{
 			// strings are already null terminated
-			printf("%s: %s\n", field->name, ptr);
+			if (field->length == 1)
+			{
+				printf("%s: %s\n", field->name, ptr);
+			}
+			else
+			{
+				printf("%s: [", field->name);
+				for (int i = 0; i < length; i++)
+				{
+					int len = (int)*(uint32_t*)ptr;
+					ptr += 4;
+					const char* str = ptr;
+					printf("%s", str);
+					
+					if (i != length - 1)
+					{
+						printf(", ");
+					}
+					ptr += len;
+				}
+				printf("]\n");
+			}
 		}
 		else
 		{
@@ -270,6 +312,11 @@ void ps_deserialize_print(const void * data, const struct ps_message_definition_
 			else
 			{
 				printf("%s: [", field->name);
+			}
+			
+			if (length == 0)
+			{
+				printf("]\n");
 			}
 
 			for (unsigned int i = 0; i < length; i++)

@@ -267,6 +267,7 @@ void ps_node_init_ex(struct ps_node_t* node, const char* name, const char* ip, b
 	node->adv_cb = 0;
 	node->sub_cb = 0;
 	node->def_cb = 0;
+	node->param_cb = 0;
 
 	node->supported_transports = PS_TRANSPORT_UDP;
 	node->num_transports = 0;
@@ -641,7 +642,7 @@ void ps_pub_publish_accept(struct ps_pub_t* pub, struct ps_client_t* client, con
 
 	char data[1500];
 	struct ps_subscribe_accept_t* p = (struct ps_subscribe_accept_t*)data;
-	p->pid = 4;
+	p->pid = PS_UDP_PROTOCOL_SUBSCRIBE_ACCEPT;
 	p->sid = client->stream_id;
 
 	//todo only send this to clients who request it
@@ -884,6 +885,12 @@ int ps_node_spin(struct ps_node_t* node)
 			if (sub->want_message_definition)
 			{
 				ps_deserialize_message_definition(&data[sizeof(struct ps_subscribe_accept_t)], &sub->received_message_def);
+				
+				// call the callback as well
+				if (node->def_cb)
+				{
+					node->def_cb(&sub->received_message_def);
+				}
 			}
 		}
 		else if (data[0] == PS_UDP_PROTOCOL_SUBSCRIBE_REQUEST)
@@ -951,6 +958,31 @@ int ps_node_spin(struct ps_node_t* node)
 				// if they wanted to keep it, they should have made a copy. Free it.
 				ps_free_message_definition(&def);
 			}
+		}
+		else if (data[0] == PS_UDP_PROTOCOL_PARAM_CHANGE)
+		{
+			// We got a request to change a parameters
+			// if we have a callback, call it
+			double value = *(double*)&data[1];
+			const char* name = &data[1+8];
+			
+			printf("Got param change %f for %s\n", value, name);
+			if (node->param_cb)
+			{
+				node->param_cb(name, value);
+			}
+			
+			// send a confirmation message, which is just the same as the one we sent
+			struct sockaddr_in address;
+			address.sin_family = AF_INET;
+			address.sin_addr.s_addr = htonl(message_info.address);
+			address.sin_port = htons(message_info.port);
+
+			char newdata[1500];
+			memcpy(data, newdata, received_bytes);
+			data[0] = PS_UDP_PROTOCOL_PARAM_ACK;
+
+			int sent_bytes = sendto(node->socket, (const char*)newdata, received_bytes, 0, (struct sockaddr*)&from, sizeof(struct sockaddr_in));
 		}
 #ifndef PUBSUB_NO_ALT_PROTOCOLS
 		else if (data[0] == PS_SHARED_PROTOCOL_SUBSCRIBE_REQUEST)
