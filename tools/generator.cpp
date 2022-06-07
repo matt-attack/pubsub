@@ -156,6 +156,73 @@ struct field
 		printf("ERROR: Invalid type %s\n", type.c_str());
 		return "invalid";
 	}
+	
+	void GenerateFree(std::string& output)
+	{
+		if (type == "string" && array_size != 1)
+		{
+			if (array_size == 0)
+			{
+				output += "    for (int i = 0; i < this->" + name + "_length; i++)\n    {\n";
+			}
+			else
+			{
+				output += "    for (int i = 0; i < " + std::to_string(array_size) + "; i++)\n    {\n";
+			}
+			
+			output += "      free(this->" + name + "[i]);\n";
+			output += "    }\n";
+		}
+		
+		if (type == "string" || array_size != 1)
+		{
+			output += "    if (this->" + name + ")\n";
+			output += "      free(this->" + name + ");\n";
+		}
+	}
+	
+	void GenerateCopy(std::string& output, const std::string& source)
+	{
+		if (type == "string")
+		{
+			if (array_size == 1)
+			{
+				output += "    " + name + " = new char[strlen(" + source + "." + name + ") + 1];\n";
+				output += "    strcpy(" + name + ", " + source + "." + name + ");\n";
+			}
+			else
+			{
+				if (array_size == 0)
+				{
+					// encode the array legnth
+					output += "    msg->" + name + "_length = " + source + "." + name + "_length;\n";
+					output += "    msg->" + name + " = (char**)malloc(sizeof(char**)*msg->" + name + "_length);\n";
+					output += "    for (int i = 0; i < msg->" + name + "_length; i++)\n    {\n";
+				}
+				else
+				{
+					output += "    for (int i = 0; i < " + std::to_string(array_size) + "; i++)\n    {\n";
+				}
+					
+				output += "      msg->" + name + "[i] = strdup(" + source + "." + name + "[i]);\n";
+				output += "    }\n";
+			}
+		}
+		else if (array_size > 1)
+		{
+			//todo probably should finish this
+		}
+		else if (array_size == 0)
+		{
+			output += "    " + name + " = (" + getBaseType() + "*)malloc(" + source + "." + name + "_length*sizeof(" + getBaseType() + "));\n";
+			output += "    " + name + "_length = " + source + "." + name + "_length;\n";
+			output += "    memcpy(" + name + ", " + source + "." + name + ", " + source + "." + name + "_length*sizeof(" + getBaseType() + "));\n";
+		}
+		else
+		{
+			output += "    " + name + " = " + source + "." + name + "; \n";
+		}
+	}
 };
 
 std::string generate(const char* definition, const char* name)
@@ -228,7 +295,11 @@ std::string generate(const char* definition, const char* name)
 			std::string type = words[0];
 
 			int size = 1;
-			if (name.substr(name.size() - 2) == "[]")
+			if (name.length() < 2)
+			{
+				
+			}
+			else if (name.substr(name.size() - 2) == "[]")
 			{
 				size = 0;
 				name = name.substr(0, name.length() - 2);
@@ -469,10 +540,18 @@ std::string generate(const char* definition, const char* name)
 				output += "  memcpy(out->" + fields[i].name + ", p, len_" + fields[i].name + "*sizeof(" + fields[i].getBaseType() + "));\n";// is memcpy faster in this case?
 				output += "  p += len_" + fields[i].name + "*sizeof(" + fields[i].getBaseType() + ");\n";
 			}
-			else if (fields[i].type != "string")
+			else
 			{
-				output += "  out->" + fields[i].name + " = *((" + fields[i].getBaseType() + "*)p);\n";
-				output += "  p += sizeof(" + fields[i].getBaseType() + ");\n";
+				if (fields[i].array_size > 1)
+				{
+					output += "  memcpy(out->" + fields[i].name + ", p, sizeof(" + fields[i].getBaseType() + ")*" + std::to_string(fields[i].array_size) + ");\n";
+					output += "  p += sizeof("+ fields[i].getBaseType() + ")*" + std::to_string(fields[i].array_size) + ";\n";
+				}
+				else
+				{
+					output += "  out->" + fields[i].name + " = *((" + fields[i].getBaseType() + "*)p);\n";
+					output += "  p += sizeof(" + fields[i].getBaseType() + ");\n";
+				}
 			}
 		}
 		output += "  return (void*)out;\n";
@@ -568,8 +647,16 @@ std::string generate(const char* definition, const char* name)
 			else
 			{
 				// todo, dont use memcpy
-				output += "  memcpy(start, &msg->" + fields[i].name + ", sizeof(" + fields[i].getBaseType() + "));\n";
-				output += "  start += sizeof(" + fields[i].getBaseType() + ");\n";
+				if (fields[i].array_size > 1)
+				{
+					output += "  memcpy(start, msg->" + fields[i].name + ", sizeof(" + fields[i].getBaseType() + ")*" + std::to_string(fields[i].array_size) + ");\n";
+					output += "  start += sizeof("+ fields[i].getBaseType() + ")*" + std::to_string(fields[i].array_size) + ";\n";
+				}
+				else
+				{
+					output += "  memcpy(start, &msg->" + fields[i].name + ", sizeof(" + fields[i].getBaseType() + "));\n";
+					output += "  start += sizeof(" + fields[i].getBaseType() + ");\n";
+				}
 			}
 		}
 		output += "  return omsg;\n";
@@ -615,111 +702,42 @@ std::string generate(const char* definition, const char* name)
 	}
 	
 	// create destructor
-	bool added_destructor = false;
-	for (size_t i = 0; i < fields.size(); i++)
+	bool needs_destructor = false;
+	for (int i = 0; i < fields.size(); i++)
 	{
 		if (fields[i].type == "string" || fields[i].array_size == 0)
 		{
-			if (added_destructor == false)
-			{
-				added_destructor = true;
-				output += "  ~" + raw_name + "()\n  {\n";
-			}
-			if (fields[i].type == "string" && fields[i].array_size != 1)
-			{
-				if (fields[i].array_size == 0)
-				{
-					output += "    for (int i = 0; i < this->" + fields[i].name + "_length; i++)\n    {\n";
-				}
-				else
-				{
-					output += "    for (int i = 0; i < " + std::to_string(fields[i].array_size) + "; i++)\n    {\n";
-				}
-				
-				output += "      delete[] this->" + fields[i].name + "[i];\n";
-				output += "    }\n";
-			}
-			output += "    if (this->" + fields[i].name + ")\n";
-			output += "      free(this->" + fields[i].name + ");\n";
+			needs_destructor = true;
 		}
 	}
-	if (added_destructor)
+	
+	if (needs_destructor)
 	{
+		output += "  ~" + raw_name + "()\n  {\n";
+		for (int i = 0; i < fields.size(); i++)
+		{
+			fields[i].GenerateFree(output);
+		}
 		output += "  }\n\n";
 
 		// add a copy constructor and constructor now...
 		output += "  " + raw_name + "(const " + raw_name + "& obj)\n  {\n";
 		for (size_t i = 0; i < fields.size(); i++)
 		{
-			if (fields[i].type == "string")
-			{
-				output += "    " + fields[i].name + " = new char[strlen(obj." + fields[i].name + ") + 1];\n";
-				output += "    strcpy(" + fields[i].name + ", obj." + fields[i].name + ");\n";
-			}
-			else if (fields[i].array_size > 1)
-			{
-				//todo
-			}
-			else if (fields[i].array_size == 0)
-			{
-				output += "    " + fields[i].name + " = (" + fields[i].getBaseType() + "*)malloc(obj." + fields[i].name + "_length*sizeof(" + fields[i].getBaseType() + "));\n";
-				//output += "    " + fields[i].name + " = new " + fields[i].getBaseType() + "[obj." + fields[i].name + "_length*sizeof(" + fields[i].getBaseType() + ")];\n";
-				output += "    " + fields[i].name + "_length = obj." + fields[i].name + "_length;\n";
-				output += "    memcpy(" + fields[i].name + ", obj." + fields[i].name + ", obj." + fields[i].name + "_length*sizeof(" + fields[i].getBaseType() + "));\n";
-			}
-			else
-			{
-				output += "    " + fields[i].name + " = obj." + fields[i].name + "; \n";
-			}
+			fields[i].GenerateCopy(output, "obj");
 		}
 		output += "  }\n\n";
 		// todo maybe just use stl types for strings/arrays?
 
 		output += "  " + raw_name + "& operator=(const " + raw_name + "& obj)\n  {\n";
-		for (size_t i = 0; i < fields.size(); i++)
+		for (int i = 0; i < fields.size(); i++)
 		{
-			if (fields[i].type == "string" || fields[i].array_size == 0)
-			{
-				if (fields[i].type == "string" && fields[i].array_size != 1)
-				{
-					if (fields[i].array_size == 0)
-					{
-						output += "    for (int i = 0; i < this->" + fields[i].name + "_length; i++)\n    {\n";
-					}
-					else
-					{
-						output += "    for (int i = 0; i < " + std::to_string(fields[i].array_size) + "; i++)\n    {\n";
-					}
-				
-					output += "      delete[] this->" + fields[i].name + "[i];\n";
-					output += "    }\n";
-				}
-				output += "    if (this->" + fields[i].name + ")\n";
-				output += "      free(this->" + fields[i].name + ");\n";
-			}
+			fields[i].GenerateFree(output);
 		}
+		output += "\n";
 		for (size_t i = 0; i < fields.size(); i++)
 		{
-			if (fields[i].type == "string")
-			{
-				output += "    " + fields[i].name + " = new char[strlen(obj." + fields[i].name + ") + 1];\n";
-				output += "    strcpy(" + fields[i].name + ", obj." + fields[i].name + ");\n";
-			}
-			else if (fields[i].array_size == 0)
-			{
-				output += "    " + fields[i].name + " = (" + fields[i].getBaseType() + "*)malloc(obj." + fields[i].name + "_length*sizeof(" + fields[i].getBaseType() + "));\n";
-				//output += "    " + fields[i].name + " = new " + fields[i].getBaseType() + "[obj." + fields[i].name + "_length*sizeof(" + fields[i].getBaseType() + ")];\n";
-				output += "    " + fields[i].name + "_length = obj." + fields[i].name + "_length;\n";
-				output += "    memcpy(" + fields[i].name + ", obj." + fields[i].name + ", obj." + fields[i].name + "_length*sizeof(" + fields[i].getBaseType() + "));\n";
-			}
-			else if (fields[i].array_size > 1)
-			{
-				//todo 
-			}
-			else
-			{
-				output += "    " + fields[i].name + " = obj." + fields[i].name + "; \n";
-			}
+			fields[i].GenerateCopy(output, "obj");
 		}
 		output += "    return *this;\n  }\n\n";
 
