@@ -22,6 +22,8 @@ void ps_event_set_add_socket(struct ps_event_set_t* set, int socket);
 // socket must already be in the set
 void ps_event_set_add_socket_write(struct ps_event_set_t* set, int socket);
 
+void ps_event_set_add_socket_write_only(struct ps_event_set_t* set, int socket);
+
 void ps_event_set_remove_socket_write(struct ps_event_set_t* set, int socket);
 
 void ps_event_set_remove_socket(struct ps_event_set_t* set, int socket);

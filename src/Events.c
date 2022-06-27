@@ -100,6 +100,17 @@ void ps_event_set_add_socket_write(struct ps_event_set_t* set, int socket)
 #endif
 }
 
+void ps_event_set_add_socket_write_only(struct ps_event_set_t* set, int socket)
+{
+#ifdef WIN32
+#else
+  struct epoll_event event;
+  event.events = EPOLLOUT;
+  event.data.ptr = 0;
+  epoll_ctl(set->fd, EPOLL_CTL_MOD, socket, &event);
+#endif
+}
+
 void ps_event_set_remove_socket_write(struct ps_event_set_t* set, int socket)
 {
 #ifdef WIN32

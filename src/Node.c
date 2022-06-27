@@ -268,6 +268,7 @@ void ps_node_init_ex(struct ps_node_t* node, const char* name, const char* ip, b
 	node->sub_cb = 0;
 	node->def_cb = 0;
 	node->param_cb = 0;
+	node->param_confirm_cb = 0;
 
 	node->supported_transports = PS_TRANSPORT_UDP;
 	node->num_transports = 0;
@@ -983,6 +984,16 @@ int ps_node_spin(struct ps_node_t* node)
 			data[0] = PS_UDP_PROTOCOL_PARAM_ACK;
 
 			int sent_bytes = sendto(node->socket, (const char*)newdata, received_bytes, 0, (struct sockaddr*)&from, sizeof(struct sockaddr_in));
+		}
+		else if (data[0] == PS_UDP_PROTOCOL_PARAM_ACK)
+		{
+			double value = *(double*)&data[1];
+			const char* name = &data[1+8];
+			
+			if (node->param_confirm_cb)
+			{
+				node->param_confirm_cb(name, value);
+			}
 		}
 #ifndef PUBSUB_NO_ALT_PROTOCOLS
 		else if (data[0] == PS_SHARED_PROTOCOL_SUBSCRIBE_REQUEST)

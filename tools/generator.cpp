@@ -195,16 +195,16 @@ struct field
 				if (array_size == 0)
 				{
 					// encode the array legnth
-					output += "    msg->" + name + "_length = " + source + "." + name + "_length;\n";
-					output += "    msg->" + name + " = (char**)malloc(sizeof(char**)*msg->" + name + "_length);\n";
-					output += "    for (int i = 0; i < msg->" + name + "_length; i++)\n    {\n";
+					output += "    " + name + "_length = " + source + "." + name + "_length;\n";
+					output += "    " + name + " = (char**)malloc(sizeof(char**)*" + name + "_length);\n";
+					output += "    for (int i = 0; i < " + name + "_length; i++)\n    {\n";
 				}
 				else
 				{
 					output += "    for (int i = 0; i < " + std::to_string(array_size) + "; i++)\n    {\n";
 				}
 					
-				output += "      msg->" + name + "[i] = strdup(" + source + "." + name + "[i]);\n";
+				output += "      " + name + "[i] = strdup(" + source + "." + name + "[i]);\n";
 				output += "    }\n";
 			}
 		}
@@ -764,7 +764,7 @@ std::string generate(const char* definition, const char* name)
 	output += "  static const ps_message_definition_t* GetDefinition()\n  {\n";
 	output += "    return &" + type_name + "_def;\n  }\n\n";
 	output += "  ps_msg_t Encode() const\n  {\n";
-	output += "    return " + ns + "__" + raw_name + "_encode(0, this);\n  }\n\n";
+	output += "    return " + ns + "__" + raw_name + "_encode(&ps_default_allocator, this);\n  }\n\n";
 	output += "  static " + raw_name + "* Decode(const void* data)\n  {\n";
 	output += "    return (" + raw_name + "*)" + ns + "__" + raw_name + "_decode(data, &ps_default_allocator);\n  }\n";// + ns + "__" + raw_name + "_encode(0, this);\n  }\n";
 	output += "};\n";
