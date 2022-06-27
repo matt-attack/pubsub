@@ -14,3 +14,6 @@ uint8 marker_type
 
 # Data making up the marker
 double data[]
+
+# Color data per marker
+uint32 colors[]

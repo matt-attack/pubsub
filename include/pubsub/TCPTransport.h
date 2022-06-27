@@ -28,31 +28,31 @@ typedef unsigned int(*ps_transport_fn_num_subscribers_t)(struct ps_transport_t* 
 typedef unsigned int(*ps_transport_fn_add_wait_set_t)(struct ps_transport_t* transport, struct ps_event_set_t* events);
 struct ps_transport_t
 {
-	unsigned short uuid;// unique id for this transport type, listed in advertisements for it
-	ps_transport_fn_pub_t pub;
-	ps_transport_fn_spin_t spin;
-	ps_transport_fn_num_subscribers_t subscriber_count;
-	ps_transport_fn_subscribe_t subscribe;
-	ps_transport_fn_unsubscribe_t unsubscribe;
-	ps_transport_fn_add_publisher_t add_pub;
-	ps_transport_fn_remove_publisher_t remove_pub;
+    unsigned short uuid;// unique id for this transport type, listed in advertisements for it
+    ps_transport_fn_pub_t pub;
+    ps_transport_fn_spin_t spin;
+    ps_transport_fn_num_subscribers_t subscriber_count;
+    ps_transport_fn_subscribe_t subscribe;
+    ps_transport_fn_unsubscribe_t unsubscribe;
+    ps_transport_fn_add_publisher_t add_pub;
+    ps_transport_fn_remove_publisher_t remove_pub;
     ps_transport_fn_add_wait_set_t add_wait_set;
     void* impl;
 };*/
 
 struct ps_tcp_transport_connection
 {
-	int socket;
-	struct ps_endpoint_t endpoint;
+  int socket;
+  struct ps_endpoint_t endpoint;
 
-    struct ps_sub_t* subscriber;
+  struct ps_sub_t* subscriber;
 
-	bool waiting_for_header;
-	int packet_size;
+  bool waiting_for_header;
+  int packet_size;
 
-    char packet_type;
-    int current_size;
-	char* packet_data;
+  char packet_type;
+  int current_size;
+  char* packet_data;
 };
 
 struct ps_tcp_client_queued_message_t
@@ -67,15 +67,15 @@ struct ps_tcp_client_t
   bool needs_removal;
 
   struct ps_pub_t* publisher;
-  
+
   int32_t current_packet_size;
   int32_t desired_packet_size;
   char* packet_data;
-  
+
   char* queued_message;
   int32_t queued_message_length;
   int32_t queued_message_written;
-  
+
   // this stores queued messages > 1
   int32_t num_queued_messages;
   struct ps_tcp_client_queued_message_t* queued_messages;
@@ -116,12 +116,12 @@ void remove_client_socket(struct ps_tcp_transport_impl* transport, int socket, s
   {
     free(transport->clients[i].packet_data);
   }
-  
+
   if (transport->clients[i].queued_message)
   {
     free(transport->clients[i].queued_message);
   }
-  
+
   // free queued messages
   if (transport->clients[i].num_queued_messages)
   {
@@ -140,7 +140,7 @@ void remove_client_socket(struct ps_tcp_transport_impl* transport, int socket, s
 
   if (transport->num_clients)
   {
-    transport->clients = (struct ps_tcp_client_t*)malloc(sizeof(struct ps_tcp_client_t)*transport->num_clients);
+    transport->clients = (struct ps_tcp_client_t*)malloc(sizeof(struct ps_tcp_client_t) * transport->num_clients);
     for (int j = 0; j < i; j++)
     {
       transport->clients[j] = old_clients[j];
@@ -165,8 +165,8 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
     // add it to the list yo
     impl->num_clients++;
     struct ps_tcp_client_t* old_sockets = impl->clients;
-    impl->clients = (struct ps_tcp_client_t*)malloc(sizeof(struct ps_tcp_client_t)*impl->num_clients);
-    for (int i = 0; i < impl->num_clients-1; i++)
+    impl->clients = (struct ps_tcp_client_t*)malloc(sizeof(struct ps_tcp_client_t) * impl->num_clients);
+    for (int i = 0; i < impl->num_clients - 1; i++)
     {
       impl->clients[i] = old_sockets[i];
     }
@@ -178,37 +178,39 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
     new_client->desired_packet_size = 0;
     new_client->packet_data = 0;
     new_client->queued_message = 0;
+    new_client->queued_message_length = 0;
+    new_client->queued_message_written = 0;
     new_client->queued_messages = 0;
     new_client->num_queued_messages = 0;
 
     // set non-blocking
 #ifdef _WIN32
-	DWORD nonBlocking = 1;
-	if (ioctlsocket(socket, FIONBIO, &nonBlocking) != 0)
-	{
-		printf("Failed to Set Socket as Non-Blocking!\n");
-		closesocket(socket);
-		return;
-	}
+    DWORD nonBlocking = 1;
+    if (ioctlsocket(socket, FIONBIO, &nonBlocking) != 0)
+    {
+      printf("Failed to Set Socket as Non-Blocking!\n");
+      closesocket(socket);
+      return;
+    }
 #endif
 #ifdef ARDUINO
     fcntl(socket, F_SETFL, O_NONBLOCK);
 #endif
 #ifdef __unix__
-	int flags = fcntl(socket, F_GETFL);
-	fcntl(socket, F_SETFL, flags | O_NONBLOCK);
+    int flags = fcntl(socket, F_GETFL);
+    fcntl(socket, F_SETFL, flags | O_NONBLOCK);
 #endif
 
     ps_event_set_add_socket(&node->events, socket);
 
-	if (impl->num_clients - 1)
-	{
-	  free(old_sockets);
-	}
+    if (impl->num_clients - 1)
+    {
+      free(old_sockets);
+    }
   }
   //printf("polled\n");
 
-  // remove any old sockets
+// remove any old sockets
   for (int i = 0; i < impl->num_clients; i++)
   {
     if (impl->clients[i].needs_removal)
@@ -231,7 +233,7 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
   for (int i = 0; i < impl->num_clients; i++)
   {
     struct ps_tcp_client_t* client = &impl->clients[i];
-    
+
     // send queued messages until we block or cant send anymore
     while (client->queued_message != 0)
     {
@@ -241,24 +243,29 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
       {
         client->queued_message_written += sent;
       }
+#ifdef WIN32
+      else if (sent < 0 && WSAGetLastError() != WSAEWOULDBLOCK)
+#else
       else if (sent < 0 && errno != EAGAIN)
+#endif
       {
         client->needs_removal = true;
       }
-    	
+
       if (client->queued_message_written == client->queued_message_length)
       {
+        printf("Message sent.\n");
         free(client->queued_message);
         client->queued_message = 0;
-        
+
         // we finished! check if there are more to send
         if (client->num_queued_messages > 0)
         {
           // grab a message from the front of our message queue
           client->queued_message = client->queued_messages[0].data;
           client->queued_message_written = 0;
-          client->queued_message_length = client->queued_messages[0].length; 
-          
+          client->queued_message_length = client->queued_messages[0].length;
+
           client->num_queued_messages -= 1;
           if (client->num_queued_messages == 0)
           {
@@ -266,15 +273,15 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
             client->queued_messages = 0;
             continue;
           }
-          
-          struct ps_tcp_client_queued_message_t* msgs = (struct ps_tcp_client_queued_message_t*)malloc(client->num_queued_messages*sizeof(struct ps_tcp_client_queued_message_t));
+
+          struct ps_tcp_client_queued_message_t* msgs = (struct ps_tcp_client_queued_message_t*)malloc(client->num_queued_messages * sizeof(struct ps_tcp_client_queued_message_t));
           for (int i = 0; i < client->num_queued_messages; i++)
           {
-            msgs[i] = client->queued_messages[i+1];// take from the front
+            msgs[i] = client->queued_messages[i + 1];// take from the front
           }
           free(client->queued_messages);
           client->queued_messages = msgs;
-          
+
           // continue so we can attempt to send again
         }
         else
@@ -288,7 +295,7 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
         break;// we couldnt send anymore atm
       }
     }
-    
+
     // check for new data and add it to the packet if present
     char buf[1500];
     // if we havent gotten a header yet, just check for that
@@ -312,7 +319,7 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
       client->packet_data = (char*)malloc(client->desired_packet_size);
 
       client->current_packet_size = 0;
-	}
+    }
     else // read in the message
     {
       int remaining_size = client->desired_packet_size - client->current_packet_size;
@@ -326,7 +333,7 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
         if (client->current_packet_size == client->desired_packet_size)
         {
           printf("message finished\n");
-          
+
           if (true)// todo look at message id
           {
             // its a subscribe
@@ -399,11 +406,11 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
       connection->packet_data = (char*)malloc(connection->packet_size);
 
       connection->current_size = 0;
-	}
+    }
     else // read in the message
     {
       int remaining_size = connection->packet_size - connection->current_size;
-      
+
       // check for new messages and read until we hit packet size
       int len = recv(connection->socket, &connection->packet_data[connection->current_size], remaining_size, 0);
       if (len > 0)
@@ -414,7 +421,6 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
         if (connection->current_size == connection->packet_size)
         {
           //printf("message finished\n");
-
           if (connection->packet_type == 0x3)
           {
             //printf("Was message definition");
@@ -422,7 +428,7 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
             {
               ps_deserialize_message_definition(connection->packet_data, &connection->subscriber->received_message_def);
             }
-            
+
             free(connection->packet_data);
             connection->waiting_for_header = true;
             return;
@@ -454,7 +460,7 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
           {
             // unhandled packet id
             free(connection->packet_data);
-          }          
+          }
           connection->waiting_for_header = true;
         }
       }
@@ -468,7 +474,7 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
 
   // the client packs the socket id in the addr
   int socket = client->endpoint.address;
-  
+
   // okay, so new version, if any write fails (EAGAIN or < expected size)
   // we make a copy of the entire message and store it on that client to try and send again in our update loop
   // if we get into this function and this client already has a queued message, just drop this one
@@ -479,23 +485,23 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
     {
       tclient = &impl->clients[i];
       break;
-    }  
+    }
   }
-  
+
   if (tclient->queued_message != 0)
   {
     // check if we have queue space left
-    
-    // for now hardcode max queue size
+
+        // for now hardcode max queue size
     const int max_queue_size = 10;
-    
+
     // copy the message to put it in the queue
     // todo remove this copy
     char* data = (char*)malloc(length + 4 + 1);
     data[0] = 0x02;
     *((uint32_t*)&data[1]) = length;
     memcpy(&data[5], ps_get_msg_start(message), length);
-  	
+
     // this if statement is unnecessary, but I added it for the sake of testing/completeness
     if (tclient->queued_message == 0)
     {
@@ -509,7 +515,7 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
       // swap everything down, freeing the first
       for (int i = tclient->num_queued_messages - 1; i >= 1; i--)
       {
-        tclient->queued_messages[i] = tclient->queued_messages[i-1];
+        tclient->queued_messages[i] = tclient->queued_messages[i - 1];
       }
       tclient->queued_messages[0].data = data;
       tclient->queued_messages[0].length = length + 5;
@@ -519,24 +525,24 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
     else
     {
       printf("queuing up message %i on topic '%s'\n", tclient->num_queued_messages, publisher->topic);
-  	  
+
       // add the message to the front of the queue
       tclient->num_queued_messages += 1;
-      struct ps_tcp_client_queued_message_t* msgs = (struct ps_tcp_client_queued_message_t*)malloc(tclient->num_queued_messages*sizeof(struct ps_tcp_client_queued_message_t));
-  
+      struct ps_tcp_client_queued_message_t* msgs = (struct ps_tcp_client_queued_message_t*)malloc(tclient->num_queued_messages * sizeof(struct ps_tcp_client_queued_message_t));
+
       msgs[0].data = data;
       msgs[0].length = length + 5;
       for (int i = 0; i < tclient->num_queued_messages - 1; i++)
       {
-       	msgs[i+1] = tclient->queued_messages[i];
+        msgs[i + 1] = tclient->queued_messages[i];
       }
       free(tclient->queued_messages);
       tclient->queued_messages = msgs;
-      
+
       return;
     }
   }
-  
+
   // try and write, if any of these fail, make a copy
   uint8_t packet_type = 0x02;
   int c = send(socket, (char*)&packet_type, 1, 0);
@@ -547,14 +553,19 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
   }
   if (c < 0)
   {
+#ifdef WIN32
+    int error = WSAGetLastError();
+    if (error == WSAEWOULDBLOCK)
+#else
     if (errno == EAGAIN || errno == EWOULDBLOCK)
+#endif
     {
       tclient->queued_message_written = 0;
       goto FAILCOPY;
     }
     goto FAILDISCONNECT;
   }
-  
+
   c = send(socket, (char*)&length, 4, 0);
   if (c < 4 && c >= 0)
   {
@@ -563,14 +574,20 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
   }
   if (c < 0)
   {
+#ifdef WIN32
+    int error = WSAGetLastError();
+    if (error == WSAEWOULDBLOCK)
+#else
     if (errno == EAGAIN || errno == EWOULDBLOCK)
+#endif
     {
-      tclient->queued_message_written = c + 1;
+      tclient->queued_message_written = 1;
       goto FAILCOPY;
     }
     goto FAILDISCONNECT;
   }
-    
+
+
   c = send(socket, (char*)ps_get_msg_start(message), length, 0);
   if (c < length && c >= 0)
   {
@@ -579,27 +596,33 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
   }
   if (c < 0)
   {
+#ifdef WIN32
+    int error = WSAGetLastError();
+    if (error == WSAEWOULDBLOCK)
+#else
     if (errno == EAGAIN || errno == EWOULDBLOCK)
+#endif
     {
-      tclient->queued_message_written = c + 5;
+      tclient->queued_message_written = 5;
       goto FAILCOPY;
     }
     goto FAILDISCONNECT;
   }
   return;
-  
+
   char* data;
 FAILDISCONNECT:
+  //printf("Disconnected: %s\n", strerror(err));
   tclient->needs_removal = true;
   return;
-  
+
 FAILCOPY:
   // todo remove this copy
   data = (char*)malloc(length + 4 + 1);
   data[0] = 0x02;
   *((uint32_t*)&data[1]) = length;
   memcpy(&data[5], ps_get_msg_start(message), length);
-  
+
   tclient->queued_message = data;
   tclient->queued_message_length = length + 5;
   ps_event_set_add_socket_write(&publisher->node->events, socket);
@@ -608,135 +631,135 @@ FAILCOPY:
 
 void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_t* subscriber, struct ps_endpoint_t* ep)
 {
-    struct ps_tcp_transport_impl* impl = (struct ps_tcp_transport_impl*)transport->impl;
+  struct ps_tcp_transport_impl* impl = (struct ps_tcp_transport_impl*)transport->impl;
 
-    // check if we already have a sub for this subscriber with this endpoint
-    // if so, ignore it
-    for (int i = 0; i < impl->num_connections; i++)
+  // check if we already have a sub for this subscriber with this endpoint
+  // if so, ignore it
+  for (int i = 0; i < impl->num_connections; i++)
+  {
+    if (impl->connections[i].endpoint.port == ep->port &&
+      impl->connections[i].endpoint.address == ep->address &&
+      impl->connections[i].subscriber->sub_id == subscriber->sub_id)
     {
-      if (impl->connections[i].endpoint.port == ep->port &&
-          impl->connections[i].endpoint.address == ep->address &&
-          impl->connections[i].subscriber->sub_id == subscriber->sub_id)
-      {
-        return;
-      }
+      return;
     }
+  }
 
 #ifdef _WIN32
-    SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
+  SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
 #else
-    int sock = socket(AF_INET, SOCK_STREAM, 0);
+  int sock = socket(AF_INET, SOCK_STREAM, 0);
 #endif
 
-    struct sockaddr_in server_addr;
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = htonl(ep->address);
-    server_addr.sin_port = htons(ep->port);
-    if (connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0 )
-    {
-      perror("error connecting tcp socket");
-    }
+  struct sockaddr_in server_addr;
+  server_addr.sin_family = AF_INET;
+  server_addr.sin_addr.s_addr = htonl(ep->address);
+  server_addr.sin_port = htons(ep->port);
+  if (connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0)
+  {
+    perror("error connecting tcp socket");
+  }
 
-	//printf("%i %i %i %i\n", (ep->address & 0xFF000000) >> 24, (ep->address & 0xFF0000) >> 16, (ep->address & 0xFF00) >> 8, (ep->address & 0xFF));
+  //printf("%i %i %i %i\n", (ep->address & 0xFF000000) >> 24, (ep->address & 0xFF0000) >> 16, (ep->address & 0xFF00) >> 8, (ep->address & 0xFF));
 
-    // make the subscribe request in a "packet"
-    // a packet is an int length followed by data
-    int8_t packet_type = 0x01;//subscribe
-    send(sock, (char*)&packet_type, 1, 0);
-    
-    int32_t length = strlen(subscriber->topic) + 1 + 4;
-    send(sock, (char*)&length, 4, 0);
-    
-    // make the request
-    char buffer[500];
-    strcpy(buffer, subscriber->topic);
-    uint32_t skip = subscriber->skip;
-    send(sock, (char*)&skip, 4, 0);
-    send(sock, buffer, length-4, 0);
+  // make the subscribe request in a "packet"
+  // a packet is an int length followed by data
+  int8_t packet_type = 0x01;//subscribe
+  send(sock, (char*)&packet_type, 1, 0);
 
-    // add the socket to the list of connections
-    impl->num_connections++;
-    struct ps_tcp_transport_connection* old_connections = impl->connections;
-    impl->connections = (struct ps_tcp_transport_connection*)malloc(sizeof(struct ps_tcp_transport_connection)*impl->num_connections);
-    for (int i = 0; i < impl->num_connections-1; i++)
-    {
-	  impl->connections[i] = old_connections[i];
-    }
-    impl->connections[impl->num_connections-1].socket = sock;
-    impl->connections[impl->num_connections-1].endpoint = *ep;
-	impl->connections[impl->num_connections-1].waiting_for_header = true;
-    impl->connections[impl->num_connections-1].subscriber = subscriber;
+  int32_t length = strlen(subscriber->topic) + 1 + 4;
+  send(sock, (char*)&length, 4, 0);
 
-    // set non-blocking
+  // make the request
+  char buffer[500];
+  strcpy(buffer, subscriber->topic);
+  uint32_t skip = subscriber->skip;
+  send(sock, (char*)&skip, 4, 0);
+  send(sock, buffer, length - 4, 0);
+
+  // add the socket to the list of connections
+  impl->num_connections++;
+  struct ps_tcp_transport_connection* old_connections = impl->connections;
+  impl->connections = (struct ps_tcp_transport_connection*)malloc(sizeof(struct ps_tcp_transport_connection) * impl->num_connections);
+  for (int i = 0; i < impl->num_connections - 1; i++)
+  {
+    impl->connections[i] = old_connections[i];
+  }
+  impl->connections[impl->num_connections - 1].socket = sock;
+  impl->connections[impl->num_connections - 1].endpoint = *ep;
+  impl->connections[impl->num_connections - 1].waiting_for_header = true;
+  impl->connections[impl->num_connections - 1].subscriber = subscriber;
+
+  // set non-blocking
 #ifdef _WIN32
-	DWORD nonBlocking = 1;
-	if (ioctlsocket(sock, FIONBIO, &nonBlocking) != 0)
-	{
-		printf("Failed to Set Socket as Non-Blocking!\n");
-		closesocket(sock);
-		return;
-	}
+  DWORD nonBlocking = 1;
+  if (ioctlsocket(sock, FIONBIO, &nonBlocking) != 0)
+  {
+    printf("Failed to Set Socket as Non-Blocking!\n");
+    closesocket(sock);
+    return;
+  }
 #endif
 #ifdef ARDUINO
-    fcntl(sock, F_SETFL, O_NONBLOCK);
+  fcntl(sock, F_SETFL, O_NONBLOCK);
 #endif
 #ifdef __unix__
-	int flags = fcntl(sock, F_GETFL);
-	fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+  int flags = fcntl(sock, F_GETFL);
+  fcntl(sock, F_SETFL, flags | O_NONBLOCK);
 #endif
 
-    ps_event_set_add_socket(&subscriber->node->events, sock);
+  ps_event_set_add_socket(&subscriber->node->events, sock);
 
-	if (impl->num_connections - 1)
-	{
-       free(old_connections);
-	}
+  if (impl->num_connections - 1)
+  {
+    free(old_connections);
+  }
 }
 
 void ps_tcp_transport_unsubscribe(struct ps_transport_t* transport, struct ps_sub_t* subscriber)
 {
-    struct ps_tcp_transport_impl* impl = (struct ps_tcp_transport_impl*)transport->impl;
-    
-	// remove all transports which reference this subscriber
-	int num_to_remove = 0;
-	for (int i = 0; i < impl->num_connections; i++)
-	{
-		if (impl->connections[i].subscriber == subscriber)
-		{
-			num_to_remove++;
-		}
-	}
-	
-	printf("Removing %i tcp subs\n", num_to_remove);
-	if (num_to_remove > 0)
-	{
-	  // Free our subscribers and any buffers
-	  int iter = 0;
-	  int new_size = impl->num_connections - num_to_remove;
-	  struct ps_tcp_transport_connection* new_connections = new_size == 0 ? 0 : (struct ps_tcp_transport_connection*)malloc(sizeof(struct ps_tcp_transport_connection)*new_size);
-      for (int i = 0; i < impl->num_connections; i++)
+  struct ps_tcp_transport_impl* impl = (struct ps_tcp_transport_impl*)transport->impl;
+
+  // remove all transports which reference this subscriber
+  int num_to_remove = 0;
+  for (int i = 0; i < impl->num_connections; i++)
+  {
+    if (impl->connections[i].subscriber == subscriber)
+    {
+      num_to_remove++;
+    }
+  }
+
+  printf("Removing %i tcp subs\n", num_to_remove);
+  if (num_to_remove > 0)
+  {
+    // Free our subscribers and any buffers
+    int iter = 0;
+    int new_size = impl->num_connections - num_to_remove;
+    struct ps_tcp_transport_connection* new_connections = new_size == 0 ? 0 : (struct ps_tcp_transport_connection*)malloc(sizeof(struct ps_tcp_transport_connection) * new_size);
+    for (int i = 0; i < impl->num_connections; i++)
+    {
+      if (impl->connections[i].subscriber != subscriber)
       {
-      	if (impl->connections[i].subscriber != subscriber)
-      	{
-      		new_connections[iter++] = impl->connections[i];
-      		continue;
-      	}
-      	
-        if (!impl->connections[i].waiting_for_header)
-        {
-          free(impl->connections[i].packet_data);
-        }
-        ps_event_set_remove_socket(&impl->node->events, impl->connections[i].socket);
-#ifdef _WIN32
-        closesocket(impl->connections[i].socket);
-#else
-        close(impl->connections[i].socket);
-#endif
+        new_connections[iter++] = impl->connections[i];
+        continue;
       }
-      impl->num_connections = new_size;
-      free(impl->connections);
-      impl->connections = new_connections;
-	}
+
+      if (!impl->connections[i].waiting_for_header)
+      {
+        free(impl->connections[i].packet_data);
+      }
+      ps_event_set_remove_socket(&impl->node->events, impl->connections[i].socket);
+#ifdef _WIN32
+      closesocket(impl->connections[i].socket);
+#else
+      close(impl->connections[i].socket);
+#endif
+    }
+    impl->num_connections = new_size;
+    free(impl->connections);
+    impl->connections = new_connections;
+  }
 }
 
 
@@ -791,57 +814,57 @@ void ps_tcp_transport_destroy(struct ps_transport_t* transport)
 void ps_tcp_transport_init(struct ps_transport_t* transport, struct ps_node_t* node)
 {
 #ifdef __unix__
-    signal(SIGPIPE, SIG_IGN);
+  signal(SIGPIPE, SIG_IGN);
 #endif
 
-    transport->spin = ps_tcp_transport_spin;
-    transport->subscribe = ps_tcp_transport_subscribe;
-    transport->unsubscribe = ps_tcp_transport_unsubscribe;
-    transport->destroy = ps_tcp_transport_destroy;
-    transport->pub = ps_tcp_transport_pub;
-    transport->uuid = 1;
+  transport->spin = ps_tcp_transport_spin;
+  transport->subscribe = ps_tcp_transport_subscribe;
+  transport->unsubscribe = ps_tcp_transport_unsubscribe;
+  transport->destroy = ps_tcp_transport_destroy;
+  transport->pub = ps_tcp_transport_pub;
+  transport->uuid = 1;
 
-    struct ps_tcp_transport_impl* impl = (struct ps_tcp_transport_impl*)malloc(sizeof(struct ps_tcp_transport_impl));
+  struct ps_tcp_transport_impl* impl = (struct ps_tcp_transport_impl*)malloc(sizeof(struct ps_tcp_transport_impl));
 
-    impl->num_clients = 0;
-    impl->num_connections = 0;
+  impl->num_clients = 0;
+  impl->num_connections = 0;
 
-    impl->node = node;
+  impl->node = node;
 
-    impl->socket = socket(AF_INET, SOCK_STREAM, 0);
+  impl->socket = socket(AF_INET, SOCK_STREAM, 0);
 
-    struct sockaddr_in server_addr;
-    server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(node->port);
-    if (bind(impl->socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0 )
-    {
-      perror("error binding tcp socket");
-    }
+  struct sockaddr_in server_addr;
+  server_addr.sin_family = AF_INET;
+  server_addr.sin_addr.s_addr = INADDR_ANY;
+  server_addr.sin_port = htons(node->port);
+  if (bind(impl->socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0)
+  {
+    perror("error binding tcp socket");
+  }
 
-    // set non-blocking
+  // set non-blocking
 #ifdef _WIN32
-	DWORD nonBlocking = 1;
-	if (ioctlsocket(impl->socket, FIONBIO, &nonBlocking) != 0)
-	{
-		printf("Failed to Set Socket as Non-Blocking!\n");
-		closesocket(impl->socket);
-		return;
-	}
+  DWORD nonBlocking = 1;
+  if (ioctlsocket(impl->socket, FIONBIO, &nonBlocking) != 0)
+  {
+    printf("Failed to Set Socket as Non-Blocking!\n");
+    closesocket(impl->socket);
+    return;
+  }
 #endif
 #ifdef ARDUINO
-    fcntl(impl->socket, F_SETFL, O_NONBLOCK);
+  fcntl(impl->socket, F_SETFL, O_NONBLOCK);
 #endif
 #ifdef __unix__
-	int flags = fcntl(impl->socket, F_GETFL);
-	fcntl(impl->socket, F_SETFL, flags | O_NONBLOCK);
+  int flags = fcntl(impl->socket, F_GETFL);
+  fcntl(impl->socket, F_SETFL, flags | O_NONBLOCK);
 #endif
 
-    listen(impl->socket, 5);
+  listen(impl->socket, 5);
 
-    ps_event_set_add_socket(&node->events, impl->socket);
+  ps_event_set_add_socket(&node->events, impl->socket);
 
-    transport->impl = (void*) impl;
+  transport->impl = (void*)impl;
 }
 
 #endif

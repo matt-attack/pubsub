@@ -295,11 +295,7 @@ std::string generate(const char* definition, const char* name)
 			std::string type = words[0];
 
 			int size = 1;
-			if (name.length() < 2)
-			{
-				
-			}
-			else if (name.substr(name.size() - 2) == "[]")
+			if (name.length() > 2 && name.substr(name.size() - 2) == "[]")
 			{
 				size = 0;
 				name = name.substr(0, name.length() - 2);
@@ -354,7 +350,7 @@ std::string generate(const char* definition, const char* name)
 
 	for (auto field : fields)
 	{
-		//printf("Got field %s of type %s\n", field.name.c_str(), field.type.c_str());
+		//printf("Got field '%s' of type %s\n", field.name.c_str(), field.type.c_str());
 	}
 
 	std::string raw_name = split(name, '_').back();
@@ -801,8 +797,10 @@ int main(int num_args, char** args)
 
 	// takes in first, the message file, then the message name w/ namespace, then file to output to
 	// ex: string.msg std_msgs/String
-	//num_args = 2;
-	//args[1] = "C:\\Users\\space\\Desktop\\pubsub_proto\\PubSub\\msg\\std_msgs__Joy.txt";
+	/*num_args = 4;
+	args[1] = "C:\\Users\\mbries\\Desktop\\pubsub\\msg\\Pose.msg";
+	args[2] = "pubsub";
+	args[3] = "Pose.msg.h";*/
     if ((num_args-1)%3 != 0)
     {
         printf("Not enough arguments!");

@@ -11,6 +11,10 @@ add_executable(simple_sub "simple_sub.c")
 target_link_libraries(simple_sub pubsub)
 add_dependencies(simple_sub pubsub pubsub_msgs)
 
+add_executable(binding_test "binding_test.c")
+target_link_libraries(binding_test pubsub_shared)
+add_dependencies(binding_test pubsub_shared pubsub_msgs)
+
 add_executable(simple_pub_cpp "simple_pub.cpp")
 target_link_libraries(simple_pub_cpp pubsub_cpp)
 add_dependencies(simple_pub_cpp pubsub_cpp pubsub_msgs)

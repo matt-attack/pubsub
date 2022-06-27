@@ -54,6 +54,7 @@ generate_messages(FILES
   PointCloud.msg
   Marker.msg
   Parameters.msg
+  Pose.msg
 )
 
 

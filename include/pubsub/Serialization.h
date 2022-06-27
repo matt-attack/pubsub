@@ -93,7 +93,7 @@ extern "C"
 
 	// print out the deserialized contents of the message to console, for rostopic echo like implementations
 	// in yaml format
-	void ps_deserialize_print(const void* data, const struct ps_message_definition_t* definition);
+	void ps_deserialize_print(const void* data, const struct ps_message_definition_t* definition, unsigned int max_array_size);
 	
 	struct ps_deserialize_iterator
 	{

@@ -270,7 +270,7 @@ const char* ps_deserialize_iterate(struct ps_deserialize_iterator* iter, const s
 	return position;
 }
 
-void ps_deserialize_print(const void * data, const struct ps_message_definition_t* definition)
+void ps_deserialize_print(const void * data, const struct ps_message_definition_t* definition, unsigned int max_array_size)
 {
 	struct ps_deserialize_iterator iter = ps_deserialize_start(data, definition);
 	const struct ps_msg_field_t* field; uint32_t length; const char* ptr;
@@ -317,6 +317,12 @@ void ps_deserialize_print(const void * data, const struct ps_message_definition_
 			if (length == 0)
 			{
 				printf("]\n");
+			}
+
+			if (length > max_array_size && max_array_size != 0)
+			{
+				length = 0;
+				printf("...\n");
 			}
 
 			for (unsigned int i = 0; i < length; i++)

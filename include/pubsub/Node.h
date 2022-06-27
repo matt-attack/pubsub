@@ -56,7 +56,7 @@ struct ps_transport_t
 typedef void(*ps_adv_cb_t)(const char* topic, const char* type, const char* node, const struct ps_advertise_req_t* data);
 typedef void(*ps_sub_cb_t)(const char* topic, const char* type, const char* node, const struct ps_subscribe_req_t* data);
 typedef void(*ps_msg_def_cb_t)(const struct ps_message_definition_t* definition);
-typedef void(*ps_param_change_cb_t)(const char* name, double value);
+typedef double(*ps_param_change_cb_t)(const char* name, double value);
 typedef void(*ps_param_confirm_cb_t)(const char* name, double value);
 
 #ifndef PUBSUB_REAL_TIME
@@ -240,6 +240,9 @@ int serialize_string(char* data, const char* str);
 void ps_node_system_query(struct ps_node_t* node);
 
 void ps_node_query_message_definition(struct ps_node_t* node, const char* message);
+
+// Sets a parameter, returns immediately rather than waiting for ack
+void ps_node_set_parameter(struct ps_node_t* node, const char* name, double value);
 
 
 int ps_okay();

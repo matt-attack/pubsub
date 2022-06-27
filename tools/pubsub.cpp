@@ -35,7 +35,7 @@ void print_help()
 		"      bw (topic name)\n"
 		"      info (topic name)\n"
 		"      show (topic name)\n"
-        "      echo (topic name)\n"
+		"      echo (topic name)\n"
 		"      pub (topic name) (message)\n"
 		"   node -\n"
 		"      list\n"
@@ -70,7 +70,7 @@ struct NodeInfo
 {
 	int port;
 	int address;
-    int transports;
+	int transports;
 };
 
 std::map<std::string, NodeInfo> _nodes;
@@ -78,7 +78,7 @@ std::map<std::string, NodeInfo> _nodes;
 int topic_list(int num_args, char** args, ps_node_t* node)
 {
 	pubsub::ArgParser parser;
-    parser.SetUsage("Usage: info topic list\n\nLists all topics.");
+	parser.SetUsage("Usage: info topic list\n\nLists all topics.");
 	parser.Parse(args, num_args, 2);
 
 	wait(node);
@@ -94,17 +94,17 @@ int topic_list(int num_args, char** args, ps_node_t* node)
 int topic_info(int num_args, char** args, ps_node_t* node)
 {
 	pubsub::ArgParser parser;
-    parser.SetUsage("Usage: info topic info TOPIC\n\nGives details about a particular topic.");
+	parser.SetUsage("Usage: info topic info TOPIC\n\nGives details about a particular topic.");
 	parser.Parse(args, num_args, 2);
 
 	wait(node);
 
-    std::string topic = parser.GetPositional(0);
-    if (!topic.length())
-    {
-        printf("Not enough arguments.\n");
-        return 0;
-    }
+	std::string topic = parser.GetPositional(0);
+	if (!topic.length())
+	{
+		printf("Not enough arguments.\n");
+		return 0;
+	}
 
 	auto info = _topics.find(topic);
 	if (info == _topics.end())
@@ -116,38 +116,38 @@ int topic_info(int num_args, char** args, ps_node_t* node)
 	std::cout << "Type: " << info->second.type << "\n";
 	std::cout << "Published by:\n";
 	for (auto pub : info->second.publishers)
-    {
-        int transports = _nodes[pub].transports;
-        std::string tps = "UDP";
-        if (transports & PS_TRANSPORT_TCP)
-        {
-            tps += ", TCP";
-        }
-		std::cout << " " << pub << " (" << tps <<")\n";
-    }
+	{
+		int transports = _nodes[pub].transports;
+		std::string tps = "UDP";
+		if (transports & PS_TRANSPORT_TCP)
+		{
+			tps += ", TCP";
+		}
+		std::cout << " " << pub << " (" << tps << ")\n";
+	}
 
 	std::cout << "\nSubscribed by:\n";
 	for (auto sub : info->second.subscribers)
 		std::cout << " " << sub << "\n";
 
-    ps_node_destroy(node);
-	
-    return 0;
+	ps_node_destroy(node);
+
+	return 0;
 }
 
 int topic_show(int num_args, char** args, ps_node_t* node)
 {
 	pubsub::ArgParser parser;
-    parser.SetUsage("Usage: info topic show TOPIC\n\n"
-                    "Prints the message definition for a given topic.");
+	parser.SetUsage("Usage: info topic show TOPIC\n\n"
+		"Prints the message definition for a given topic.");
 	parser.Parse(args, num_args, 2);
 
-    std::string topic = parser.GetPositional(0);
-    if (!topic.length())
-    {
-        printf("Not enough arguments.\n");
-        return 0;
-    }
+	std::string topic = parser.GetPositional(0);
+	if (!topic.length())
+	{
+		printf("Not enough arguments.\n");
+		return 0;
+	}
 
 	// print out the message definition string for this topic
 	bool got_data = false;
@@ -184,7 +184,7 @@ int topic_show(int num_args, char** args, ps_node_t* node)
 		// print the message format as a string
 		ps_print_definition(&definition, true);
 
-        ps_node_destroy(node);
+		ps_node_destroy(node);
 
 		return 0;
 	}
@@ -192,32 +192,35 @@ int topic_show(int num_args, char** args, ps_node_t* node)
 
 int topic_echo(int num_args, char** args, ps_node_t* _node)
 {
-    static ps_node_t* node = _node;
+	static ps_node_t* node = _node;
 	pubsub::ArgParser parser;
-    parser.SetUsage("Usage: info topic echo TOPIC\n\nEchos a particular topic.");
+	parser.SetUsage("Usage: info topic echo TOPIC\n\nEchos a particular topic.");
 	parser.AddMulti({ "i" }, "Print info about the publisher with each message.");
 	parser.AddMulti({ "n" }, "Number of messages to echo.", "0");
 	parser.AddMulti({ "skip", "s" }, "Skip factor for the subscriber.", "0");
-    parser.AddMulti({ "tcp" }, "Prefer the TCP transport.");
+	parser.AddMulti({ "tcp" }, "Prefer the TCP transport.");
+	parser.AddMulti({ "no-arr" }, "Don't print out the contents of arrays in messages.");
 
 	parser.Parse(args, num_args, 2);
 
-    std::string topic = parser.GetPositional(0);
-    if (!topic.length())
-    {
-        printf("Not enough arguments.\n");
-        return 0;
-    }
+	std::string topic = parser.GetPositional(0);
+	if (!topic.length())
+	{
+		printf("Not enough arguments.\n");
+		return 0;
+	}
 
 	static bool print_info = parser.GetBool("i");
-    double vn = parser.GetDouble("n");
-    if (vn <= 0)
-    {
-        vn = 2147483647;
-    }
+	double vn = parser.GetDouble("n");
+	if (vn <= 0)
+	{
+		vn = 2147483647;
+	}
 	static unsigned long long int n = vn;
 	int skip = parser.GetDouble("s");
-    bool tcp = parser.GetBool("tcp");
+	bool tcp = parser.GetBool("tcp");
+
+	static bool no_arr = parser.GetBool("no-arr");
 
 
 	// create a subscriber
@@ -239,13 +242,13 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
 			std::cout << "Topic " << topic << " found!\n";
 			//std::cout << info->first.c_str() << " " <<  info->second.type.c_str();
 			subscribed = true;
-			
+
 			// override this to handle latched messages properly
 			node->def_cb = [](const ps_message_definition_t* def)
 			{
 				//printf("got message definition info");
 				ps_copy_message_definition(&definition, def);
-				
+
 				if (todo_msgs.size() && sub.received_message_def.fields != 0)
 				{
 					for (auto msg : todo_msgs)
@@ -269,7 +272,7 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
 								<< ((info->address & 0xFF)) << ":" << info->port << "\n";
 							printf("-------------\n");
 						}
-						ps_deserialize_print(msg.first, &sub.received_message_def);
+						ps_deserialize_print(msg.first, &sub.received_message_def, no_arr ? 10 : 0);
 						printf("-------------\n");
 						free(msg.first);
 						if (++count >= n)
@@ -292,7 +295,7 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
 			options.want_message_def = true;
 			options.allocator = 0;
 			options.ignore_local = false;
-            options.preferred_transport = tcp ? 1 : 0;
+			options.preferred_transport = tcp ? 1 : 0;
 			options.cb = [](void* message, unsigned int size, void* data, const ps_msg_info_t* info)
 			{
 				// get and deserialize the messages
@@ -322,7 +325,7 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
 							<< ((info->address & 0xFF)) << ":" << info->port << "\n";
 						printf("-------------\n");
 					}
-					ps_deserialize_print(message, &sub.received_message_def);
+					ps_deserialize_print(message, &sub.received_message_def, no_arr ? 10 : 0);
 					printf("-------------\n");
 					free(message);
 					if (++count >= n)
@@ -340,27 +343,27 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
 		}
 	}
 
-    if (subscribed)
-    {
-        ps_sub_destroy(&sub);
-    }
+	if (subscribed)
+	{
+		ps_sub_destroy(&sub);
+	}
 }
 
 int topic_pub(int num_args, char** args, ps_node_t* node)
 {
-    pubsub::ArgParser parser;
+	pubsub::ArgParser parser;
 	parser.AddMulti({ "r", "rate" }, "Publish rate in Hz.", "1.0");
 	parser.AddMulti({ "l", "latch" }, "Latches the topic.", "true");
-    parser.SetUsage("Usage: info topic pub TOPIC MESSAGE\n\nPublishes a particular topic.");
+	parser.SetUsage("Usage: info topic pub TOPIC MESSAGE\n\nPublishes a particular topic.");
 	parser.Parse(args, num_args, 2);
 
-    std::string topic = parser.GetPositional(0);
+	std::string topic = parser.GetPositional(0);
 
-    if (!topic.length())
-    {
-        printf("Not enough arguments.\n");
-        return 0;
-    }
+	if (!topic.length())
+	{
+		printf("Not enough arguments.\n");
+		return 0;
+	}
 
 	double rate = parser.GetDouble("r");
 	bool latched = parser.GetBool("l");
@@ -445,16 +448,16 @@ int topic_pub(int num_args, char** args, ps_node_t* node)
 		ps_sleep(1000.0 / rate);
 	}
 
-    ps_node_destroy(node);
+	ps_node_destroy(node);
 
-    return 0;
+	return 0;
 }
 
 int node_list(int num_args, char** args, ps_node_t* node)
 {
-    pubsub::ArgParser parser;
-    parser.SetUsage("Usage: info node list\n\nList all running nodes.");
-    parser.Parse(args, num_args, 2);
+	pubsub::ArgParser parser;
+	parser.SetUsage("Usage: info node list\n\nList all running nodes.");
+	parser.Parse(args, num_args, 2);
 
 	wait(node);
 
@@ -475,23 +478,23 @@ int node_list(int num_args, char** args, ps_node_t* node)
 		std::cout << " " << node.first << "\n";
 	}
 
-    ps_node_destroy(node);
+	ps_node_destroy(node);
 	return 0;
 }
 
 int node_info(int num_args, char** args, ps_node_t* node)
 {
 	pubsub::ArgParser parser;
-    parser.SetUsage("Usage: info node info NODE\n\n"
-                    "Prints information about a given node.");
+	parser.SetUsage("Usage: info node info NODE\n\n"
+		"Prints information about a given node.");
 	parser.Parse(args, num_args, 2);
 
-    std::string node_name = parser.GetPositional(0);
-    if (!node_name.length())
-    {
-        printf("Not enough arguments.\n");
-        return 0;
-    }
+	std::string node_name = parser.GetPositional(0);
+	if (!node_name.length())
+	{
+		printf("Not enough arguments.\n");
+		return 0;
+	}
 
 	wait(node);
 
@@ -521,13 +524,13 @@ int node_info(int num_args, char** args, ps_node_t* node)
 			<< ((info.address & 0xFF0000) >> 16) << "."
 			<< ((info.address & 0xFF00) >> 8) << "."
 			<< ((info.address & 0xFF)) << ":" << info.port << "\n";
-        int transports = info.transports;
-        std::string tps = "UDP";
-        if (transports & PS_TRANSPORT_TCP)
-        {
-            tps += ", TCP";
-        }
-        std::cout << " Transports: " << tps << "\n";
+		int transports = info.transports;
+		std::string tps = "UDP";
+		if (transports & PS_TRANSPORT_TCP)
+		{
+			tps += ", TCP";
+		}
+		std::cout << " Transports: " << tps << "\n";
 	}
 
 	if (subs.size() == 0 && pubs.size() == 0)
@@ -548,9 +551,52 @@ int node_info(int num_args, char** args, ps_node_t* node)
 		std::cout << " " << pub << "\n";
 	}
 
-    ps_node_destroy(node);
-	
-    return 0;
+	ps_node_destroy(node);
+
+	return 0;
+}
+
+int param_set(int num_args, char** args, ps_node_t* node)
+{
+	pubsub::ArgParser parser;
+	parser.SetUsage("Usage: info param set PARAM VALUE\n\n"
+		"Sets the named parameter to a given value.");
+	parser.Parse(args, num_args, 2);
+
+	std::string param_name = parser.GetPositional(0);
+	if (!param_name.length())
+	{
+		printf("Not enough arguments.\n");
+		return 0;
+	}
+
+	std::string param_value = parser.GetPositional(1);
+	if (!param_value.length())
+	{
+		printf("Not enough arguments.\n");
+		return 0;
+	}
+
+	ps_node_set_parameter(node, param_name.c_str(), std::atof(param_value.c_str()));
+
+	// Wait until we get a confirmation
+	uint64_t start_time = GetTimeMs();
+	uint64_t end_time = start_time + 1000;
+	while (GetTimeMs() < end_time)
+	{
+		// spin until we get a confirmation
+		ps_node_spin(node);
+
+		// todo look for confirmation
+		/*if (got confirmation)
+		{
+			return 1;
+		}*/
+	}
+
+	ps_node_destroy(node);
+
+	return 0;
 }
 
 int main(int num_args_real, char** args)
@@ -570,11 +616,11 @@ int main(int num_args_real, char** args)
 
 	// Setup the node with a random name
 	static ps_node_t node;
-	ps_node_init(&node, "Query", "", false);
+	ps_node_init(&node, "Query", "", true);
 
-    struct ps_transport_t tcp_transport;
-    ps_tcp_transport_init(&tcp_transport, &node);
-    ps_node_add_transport(&node, &tcp_transport);
+	struct ps_transport_t tcp_transport;
+	ps_tcp_transport_init(&tcp_transport, &node);
+	ps_node_add_transport(&node, &tcp_transport);
 
 	// Setup introspection callbacks
 	node.adv_cb = [](const char* topic, const char* type, const char* node, const ps_advertise_req_t* data)
@@ -582,7 +628,7 @@ int main(int num_args_real, char** args)
 		NodeInfo info;
 		info.address = data->addr;
 		info.port = data->port;
-        info.transports = data->transports;
+		info.transports = data->transports;
 		_nodes[node] = info;
 
 		auto t = _topics.find(topic);
@@ -609,20 +655,20 @@ int main(int num_args_real, char** args)
 
 	node.sub_cb = [](const char* topic, const char* type, const char* node, const ps_subscribe_req_t* data)
 	{
-        auto iter = _nodes.find(node);
-        if (iter == _nodes.end())
-        {
-          NodeInfo info;
-          info.address = data->addr;
-          info.port = data->port;
-          info.transports = 0;
-          _nodes[node] = info;
-        }
-        else
-        {
-          iter->second.address = data->addr;
-          iter->second.port = data->port;
-        }
+		auto iter = _nodes.find(node);
+		if (iter == _nodes.end())
+		{
+			NodeInfo info;
+			info.address = data->addr;
+			info.port = data->port;
+			info.transports = 0;
+			_nodes[node] = info;
+		}
+		else
+		{
+			iter->second.address = data->addr;
+			iter->second.port = data->port;
+		}
 		auto t = _topics.find(topic);
 		if (t == _topics.end())
 		{
@@ -653,7 +699,7 @@ int main(int num_args_real, char** args)
 
 	// Query the other nodes in the network for their data
 	ps_node_system_query(&node);
-	
+
 	if (strcmp(args[1], "--help") == 0 || strcmp(args[1], "-h") == 0)
 	{
 		print_help();
@@ -673,7 +719,7 @@ int main(int num_args_real, char** args)
 
 		if (subverb == "list")
 		{
-            return topic_list(num_args, args, &node);
+			return topic_list(num_args, args, &node);
 		}
 
 		if (num_args < 4)
@@ -686,16 +732,17 @@ int main(int num_args_real, char** args)
 
 		if (subverb == "echo")
 		{
-            return topic_echo(num_args, args, &node);
+			return topic_echo(num_args, args, &node);
 		}
 		else if (subverb == "hz" || subverb == "bw")
 		{
 			pubsub::ArgParser parser;
 			parser.AddMulti({ "w", "window" }, "Window size for averaging.", "100");
-            if (subverb == "hz")
-                parser.SetUsage("Usage: info topic hz TOPIC\n\nDetermines the rate of publication for a given topic.");
-            else
-                parser.SetUsage("Usage: info topic bw TOPIC\n\nDetermines the single subscriber bandwidth for a given topic.");
+			parser.AddMulti({ "tcp" }, "Prefer the TCP transport.");
+			if (subverb == "hz")
+				parser.SetUsage("Usage: info topic hz TOPIC\n\nDetermines the rate of publication for a given topic.");
+			else
+				parser.SetUsage("Usage: info topic bw TOPIC\n\nDetermines the single subscriber bandwidth for a given topic.");
 			parser.Parse(args, num_args, 2);
 
 			// create a subscriber
@@ -725,7 +772,12 @@ int main(int num_args_real, char** args)
 							message_times->pop_front();
 					};
 
-					ps_node_create_subscriber_cb(&node, info->first.c_str(), 0, &sub, cb, &message_times, false, 0, false);
+					ps_subscriber_options opts;
+					ps_subscriber_options_init(&opts);
+					opts.cb = cb;
+					opts.cb_data = &message_times;
+					opts.preferred_transport = parser.GetBool("tcp") ? 1 : 0;
+					ps_node_create_subscriber_adv(&node, info->first.c_str(), 0, &sub, &opts);
 					break;
 				}
 			}
@@ -783,11 +835,11 @@ int main(int num_args_real, char** args)
 		}
 		else if (subverb == "info")
 		{
-            return topic_info(num_args, args, &node);
+			return topic_info(num_args, args, &node);
 		}
 		else if (subverb == "show")
 		{
-            return topic_show(num_args, args, &node);
+			return topic_show(num_args, args, &node);
 		}
 		else if (subverb == "pub")
 		{
@@ -801,19 +853,44 @@ int main(int num_args_real, char** args)
 			std::string verb2 = args[2];
 			if (verb2 == "list")
 			{
-                return node_list(num_args, args, &node);
+				return node_list(num_args, args, &node);
 			}
 			else if (verb2 == "info")
 			{
-                return node_info(num_args, args, &node);
+				return node_info(num_args, args, &node);
 			}
+		}
+		else
+		{
+			printf("Not enough arguments\n");
+			return 0;
+		}
+	}
+	else if (verb == "param")
+	{
+		if (num_args >= 3)
+		{
+			std::string verb2 = args[2];
+			/*if (verb2 == "list")
+			{
+				return node_list(num_args, args, &node);
+			}
+			else */if (verb2 == "set")
+			{
+				return param_set(num_args, args, &node);
+			}
+		}
+		else
+		{
+			printf("Not enough arguments\n");
+			return 0;
 		}
 	}
 	else
 	{
 		printf("ERROR: Unhandled verb %s\n", args[1]);
 
-        print_help();
+		print_help();
 	}
 
 	// this destroys a node and everything inside of it

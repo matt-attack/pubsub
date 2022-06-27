@@ -270,3 +270,4 @@ tools/CMakeFiles/*
 *.msg.h
 Makefile
 cmake_install.cmake
+build/
