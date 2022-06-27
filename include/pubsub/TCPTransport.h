@@ -55,6 +55,12 @@ struct ps_tcp_transport_connection
 	char* packet_data;
 };
 
+struct ps_tcp_client_queued_message_t
+{
+  char* data;
+  int32_t length;
+};
+
 struct ps_tcp_client_t
 {
   int socket;
@@ -62,13 +68,17 @@ struct ps_tcp_client_t
 
   struct ps_pub_t* publisher;
   
-  int current_packet_size;
-  int desired_packet_size;
+  int32_t current_packet_size;
+  int32_t desired_packet_size;
   char* packet_data;
   
   char* queued_message;
-  int queued_message_length;
-  int queued_message_written;
+  int32_t queued_message_length;
+  int32_t queued_message_written;
+  
+  // this stores queued messages > 1
+  int32_t num_queued_messages;
+  struct ps_tcp_client_queued_message_t* queued_messages;
 };
 
 struct ps_tcp_transport_impl
@@ -110,6 +120,16 @@ void remove_client_socket(struct ps_tcp_transport_impl* transport, int socket, s
   if (transport->clients[i].queued_message)
   {
     free(transport->clients[i].queued_message);
+  }
+  
+  // free queued messages
+  if (transport->clients[i].num_queued_messages)
+  {
+    for (int j = 0; j < transport->clients[i].num_queued_messages; j++)
+    {
+      free(transport->clients[i].queued_messages[j].data);
+    }
+    free(transport->clients[i].queued_messages);
   }
 
   struct ps_tcp_client_t* old_clients = transport->clients;
@@ -158,6 +178,8 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
     new_client->desired_packet_size = 0;
     new_client->packet_data = 0;
     new_client->queued_message = 0;
+    new_client->queued_messages = 0;
+    new_client->num_queued_messages = 0;
 
     // set non-blocking
 #ifdef _WIN32
@@ -210,8 +232,8 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
   {
     struct ps_tcp_client_t* client = &impl->clients[i];
     
-    // check if we have any sends left to complete
-    if (client->queued_message != 0)
+    // send queued messages until we block or cant send anymore
+    while (client->queued_message != 0)
     {
       int to_send = client->queued_message_length - client->queued_message_written;
       int sent = send(client->socket, &client->queued_message[client->queued_message_written], to_send, 0);
@@ -229,7 +251,41 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
         free(client->queued_message);
         client->queued_message = 0;
         
-        ps_event_set_remove_socket_write(&node->events, client->socket);
+        // we finished! check if there are more to send
+        if (client->num_queued_messages > 0)
+        {
+          // grab a message from the front of our message queue
+          client->queued_message = client->queued_messages[0].data;
+          client->queued_message_written = 0;
+          client->queued_message_length = client->queued_messages[0].length; 
+          
+          client->num_queued_messages -= 1;
+          if (client->num_queued_messages == 0)
+          {
+            free(client->queued_messages);
+            client->queued_messages = 0;
+            continue;
+          }
+          
+          struct ps_tcp_client_queued_message_t* msgs = (struct ps_tcp_client_queued_message_t*)malloc(client->num_queued_messages*sizeof(struct ps_tcp_client_queued_message_t));
+          for (int i = 0; i < client->num_queued_messages; i++)
+          {
+            msgs[i] = client->queued_messages[i+1];// take from the front
+          }
+          free(client->queued_messages);
+          client->queued_messages = msgs;
+          
+          // continue so we can attempt to send again
+        }
+        else
+        {
+          ps_event_set_remove_socket_write(&node->events, client->socket);
+          break;// no more to send
+        }
+      }
+      else
+      {
+        break;// we couldnt send anymore atm
       }
     }
     
@@ -273,8 +329,8 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
           
           if (true)// todo look at message id
           {
-          	// its a subscribe
-          	const char* topic = &client->packet_data[4];
+            // its a subscribe
+            const char* topic = &client->packet_data[4];
             // check if this matches any of our publishers
             for (unsigned int pi = 0; pi < node->num_pubs; pi++)
             {
@@ -428,8 +484,57 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
   
   if (tclient->queued_message != 0)
   {
-  	printf("dropped message\n");
-  	return;// drop it, we have one queued already
+    // check if we have queue space left
+    
+    // for now hardcode max queue size
+    const int max_queue_size = 10;
+    
+    // copy the message to put it in the queue
+    // todo remove this copy
+    char* data = (char*)malloc(length + 4 + 1);
+    data[0] = 0x02;
+    *((uint32_t*)&data[1]) = length;
+    memcpy(&data[5], ps_get_msg_start(message), length);
+  	
+    // this if statement is unnecessary, but I added it for the sake of testing/completeness
+    if (tclient->queued_message == 0)
+    {
+      tclient->queued_message = data;
+      tclient->queued_message_length = length + 5;
+      tclient->queued_message_written = 0;
+    }
+    else if (tclient->num_queued_messages >= max_queue_size)
+    {
+      // todo use a deque lol
+      // swap everything down, freeing the first
+      for (int i = tclient->num_queued_messages - 1; i >= 1; i--)
+      {
+        tclient->queued_messages[i] = tclient->queued_messages[i-1];
+      }
+      tclient->queued_messages[0].data = data;
+      tclient->queued_messages[0].length = length + 5;
+      printf("dropped message on topic '%s'\n", publisher->topic);
+      return;// drop it, we are out of queue space
+    }
+    else
+    {
+      printf("queuing up message %i on topic '%s'\n", tclient->num_queued_messages, publisher->topic);
+  	  
+      // add the message to the front of the queue
+      tclient->num_queued_messages += 1;
+      struct ps_tcp_client_queued_message_t* msgs = (struct ps_tcp_client_queued_message_t*)malloc(tclient->num_queued_messages*sizeof(struct ps_tcp_client_queued_message_t));
+  
+      msgs[0].data = data;
+      msgs[0].length = length + 5;
+      for (int i = 0; i < tclient->num_queued_messages - 1; i++)
+      {
+       	msgs[i+1] = tclient->queued_messages[i];
+      }
+      free(tclient->queued_messages);
+      tclient->queued_messages = msgs;
+      
+      return;
+    }
   }
   
   // try and write, if any of these fail, make a copy
@@ -465,7 +570,6 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
     }
     goto FAILDISCONNECT;
   }
-  
     
   c = send(socket, (char*)ps_get_msg_start(message), length, 0);
   if (c < length && c >= 0)
@@ -490,6 +594,7 @@ FAILDISCONNECT:
   return;
   
 FAILCOPY:
+  // todo remove this copy
   data = (char*)malloc(length + 4 + 1);
   data[0] = 0x02;
   *((uint32_t*)&data[1]) = length;
