@@ -17,6 +17,10 @@ add_library (pubsub
   "src/Serialization.c"
   "src/System.c"
 )
+if (UNIX)
+else()
+target_link_libraries(pubsub winmm)
+endif()
 target_include_directories(pubsub PUBLIC include/)
 
 # Build the core exports
@@ -27,7 +31,11 @@ add_library (pubsub_shared SHARED
   "src/Subscriber.c"
   "src/Serialization.c"
   "src/System.c"
- "src/Bindings.c")
+  "src/Bindings.c")
+if (UNIX)
+else()
+target_link_libraries(pubsub_shared winmm)
+endif()
 target_include_directories(pubsub_shared PUBLIC include/)
 
 
@@ -55,7 +63,11 @@ function(my_export_target _target _include_dir)
             #set_property(TARGET pubsub_msg_gen PROPERTY
             # IMPORTED_LOCATION "../InstallMyExe/bin/myexe")
             set(${_target}_INCLUDE_DIRS \"${_include_dir}\")
+            if (UNIX)
             set(${_target}_LIBRARIES \"${CMAKE_CURRENT_BINARY_DIR}/${_target}.lib\")
+            else()
+            set(${_target}_LIBRARIES \"${CMAKE_CURRENT_BINARY_DIR}/${_target}.lib\" winmm)
+            endif()
             macro(generate_messages)
                 set(options \"DIRECTORY\" \"TARGET\")
                 cmake_parse_arguments(ARG \"\" \"\${options}\" \"FILES\" \"\" \${ARGN})

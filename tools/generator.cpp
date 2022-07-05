@@ -464,8 +464,8 @@ std::string generate(const char* definition, const char* name)
 	{
 		//generate simple de/serializaton
 		output += "void* " + type_name + "_decode(const void* data, struct ps_allocator_t* allocator)\n{\n";
-		output += "  struct " + type_name + "* out = (struct " + type_name + "*)allocator->alloc(sizeof(" + type_name + "), allocator->context);\n";
-		output += "  *out = *(" + type_name + "*)data;\n";
+		output += "  struct " + type_name + "* out = (struct " + type_name + "*)allocator->alloc(sizeof(struct " + type_name + "), allocator->context);\n";
+		output += "  *out = *(struct " + type_name + "*)data;\n";
 		output += "  return out;\n";
 		output += "}\n\n";
 

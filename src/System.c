@@ -4,6 +4,7 @@
 #include <Windows.h>
 void ps_sleep(unsigned int time_ms)
 {
+  timeBeginPeriod(1);
 	Sleep(time_ms);
 }
 

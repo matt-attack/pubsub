@@ -320,7 +320,8 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
 
       client->current_packet_size = 0;
     }
-    else // read in the message
+    // read in the message
+    if (client->desired_packet_size != 0)
     {
       int remaining_size = client->desired_packet_size - client->current_packet_size;
       // check for new messages and read until we hit packet size
