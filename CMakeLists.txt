@@ -37,6 +37,7 @@ else()
 target_link_libraries(pubsub_shared winmm)
 endif()
 target_include_directories(pubsub_shared PUBLIC include/)
+add_dependencies(pubsub_shared pubsub_msgs)
 
 
 add_library (pubsub_cpp

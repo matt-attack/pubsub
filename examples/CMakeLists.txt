@@ -30,6 +30,10 @@ target_link_libraries(simple_sub_cpp pubsub_cpp)
 add_dependencies(simple_sub_cpp pubsub_cpp pubsub_msgs)
 set_property(TARGET simple_sub_cpp PROPERTY CXX_STANDARD 11)
 
+add_executable(read_param "read_param.c")
+target_link_libraries(read_param pubsub)
+add_dependencies(read_param pubsub pubsub_msgs)
+
 #install(TARGETS pubsubtest
 #  ARCHIVE DESTINATION "s"
 #  LIBRARY DESTINATION "s"

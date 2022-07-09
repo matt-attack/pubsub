@@ -950,7 +950,7 @@ int ps_node_spin(struct ps_node_t* node)
 			// We got a parameter change confirmation. What to do with it?
 			double value = *(double*)&data[1];
 			const char* name = &data[1 + 8];
-			printf("Got ack, new value: %f\n", value);
+			//printf("Got ack, new value: %f\n", value);
 
 			if (node->param_confirm_cb)
 			{
@@ -1204,7 +1204,7 @@ int ps_node_spin(struct ps_node_t* node)
 			double value = *(double*)&data[1];
 			const char* name = &data[1 + 8];
 
-			printf("Got param change %f for %s\n", value, name);
+			//printf("Got param change %f for %s\n", value, name);
 			int send_ack = 0;
 			double new_value = 0.0;
 			if (node->param_cb)
@@ -1362,7 +1362,7 @@ int serialize_string(char* data, const char* str)
 void ps_node_set_parameter(struct ps_node_t* node, const char* name, double value)
 {
 	// send a udp message to set the parameter via broadcast
-	printf("Changing parameter\n");
+	//printf("Changing parameter\n");
 	struct sockaddr_in address;
 	address.sin_family = AF_INET;
 	address.sin_addr.s_addr = node->advertise_addr;

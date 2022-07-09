@@ -578,6 +578,18 @@ int param_set(int num_args, char** args, ps_node_t* node)
     printf("Not enough arguments.\n");
     return 0;
   }
+  
+  static std::string name = param_name;
+  static double new_value;
+  static bool confirmed = false;
+  node->param_confirm_cb = [](const char* pname, double value)
+  {
+  	if (strcmp(pname, name.c_str()) == 0)
+  	{
+  	  new_value = value;
+  	  confirmed = true;
+  	}
+  };
 
   ps_node_set_parameter(node, param_name.c_str(), std::atof(param_value.c_str()));
 
@@ -587,13 +599,19 @@ int param_set(int num_args, char** args, ps_node_t* node)
   while (GetTimeMs() < end_time)
   {
     // spin until we get a confirmation
+    ps_sleep(10);
     ps_node_spin(node);
 
-    // todo look for confirmation
-    /*if (got confirmation)
+    if (confirmed)
     {
-      return 1;
-    }*/
+      printf("Change confirmed as: %f\n", new_value);
+      break;
+    }
+  }
+  
+  if (!confirmed)
+  {
+    printf("Change timed out.\n");
   }
 
   ps_node_destroy(node);
