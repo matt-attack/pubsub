@@ -64,7 +64,7 @@ EXPORT void ps_spin_node(int node)
 
 EXPORT int ps_create_publisher(int node, const char* topic, const char* definition, bool latched)
 {
-	// find a spare node, return -1 if none was found
+	// find a spare pub, return -1 if none was found
 	int free_pub = -1;
 	for (int i = 0; i < 20; i++)
 	{
@@ -86,7 +86,7 @@ EXPORT int ps_create_publisher(int node, const char* topic, const char* definiti
 	};
 
 	// note it has no encode/decode functions
-	struct ps_message_definition_t pubsub__Image_def = { 3803012856, "pubsub__Int32", 1, pubsub__Image_fields, 0, 0, 0, 0 };
+	
 
 	struct ps_message_definition_t* cpy = (struct ps_message_definition_t*)malloc(sizeof(struct ps_message_definition_t));
 	if (strcmp(definition, "marker") == 0)
@@ -103,7 +103,103 @@ EXPORT int ps_create_publisher(int node, const char* topic, const char* definiti
 	}
 	else
 	{
-		ps_copy_message_definition(cpy, &pubsub__Image_def);
+        struct ps_msg_field_t fields[50];
+        struct ps_message_definition_t temp_def = { 3803012856, "pubsub__Int32", 1, fields, 0, 0, 0, 0 };
+        // custom!
+        char* def_copy = strdup(definition);
+        char* saveptr1, *saveptr2;
+        // the format will be "namehere;int32 field_one;float32 field_two;"
+        // tokenize each line out
+        char* line = strtok_r(def_copy, ";", &saveptr1);
+        int num_fields = 0;
+        while (line != NULL)
+        {
+            char* line_copy = strdup(line);
+            const char* type = 0;
+            const char* name = 0;
+            
+            char* word = strtok_r(line_copy, " ", &saveptr2);
+            int word_cnt = 0;
+            while (word != NULL)
+            {
+                if (word_cnt == 0)
+                {
+                    type = word;
+                }
+                else if (word_cnt == 1)
+                {
+                    name = word;
+                }
+                word = strtok_r(NULL, " ", &saveptr2);
+                word_cnt++;
+            }
+
+            if (num_fields == 0)
+            {
+                temp_def.name = type;
+            }
+            else
+            {
+                struct ps_msg_field_t* field = &fields[num_fields-1];
+                field->name = name;
+                field->length = 1;
+                field->content_length = 0;
+                field->type = 0;// todo
+                field->flags = 0;
+                if (strcmp(type, "int8") == 0)
+                {
+                    field->type = FT_Int8;
+                }
+                if (strcmp(type, "uint8") == 0)
+                {
+                    field->type = FT_UInt8;
+                }
+                if (strcmp(type, "int16") == 0)
+                {
+                    field->type = FT_Int16;
+                }
+                if (strcmp(type, "uint16") == 0)
+                {
+                    field->type = FT_UInt16;
+                }
+                if (strcmp(type, "int32") == 0)
+                {
+                    field->type = FT_Int32;
+                }
+                if (strcmp(type, "uint32") == 0)
+                {
+                    field->type = FT_UInt32;
+                }
+                if (strcmp(type, "int64") == 0)
+                {
+                    field->type = FT_Int64;
+                }
+                if (strcmp(type, "uint64") == 0)
+                {
+                    field->type = FT_UInt64;
+                }
+                if (strcmp(type, "float32") == 0)
+                {
+                    field->type = FT_Float32;
+                }
+                if (strcmp(type, "float64") == 0)
+                {
+                    field->type = FT_Float64;
+                }
+                if (strcmp(type, "string") == 0)
+                {
+                    field->type = FT_String;
+                }
+            }
+            line = strtok_r(NULL, ";", &saveptr1);
+            num_fields++;
+        }
+
+        // finish filling out the definition
+        temp_def.num_fields = num_fields-1;
+        //temp_def.name = "todo name here";
+        temp_def.hash = 10010101;// todo actually calculate
+		ps_copy_message_definition(cpy, &temp_def);
 	}
 
 	ps_node_create_publisher(&nodes[node], strdup(topic), cpy, &publishers[free_pub], latched);
@@ -113,6 +209,7 @@ EXPORT int ps_create_publisher(int node, const char* topic, const char* definiti
 
 EXPORT void ps_publish(int pub, const void* msg, int len)
 {
+    // publish the message simply since it is already encoded
 	struct ps_msg_t omsg;
 	ps_msg_alloc(len, 0, &omsg);
 	memcpy(ps_get_msg_start(omsg.data), msg, len);
