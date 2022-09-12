@@ -65,7 +65,7 @@ function(my_export_target _target _include_dir)
             # IMPORTED_LOCATION "../InstallMyExe/bin/myexe")
             set(${_target}_INCLUDE_DIRS \"${_include_dir}\")
             if (UNIX)
-            set(${_target}_LIBRARIES \"${CMAKE_CURRENT_BINARY_DIR}/${_target}.lib\")
+            set(${_target}_LIBRARIES \"${CMAKE_CURRENT_BINARY_DIR}/lib${_target}.a\")
             else()
             set(${_target}_LIBRARIES \"${CMAKE_CURRENT_BINARY_DIR}/${_target}.lib\" winmm)
             endif()
@@ -103,7 +103,7 @@ function(my_export_target _target _include_dir)
         "
     )
 
-    export(TARGETS ${_target} pubsub_msg_gen FILE "${CMAKE_CURRENT_BINARY_DIR}/${_target}Targets.cmake")
+    export(TARGETS ${_target} FILE "${CMAKE_CURRENT_BINARY_DIR}/${_target}Targets.cmake")
 
     # NOTE: The following call can pollute your PC's CMake package registry
     #       See comments/alternatives below
@@ -112,4 +112,5 @@ endfunction(my_export_target)
 
 my_export_target(pubsub "${CMAKE_CURRENT_SOURCE_DIR}/include")
 my_export_target(pubsub_cpp "${CMAKE_CURRENT_SOURCE_DIR}/include")
+my_export_target(pubsub_msg_gen "${CMAKE_CURRENT_SOURCE_DIR}/include")
 #my_export_target(pubsub_msgs "${CMAKE_CURRENT_SOURCE_DIR}")
