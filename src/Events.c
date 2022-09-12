@@ -28,6 +28,7 @@ void ps_event_set_create(struct ps_event_set_t* set)
 
   struct epoll_event event;
   event.events = EPOLLIN;
+  event.data.ptr = 0;
   epoll_ctl(set->fd, EPOLL_CTL_ADD, set->event_fd, &event);
 #endif
 }
@@ -73,8 +74,60 @@ void ps_event_set_add_socket(struct ps_event_set_t* set, int socket)
 #else
   struct epoll_event event;
   event.events = EPOLLIN;
+  event.data.ptr = 0;
   epoll_ctl(set->fd, EPOLL_CTL_ADD, socket, &event);
   set->num_events++;
+#endif
+}
+
+void ps_event_set_add_socket_write(struct ps_event_set_t* set, int socket)
+{
+#ifdef WIN32
+  // find the handle and change the select
+  for (int i = 0; i < set->num_handles; i++)
+  {
+    if (set->sockets[i] == socket)
+    {
+      WSAEventSelect(socket, set->handles[i], FD_READ | FD_WRITE);
+      break;
+    }
+  }
+#else
+  struct epoll_event event;
+  event.events = EPOLLIN | EPOLLOUT;
+  event.data.ptr = 0;
+  epoll_ctl(set->fd, EPOLL_CTL_MOD, socket, &event);
+#endif
+}
+
+void ps_event_set_add_socket_write_only(struct ps_event_set_t* set, int socket)
+{
+#ifdef WIN32
+#else
+  struct epoll_event event;
+  event.events = EPOLLOUT;
+  event.data.ptr = 0;
+  epoll_ctl(set->fd, EPOLL_CTL_MOD, socket, &event);
+#endif
+}
+
+void ps_event_set_remove_socket_write(struct ps_event_set_t* set, int socket)
+{
+#ifdef WIN32
+  // find the handle and change the select
+  for (int i = 0; i < set->num_handles; i++)
+  {
+    if (set->sockets[i] == socket)
+    {
+      WSAEventSelect(socket, set->handles[i], FD_READ);
+      break;
+    }
+  }
+#else
+  struct epoll_event event;
+  event.events = EPOLLIN;
+  event.data.ptr = 0;
+  epoll_ctl(set->fd, EPOLL_CTL_MOD, socket, &event);
 #endif
 }
 
@@ -162,7 +215,9 @@ void ps_event_set_wait(struct ps_event_set_t* set, unsigned int timeout_ms)
 #ifdef WIN32
   DWORD event = WSAWaitForMultipleEvents(set->num_handles, set->handles, false, timeout_ms, false);
   if (event == WSA_WAIT_TIMEOUT)
+  {
     return;
+  }
 
   // Reset the signaled event
   int id = event - WSA_WAIT_EVENT_0;

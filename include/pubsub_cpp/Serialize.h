@@ -196,7 +196,7 @@ ps_msg_t serialize_value(const Value& value, const ps_message_definition_t& defi
 	}
 
 	printf("Publishing The Message Below:\n");
-	ps_deserialize_print(ps_get_msg_start(msg.data), &definition);
+	ps_deserialize_print(ps_get_msg_start(msg.data), &definition, 0);
 
 	return msg;
 }

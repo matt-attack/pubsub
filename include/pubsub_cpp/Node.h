@@ -34,7 +34,7 @@ static std::multimap<std::string, SubscriberBase*> _subscribers;
 
 // this assumes topic and ns are properly checked
 // ns should not have a leading slash, topic should if it is absolute
-std::string handle_remap(const std::string& topic, const std::string& ns)
+inline std::string handle_remap(const std::string& topic, const std::string& ns)
 {
     //printf("Handling remap of %s in ns %s\n", topic.c_str(), ns.c_str());
 	// we need at least one character
@@ -89,7 +89,7 @@ std::string handle_remap(const std::string& topic, const std::string& ns)
 }
 
 // not thread safe
-void initialize(const char** args, const int argc)
+inline void initialize(const char** args, const int argc)
 {
 	// fills out global remappings, names and namespaces
 
@@ -112,7 +112,7 @@ void initialize(const char** args, const int argc)
 
 // makes sure that a user given name is valid
 // valid names must be all lowercase and only
-std::string validate_name(const std::string& name, bool remove_leading_slashes = false)
+inline std::string validate_name(const std::string& name, bool remove_leading_slashes = false)
 {
     //printf("Validating %s\n", name.c_str());
 	for (size_t i = 0; i < name.length(); i++)
@@ -401,6 +401,14 @@ public:
 	unsigned int getNumSubscribers()
 	{
 		return ps_pub_get_subscriber_count(&publisher_);
+	}
+
+	void addCustomEndpoint(const int ip_addr, const short port, const unsigned int stream_id)
+	{
+		ps_endpoint_t endpoint;
+		endpoint.address = ip_addr;
+		endpoint.port = port;
+		ps_pub_add_endpoint_client(&publisher_, &endpoint, stream_id);
 	}
 };
 

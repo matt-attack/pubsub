@@ -14,14 +14,14 @@ namespace pubsub
 class Duration
 {
 public:
-	uint64_t usec;
+	int64_t usec;
 
 	Duration()
 	{
 
 	}
 
-    Duration(uint64_t usec_)
+    Duration(int64_t usec_)
     {
       usec = usec_;
     }
@@ -89,9 +89,19 @@ public:
 		return this->usec < rhs.usec;
 	}
 
+	bool operator<=(const Time& rhs) const// otherwise, both parameters may be const references
+	{
+		return this->usec <= rhs.usec;
+	}
+
 	bool operator>(const Time& rhs) const// otherwise, both parameters may be const references
 	{
 		return this->usec > rhs.usec;
+	}
+
+	bool operator>=(const Time& rhs) const// otherwise, both parameters may be const references
+	{
+		return this->usec >= rhs.usec;
 	}
 
 	Time operator+(const Duration& rhs) // otherwise, both parameters may be const references

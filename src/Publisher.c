@@ -33,7 +33,7 @@ void ps_pub_publish_client(struct ps_pub_t* pub, struct ps_client_t* client, str
 
 	//need to add in the topic id
 	struct ps_msg_header* hdr = (struct ps_msg_header*)msg->data;
-	hdr->pid = PS_UDP_PROTOCOL_DATA;// todo use enums
+	hdr->pid = PS_UDP_PROTOCOL_DATA;
 	hdr->id = client->stream_id;
 	hdr->seq = client->sequence_number++;
 	hdr->index = 0;
@@ -49,7 +49,8 @@ bool ps_pub_add_client(struct ps_pub_t* pub, const struct ps_client_t* client)
 	for (unsigned int i = 0; i < pub->num_clients; i++)
 	{
 		if (pub->clients[i].endpoint.address == client->endpoint.address
-			&& pub->clients[i].endpoint.port == client->endpoint.port)
+			&& pub->clients[i].endpoint.port == client->endpoint.port
+			&& pub->clients[i].stream_id == client->stream_id)
 		{
 			//printf("We already have this client, ignoring request\n");
 			return false;
@@ -74,6 +75,19 @@ bool ps_pub_add_client(struct ps_pub_t* pub, const struct ps_client_t* client)
     return true;
 }
 
+void ps_pub_add_endpoint_client(struct ps_pub_t* pub, const struct ps_endpoint_t* endpoint, const unsigned int stream_id)
+{
+	struct ps_client_t client;
+	client.endpoint = *endpoint;
+	client.last_keepalive = 0;// zero means to never time out this endpoint
+	client.sequence_number = 0;
+	client.stream_id = stream_id;
+	client.modulo = 0;
+	client.transport = 0;
+
+	ps_pub_add_client(pub, &client);
+}
+
 void ps_pub_remove_client(struct ps_pub_t* pub, const struct ps_client_t* client)
 {
 	// first make sure we dont add any duplicate clients
@@ -81,7 +95,8 @@ void ps_pub_remove_client(struct ps_pub_t* pub, const struct ps_client_t* client
 	for (unsigned int i = 0; i < pub->num_clients; i++)
 	{
 		if (pub->clients[i].endpoint.address == client->endpoint.address
-			&& pub->clients[i].endpoint.port == client->endpoint.port)
+			&& pub->clients[i].endpoint.port == client->endpoint.port
+			&& pub->clients[i].stream_id == client->stream_id)
 		{
 			printf("Found the client, removing it\n");
 			found = true;
@@ -102,7 +117,8 @@ void ps_pub_remove_client(struct ps_pub_t* pub, const struct ps_client_t* client
 	for (unsigned int i = 0; i < pub->num_clients+1; i++)
 	{
 		if (old_clients[i].endpoint.address == client->endpoint.address
-			&& old_clients[i].endpoint.port == client->endpoint.port)
+			&& old_clients[i].endpoint.port == client->endpoint.port
+			&& old_clients[i].stream_id == client->stream_id)
 		{
 
 		}

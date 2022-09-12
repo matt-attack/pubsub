@@ -40,8 +40,10 @@ struct ps_sub_t
 
 	unsigned int skip;
 
+	// queue is implemented as a deque
+	int queue_start;// start index of items in the queue (loops around on positive side)
 	int queue_size;// maximum size of the queue
-	int queue_len;
+	int queue_len;// current queue size
 	void** queue;// pointers to each of the queue items
 };
 

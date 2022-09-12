@@ -50,6 +50,11 @@ generate_messages(FILES
   String.msg 
   Float.msg
   Image.msg
+  Costmap.msg
+  PointCloud.msg
+  Marker.msg
+  Parameters.msg
+  Pose.msg
 )
 
 

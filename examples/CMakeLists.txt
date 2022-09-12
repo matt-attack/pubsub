@@ -11,6 +11,10 @@ add_executable(simple_sub "simple_sub.c")
 target_link_libraries(simple_sub pubsub)
 add_dependencies(simple_sub pubsub pubsub_msgs)
 
+add_executable(binding_test "binding_test.c")
+target_link_libraries(binding_test pubsub_shared)
+add_dependencies(binding_test pubsub_shared pubsub_msgs)
+
 add_executable(simple_pub_cpp "simple_pub.cpp")
 target_link_libraries(simple_pub_cpp pubsub_cpp)
 add_dependencies(simple_pub_cpp pubsub_cpp pubsub_msgs)
@@ -25,6 +29,10 @@ add_executable(simple_sub_cpp "simple_sub.cpp")
 target_link_libraries(simple_sub_cpp pubsub_cpp)
 add_dependencies(simple_sub_cpp pubsub_cpp pubsub_msgs)
 set_property(TARGET simple_sub_cpp PROPERTY CXX_STANDARD 11)
+
+add_executable(read_param "read_param.c")
+target_link_libraries(read_param pubsub)
+add_dependencies(read_param pubsub pubsub_msgs)
 
 #install(TARGETS pubsubtest
 #  ARCHIVE DESTINATION "s"
