@@ -6,6 +6,7 @@ uint32 num_points
 # 1 = x,y,z,intensity
 POINT_XYZ=0
 POINT_XYZI=1
+POINT_XYZIO=2
 enum uint8 point_type
 
 # Pointcloud data itself in an interleaved array

@@ -14,6 +14,7 @@
 #include <deque>
 #include <functional>
 #include <algorithm>
+#include <memory>
 
 
 //#include <WS2tcpip.h>
