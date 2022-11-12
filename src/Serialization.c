@@ -94,7 +94,7 @@ void ps_copy_message_definition(struct ps_message_definition_t* dst, const struc
 		dst->fields[i].name = name;
 	}
 	dst->num_enums = src->num_enums;
-	dst->enums = (struct ps_msg_enum_t*)malloc(sizeof(struct ps_msg_enum_t*)*dst->num_enums);
+	dst->enums = (struct ps_msg_enum_t*)malloc(sizeof(struct ps_msg_enum_t)*dst->num_enums);
 	for (unsigned int i = 0; i < dst->num_enums; i++)
 	{
 		dst->enums[i].value = src->enums[i].value;
