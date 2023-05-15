@@ -8,6 +8,8 @@ find_package( Threads )
 add_subdirectory("tools")
 add_subdirectory("examples")
 
+set(PUBSUB_VERBOSE 0)
+
 # Build the core exports
 add_library (pubsub 
   "src/Events.c"
@@ -16,12 +18,16 @@ add_library (pubsub
   "src/Subscriber.c"
   "src/Serialization.c"
   "src/System.c"
+  "src/UDPTransport.c"
 )
 if (UNIX)
 else()
 target_link_libraries(pubsub winmm)
 endif()
 target_include_directories(pubsub PUBLIC include/)
+if (PUBSUB_VERBOSE)
+target_compile_definitions(pubsub PUBLIC PUBSUB_VERBOSE)
+endif()
 
 # Build the core exports
 add_library (pubsub_shared SHARED
@@ -31,6 +37,7 @@ add_library (pubsub_shared SHARED
   "src/Subscriber.c"
   "src/Serialization.c"
   "src/System.c"
+  "src/UDPTransport.c"
   "src/Bindings.c")
 if (UNIX)
 else()
@@ -38,7 +45,9 @@ target_link_libraries(pubsub_shared winmm)
 endif()
 target_include_directories(pubsub_shared PUBLIC include/)
 add_dependencies(pubsub_shared pubsub_msgs)
-
+if (PUBSUB_VERBOSE)
+target_compile_definitions(pubsub_shared PUBLIC PUBSUB_VERBOSE)
+endif()
 
 add_library (pubsub_cpp
   "high_level_api/Node.cpp"
@@ -61,8 +70,6 @@ function(my_export_target _target _include_dir)
                 APPEND PROPERTY
                     INTERFACE_INCLUDE_DIRECTORIES \"${_include_dir}\"
             )
-            #set_property(TARGET pubsub_msg_gen PROPERTY
-            # IMPORTED_LOCATION "../InstallMyExe/bin/myexe")
             set(${_target}_INCLUDE_DIRS \"${_include_dir}\")
             if (UNIX)
             set(${_target}_LIBRARIES \"${CMAKE_CURRENT_BINARY_DIR}/lib${_target}.a\")

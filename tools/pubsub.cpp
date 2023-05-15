@@ -190,6 +190,8 @@ int topic_show(int num_args, char** args, ps_node_t* node)
 
     return 0;
   }
+
+  return 0;// to make the compiler happy, not even possible to hit this line
 }
 
 int topic_echo(int num_args, char** args, ps_node_t* _node)
@@ -349,6 +351,7 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
   {
     ps_sub_destroy(&sub);
   }
+  return 0;
 }
 
 int topic_pub(int num_args, char** args, ps_node_t* node)

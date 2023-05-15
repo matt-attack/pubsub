@@ -197,7 +197,6 @@ EXPORT int ps_create_publisher(int node, const char* topic, const char* definiti
 
         // finish filling out the definition
         temp_def.num_fields = num_fields-1;
-        //temp_def.name = "todo name here";
         temp_def.hash = 10010101;// todo actually calculate
 		ps_copy_message_definition(cpy, &temp_def);
 	}

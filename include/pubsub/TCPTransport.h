@@ -160,7 +160,9 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
   int socket = accept(impl->socket, 0, 0);
   if (socket > 0)
   {
+#ifdef PUBSUB_VERBOSE
     printf("Got new socket connection!\n");
+#endif
 
     // add it to the list yo
     impl->num_clients++;
@@ -333,7 +335,9 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
 
         if (client->current_packet_size == client->desired_packet_size)
         {
+#ifdef PUBSUB_VERBOSE
           printf("message finished\n");
+#endif
 
           if (true)// todo look at message id
           {
@@ -358,7 +362,9 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
 
                 impl->clients[i].publisher = pub;
 
-                printf("Got subscribe request, adding client if we haven't already\n");
+#ifdef PUBSUB_VERBOSE
+                printf("TCPTransport: Got subscribe request, adding client if we haven't already\n");
+#endif
                 ps_pub_add_client(pub, &sub_client);
 
                 // send the client the acknowledgement and message definition
@@ -658,7 +664,7 @@ void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_
   server_addr.sin_port = htons(ep->port);
   if (connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0)
   {
-    perror("error connecting tcp socket");
+    ps_print_socket_error("error connecting tcp socket");
   }
 
   //printf("%i %i %i %i\n", (ep->address & 0xFF000000) >> 24, (ep->address & 0xFF0000) >> 16, (ep->address & 0xFF00) >> 8, (ep->address & 0xFF));
@@ -696,7 +702,7 @@ void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_
   DWORD nonBlocking = 1;
   if (ioctlsocket(sock, FIONBIO, &nonBlocking) != 0)
   {
-    printf("Failed to Set Socket as Non-Blocking!\n");
+    ps_print_socket_error("Failed to Set Socket as Non-Blocking");
     closesocket(sock);
     return;
   }
@@ -731,7 +737,10 @@ void ps_tcp_transport_unsubscribe(struct ps_transport_t* transport, struct ps_su
     }
   }
 
+#ifdef PUBSUB_VERBOSE
   printf("Removing %i tcp subs\n", num_to_remove);
+#endif
+
   if (num_to_remove > 0)
   {
     // Free our subscribers and any buffers
@@ -840,7 +849,7 @@ void ps_tcp_transport_init(struct ps_transport_t* transport, struct ps_node_t* n
   server_addr.sin_port = htons(node->port);
   if (bind(impl->socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0)
   {
-    perror("error binding tcp socket");
+    ps_print_socket_error("error binding tcp socket");
   }
 
   // set non-blocking
@@ -848,7 +857,7 @@ void ps_tcp_transport_init(struct ps_transport_t* transport, struct ps_node_t* n
   DWORD nonBlocking = 1;
   if (ioctlsocket(impl->socket, FIONBIO, &nonBlocking) != 0)
   {
-    printf("Failed to Set Socket as Non-Blocking!\n");
+    ps_print_socket_error("Failed to Set Socket as Non-Blocking");
     closesocket(impl->socket);
     return;
   }

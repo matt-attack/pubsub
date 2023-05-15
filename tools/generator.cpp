@@ -7,6 +7,7 @@
 #include <vector>
 #include <string>
 #include <sstream>
+#include <algorithm>
 
 std::vector<std::string> split(const std::string& data, char c)
 {
@@ -36,11 +37,6 @@ struct field
 	int array_size;
 	
 	std::string flag;
-
-	std::string serialize()
-	{
-
-	}
 
 	std::string getBaseType()
 	{
@@ -558,7 +554,7 @@ std::string generate(const char* definition, const char* name)
 		output += "  const struct " + type_name + "* msg = (const struct " + type_name + "*)data;\n";
 		output += "  int len = sizeof(struct " + type_name + ");\n";
 		output += "  // calculate the encoded length of the message\n";
-		int n_str = 0;
+		int n_arr = 0;
 		for (size_t i = 0; i < fields.size(); i++)
 		{
 			if (fields[i].type == "string")
@@ -567,7 +563,6 @@ std::string generate(const char* definition, const char* name)
 				{
 					output += "  int len_" + fields[i].name + " = strlen(msg->" + fields[i].name + ") + 1; \n";
 					output += "  len += len_" + fields[i].name + ";\n";
-					n_str++;
 				}
 				else
 				{
@@ -586,16 +581,16 @@ std::string generate(const char* definition, const char* name)
 					output += "  for (int i = 0; i < num_" + fields[i].name + "; i++) {\n";
 					output += "    len += strlen(msg->" + fields[i].name + "[i]) + 4 + 1;\n";
 					output += "  }\n";
-					n_str++;
 				}
+				n_arr++;
 			}
 			else if (fields[i].array_size == 0)
 			{
 				output += "  len += msg->" + fields[i].name + "_length*sizeof(" + fields[i].getBaseType() + ");\n";
-				n_str++;
+				n_arr++;
 			}
 		}
-		output += "  len -= " + std::to_string(n_str) + "*sizeof(char*);\n";
+		output += "  len -= " + std::to_string(n_arr) + "*sizeof(char*);\n";
 		output += "  struct ps_msg_t omsg;\n";
 		output += "  ps_msg_alloc(len, allocator, &omsg);\n";
 		output += "  char* start = (char*)ps_get_msg_start(omsg.data);\n";
@@ -771,10 +766,14 @@ std::string generate(const char* definition, const char* name)
 	if (enumerations.size() > 0)
 	{
 		output += "#else\n";
+		auto upper_raw_name = raw_name;
+		std::transform(upper_raw_name.begin(), upper_raw_name.end(), upper_raw_name.begin(), ::toupper);
 		for (int i = 0; i < enumerations.size(); i++)
 		{
 			auto en = enumerations[i];
 			output += "#define ";
+			output += upper_raw_name;
+			output += "_";
 			output += en.name;
 			output += " ";
 			output += en.value;
