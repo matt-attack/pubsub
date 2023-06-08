@@ -85,7 +85,8 @@ struct field
 		{
 			return "double";
 		}
-
+		printf("ERROR: invalid type '%s' for field '%s'\n", type.c_str(), name.c_str());
+		throw 7;
 		return "invalid";
 	}
 	
@@ -98,7 +99,8 @@ struct field
 		if (flag == "")
 			return "FF_NONE";
 		
-		printf("ERROR: Invalid flag %s\n", flag.c_str());
+		printf("ERROR: Invalid flag '%s' for field '%s'\n", flag.c_str(), name.c_str());
+		throw 7;
 		return "invalid";
 	}
 
@@ -149,7 +151,8 @@ struct field
 		{
 			return "FT_Float64";
 		}
-		printf("ERROR: Invalid type %s\n", type.c_str());
+		printf("ERROR: Invalid type '%s' for field '%s'\n", type.c_str(), name.c_str());
+		throw 7;
 		return "invalid";
 	}
 	
@@ -844,12 +847,21 @@ int main(int num_args, char** args)
 		file_name = file_name.substr(file_name.find_last_of('/') + 1);
 		// remove everything after the .
 		std::string name = std::string(args[i+1]) + "__" + file_name.substr(0, file_name.find_first_of('.'));
-		std::string output = generate(str.c_str(), name.c_str());
 
-		// write it back to file
-		std::string out_name = args[i+2];
-		std::ofstream o(out_name, std::ios::binary);
-		o << output;
+		try
+		{
+			std::string output = generate(str.c_str(), name.c_str());
+
+			// write it back to file
+			std::string out_name = args[i+2];
+			std::ofstream o(out_name, std::ios::binary);
+			o << output;
+		}
+		catch (int ex)
+		{
+			printf("Message generation failed.\n");
+			return -1;
+		}
 	}
 
 	/*int num_messages = 5;
