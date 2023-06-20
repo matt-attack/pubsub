@@ -270,13 +270,17 @@ const char* ps_deserialize_iterate(struct ps_deserialize_iterator* iter, const s
 	return position;
 }
 
-void ps_deserialize_print(const void * data, const struct ps_message_definition_t* definition, unsigned int max_array_size)
+void ps_deserialize_print(const void * data, const struct ps_message_definition_t* definition, unsigned int max_array_size, const char* field_name)
 {
 	struct ps_deserialize_iterator iter = ps_deserialize_start(data, definition);
 	const struct ps_msg_field_t* field; uint32_t length; const char* ptr;
 	int it = 0;
 	while (ptr = ps_deserialize_iterate(&iter, &field, &length))
 	{
+		if (field_name && strcmp(field_name, field->name) != 0)
+		{
+			continue;
+		}
 		if (field->type == FT_String)
 		{
 			// strings are already null terminated

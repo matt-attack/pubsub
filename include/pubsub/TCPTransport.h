@@ -1,12 +1,14 @@
 #ifndef _PUBSUB_TCP_TRANSPORT_HEADER
 #define _PUBSUB_TCP_TRANSPORT_HEADER
 
+// Must be included first on windows
+#include <pubsub/Net.h>
 
 #include <pubsub/Node.h>
 #include <pubsub/Publisher.h>
 #include <pubsub/Subscriber.h>
 #include <pubsub/System.h>
-#include <pubsub/Net.h>
+//#include <pubsub/Net.h>
 
 #include <stdlib.h>
 #include <stdio.h>

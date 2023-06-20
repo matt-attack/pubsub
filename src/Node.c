@@ -273,7 +273,7 @@ void ps_node_init_ex(struct ps_node_t* node, const char* name, const char* ip, b
 		// hack for localhost
 		broadcast = true;
 		node->advertise_addr = inet_addr("127.255.255.255");
-		mc_bind_addr = mc_bind_addr;
+		mc_bind_addr = mc_bind_addr;// this seems like a typo....
 	}
 	else if (broadcast)
 	{

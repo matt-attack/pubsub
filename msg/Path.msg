@@ -1,7 +1,7 @@
 
 # Frame the path is in, either wgs84 or odometry
-FRAME_ODOM=0
-FRAME_WGS84=1
+FRAME_WGS84=0
+FRAME_ODOM=1
 enum uint8 frame
 
 # Type of path data
