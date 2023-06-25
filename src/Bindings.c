@@ -6,6 +6,12 @@
 #include "pubsub/Costmap.msg.h"
 #include "pubsub/Marker.msg.h"
 #include "pubsub/Pose.msg.h"
+#include "pubsub/Path.msg.h"
+
+#if defined(_WIN32) || defined(_WIN64)
+/* We are on Windows */
+# define strtok_r strtok_s
+#endif
 
 static bool node_initialized[10] = { 0 };
 static struct ps_node_t nodes[10];
@@ -100,6 +106,10 @@ EXPORT int ps_create_publisher(int node, const char* topic, const char* definiti
 	else if (strcmp(definition, "pose") == 0)
 	{
 		ps_copy_message_definition(cpy, &pubsub__Pose_def);
+	}
+	else if (strcmp(definition, "path") == 0)
+	{
+		ps_copy_message_definition(cpy, &pubsub__Path_def);
 	}
 	else
 	{

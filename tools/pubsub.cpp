@@ -204,6 +204,7 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
   parser.AddMulti({ "skip", "s" }, "Skip factor for the subscriber.", "0");
   parser.AddMulti({ "tcp" }, "Prefer the TCP transport.");
   parser.AddMulti({ "no-arr" }, "Don't print out the contents of arrays in messages.");
+  parser.AddMulti({ "f", "field" }, "Print out just the value of a specific field.");
 
   parser.Parse(args, num_args, 2);
 
@@ -225,6 +226,9 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
   bool tcp = parser.GetBool("tcp");
 
   static bool no_arr = parser.GetBool("no-arr");
+  
+  std::string str = parser.GetString("f");
+  static const char* field_name = str.length() ? str.c_str() : 0;
 
 
   // create a subscriber
@@ -276,7 +280,7 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
                 << ((info->address & 0xFF)) << ":" << info->port << "\n";
               printf("-------------\n");
             }
-            ps_deserialize_print(msg.first, &sub.received_message_def, no_arr ? 10 : 0);
+            ps_deserialize_print(msg.first, &sub.received_message_def, no_arr ? 10 : 0, field_name);
             printf("-------------\n");
             free(msg.first);
             if (++count >= n)
@@ -329,7 +333,7 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
               << ((info->address & 0xFF)) << ":" << info->port << "\n";
             printf("-------------\n");
           }
-          ps_deserialize_print(message, &sub.received_message_def, no_arr ? 10 : 0);
+          ps_deserialize_print(message, &sub.received_message_def, no_arr ? 10 : 0, field_name);
           printf("-------------\n");
           free(message);
           if (++count >= n)

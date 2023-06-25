@@ -6,6 +6,8 @@
 #ifndef ARDUINO
 #include <time.h>
 #endif
+#else
+#include <Windows.h>
 #endif
 
 #ifdef ARDUINO
@@ -29,10 +31,9 @@ uint64_t ps_get_tick_count()
 #endif
 
 #ifdef _WIN32
-#include <Windows.h>
 void ps_sleep(unsigned int time_ms)
 {
-  timeBeginPeriod(1);
+	timeBeginPeriod(1);
 	Sleep(time_ms);
 }
 
@@ -73,11 +74,11 @@ void ps_print_socket_error(const char* description)
 
 	if (description != 0)
 	{
-		printf("%s: \n", errstr);
+		printf("%s: \n", message);
 	}
 	else
 	{
-		printf("%s\n", errstr);
+		printf("%s\n", message);
 	}
 #else
 	perror(description);
