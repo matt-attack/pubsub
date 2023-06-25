@@ -47,6 +47,7 @@ struct ps_tcp_transport_connection
 
   struct ps_sub_t* subscriber;
 
+  bool connecting;
   bool waiting_for_header;
   int packet_size;
 
@@ -392,8 +393,50 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
   {
     struct ps_tcp_transport_connection* connection = &impl->connections[i];
     char buf[1500];
+    if (connection->connecting)
+    {
+      //printf("checking for connected\n");
+      // select to check for writability
+      fd_set wfds;
+      struct timeval tv;
+      int retval;
+
+      FD_ZERO(&wfds);
+      FD_SET(connection->socket, &wfds);
+
+      tv.tv_sec = 0;
+      tv.tv_usec = 0;
+      retval = select(connection->socket + 1, NULL, &wfds, NULL, &tv);
+      if (retval == -1)
+      {
+        // error?
+        printf("socket errored while connecting\n");
+      }
+      else if (retval)
+      {
+        // socket is writable
+        //printf("socket writable\n");
+
+        // make the subscribe request in a "packet"
+        // a packet is an int length followed by data
+        int8_t packet_type = 0x01;//subscribe
+        send(connection->socket, (char*)&packet_type, 1, 0);
+
+        int32_t length = strlen(connection->subscriber->topic) + 1 + 4;
+        send(connection->socket, (char*)&length, 4, 0);
+
+        // make the request
+        char buffer[500];
+        strcpy(buffer, connection->subscriber->topic);
+        uint32_t skip = connection->subscriber->skip;
+        send(connection->socket, (char*)&skip, 4, 0);
+        send(connection->socket, buffer, length - 4, 0);
+	
+        connection->connecting = false;
+      }
+    }
     // if we havent gotten a header yet, just check for that
-    if (connection->waiting_for_header)
+    else if (connection->waiting_for_header)
     {
       const int header_size = 5;
       int len = recv(connection->socket, buf, header_size, MSG_PEEK);
@@ -658,45 +701,6 @@ void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_
   int sock = socket(AF_INET, SOCK_STREAM, 0);
 #endif
 
-  struct sockaddr_in server_addr;
-  server_addr.sin_family = AF_INET;
-  server_addr.sin_addr.s_addr = htonl(ep->address);
-  server_addr.sin_port = htons(ep->port);
-  if (connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0)
-  {
-    ps_print_socket_error("error connecting tcp socket");
-  }
-
-  //printf("%i %i %i %i\n", (ep->address & 0xFF000000) >> 24, (ep->address & 0xFF0000) >> 16, (ep->address & 0xFF00) >> 8, (ep->address & 0xFF));
-
-  // make the subscribe request in a "packet"
-  // a packet is an int length followed by data
-  int8_t packet_type = 0x01;//subscribe
-  send(sock, (char*)&packet_type, 1, 0);
-
-  int32_t length = strlen(subscriber->topic) + 1 + 4;
-  send(sock, (char*)&length, 4, 0);
-
-  // make the request
-  char buffer[500];
-  strcpy(buffer, subscriber->topic);
-  uint32_t skip = subscriber->skip;
-  send(sock, (char*)&skip, 4, 0);
-  send(sock, buffer, length - 4, 0);
-
-  // add the socket to the list of connections
-  impl->num_connections++;
-  struct ps_tcp_transport_connection* old_connections = impl->connections;
-  impl->connections = (struct ps_tcp_transport_connection*)malloc(sizeof(struct ps_tcp_transport_connection) * impl->num_connections);
-  for (int i = 0; i < impl->num_connections - 1; i++)
-  {
-    impl->connections[i] = old_connections[i];
-  }
-  impl->connections[impl->num_connections - 1].socket = sock;
-  impl->connections[impl->num_connections - 1].endpoint = *ep;
-  impl->connections[impl->num_connections - 1].waiting_for_header = true;
-  impl->connections[impl->num_connections - 1].subscriber = subscriber;
-
   // set non-blocking
 #ifdef _WIN32
   DWORD nonBlocking = 1;
@@ -714,6 +718,59 @@ void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_
   int flags = fcntl(sock, F_GETFL);
   fcntl(sock, F_SETFL, flags | O_NONBLOCK);
 #endif
+
+  // Actually connect
+  //printf("connecting\n");
+  struct sockaddr_in server_addr;
+  server_addr.sin_family = AF_INET;
+  server_addr.sin_addr.s_addr = htonl(ep->address);
+  server_addr.sin_port = htons(ep->port);
+  int connect_result = connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr));
+  if (connect_result != 0)
+  {
+#ifdef _WIN32
+    if (WSAGetLastError() != WSAINPROGRESS)
+#else
+    if (errno != EINPROGRESS)
+#endif
+    {
+      ps_print_socket_error("error connecting tcp socket");
+	  return;
+    }
+  }
+
+  //printf("%i %i %i %i\n", (ep->address & 0xFF000000) >> 24, (ep->address & 0xFF0000) >> 16, (ep->address & 0xFF00) >> 8, (ep->address & 0xFF));
+
+  // make the subscribe request in a "packet"
+  // a packet is an int length followed by data
+  /*int8_t packet_type = 0x01;//subscribe
+  send(sock, (char*)&packet_type, 1, 0);
+
+  int32_t length = strlen(subscriber->topic) + 1 + 4;
+  send(sock, (char*)&length, 4, 0);
+
+  // make the request
+  char buffer[500];
+  strcpy(buffer, subscriber->topic);
+  uint32_t skip = subscriber->skip;
+  send(sock, (char*)&skip, 4, 0);
+  send(sock, buffer, length - 4, 0);*/
+
+  // add the socket to the list of connections
+  impl->num_connections++;
+  struct ps_tcp_transport_connection* old_connections = impl->connections;
+  impl->connections = (struct ps_tcp_transport_connection*)malloc(sizeof(struct ps_tcp_transport_connection) * impl->num_connections);
+  for (int i = 0; i < impl->num_connections - 1; i++)
+  {
+    impl->connections[i] = old_connections[i];
+  }
+  
+  struct ps_tcp_transport_connection* new_connection = &impl->connections[impl->num_connections - 1];
+  new_connection->socket = sock;
+  new_connection->endpoint = *ep;
+  new_connection->waiting_for_header = true;
+  new_connection->subscriber = subscriber;
+  new_connection->connecting = true;
 
   ps_event_set_add_socket(&subscriber->node->events, sock);
 
