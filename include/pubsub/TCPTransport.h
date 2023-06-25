@@ -731,7 +731,7 @@ void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_
   if (connect_result != 0)
   {
 #ifdef _WIN32
-    if (WSAGetLastError() != WSAINPROGRESS)
+    if (WSAGetLastError() != WSAEINPROGRESS)
 #else
     if (errno != EINPROGRESS)
 #endif
