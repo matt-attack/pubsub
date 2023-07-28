@@ -5,7 +5,9 @@
 #include <pubsub/System.h>
 #include <stdint.h>
 
-//#include <Windows.h>
+#ifdef _WIN32
+#include <Windows.h>
+#endif
 
 struct message
 {
@@ -25,7 +27,11 @@ int main()
 		msg.h = 20;
 		ps_publish(pub, &msg, 16);
 		ps_spin_node(node);
+#ifdef _WIN32
+		Sleep(100);
+#else
 		ps_sleep(100);
+#endif
 	}
 
 	ps_destroy_node(node);

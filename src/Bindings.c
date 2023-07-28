@@ -13,6 +13,11 @@ static struct ps_transport_t tcp_transports[10];
 static bool pub_initialized[20] = { 0 };
 static struct ps_pub_t publishers[20];
 
+#if defined(_WIN32) || defined(_WIN64)
+/* We are on Windows */
+# define strtok_r strtok_s
+#endif
+
 EXPORT int ps_create_node(const char* name, const char* ip, bool broadcast)
 {
 	// find a spare node, return -1 if none was found
