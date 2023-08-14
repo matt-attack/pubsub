@@ -259,7 +259,7 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
 
       if (client->queued_message_written == client->queued_message_length)
       {
-        printf("Message sent.\n");
+        //printf("Message sent.\n");
         free(client->queued_message);
         client->queued_message = 0;
 
@@ -478,7 +478,13 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
             //printf("Was message definition");
             if (connection->subscriber->want_message_definition)
             {
+              // todo put this in a function so we cant accidentally forget it
               ps_deserialize_message_definition(connection->packet_data, &connection->subscriber->received_message_def);
+
+              if (connection->subscriber->node->def_cb)
+              {
+                  connection->subscriber->node->def_cb(&connection->subscriber->received_message_def);
+              }
             }
 
             free(connection->packet_data);
@@ -571,12 +577,12 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
       }
       tclient->queued_messages[0].data = data;
       tclient->queued_messages[0].length = length + 5;
-      printf("dropped message on topic '%s'\n", publisher->topic);
+      //printf("dropped message on topic '%s'\n", publisher->topic);
       return;// drop it, we are out of queue space
     }
     else
     {
-      printf("queuing up message %i on topic '%s'\n", tclient->num_queued_messages, publisher->topic);
+      //printf("queuing up message %i on topic '%s'\n", tclient->num_queued_messages, publisher->topic);
 
       // add the message to the front of the queue
       tclient->num_queued_messages += 1;
@@ -681,7 +687,7 @@ FAILCOPY:
   return;
 }
 
-void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_t* subscriber, struct ps_endpoint_t* ep)
+void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_t* subscriber, struct ps_endpoint_t* ep, uint32_t transport_info)
 {
   struct ps_tcp_transport_impl* impl = (struct ps_tcp_transport_impl*)transport->impl;
 
@@ -726,12 +732,12 @@ void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_
   struct sockaddr_in server_addr;
   server_addr.sin_family = AF_INET;
   server_addr.sin_addr.s_addr = htonl(ep->address);
-  server_addr.sin_port = htons(ep->port);
+  server_addr.sin_port = htons(transport_info);
   int connect_result = connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr));
   if (connect_result != 0)
   {
 #ifdef _WIN32
-    if (WSAGetLastError() != WSAEINPROGRESS)
+    if (WSAGetLastError() != WSAEWOULDBLOCK)//WSAEINPROGRESS
 #else
     if (errno != EINPROGRESS)
 #endif
@@ -905,11 +911,18 @@ void ps_tcp_transport_init(struct ps_transport_t* transport, struct ps_node_t* n
   struct sockaddr_in server_addr;
   server_addr.sin_family = AF_INET;
   server_addr.sin_addr.s_addr = INADDR_ANY;
-  server_addr.sin_port = htons(node->port);
+  server_addr.sin_port = 0;// we want an ephemeral port
   if (bind(impl->socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0)
   {
-    ps_print_socket_error("error binding tcp socket");
+    ps_print_socket_error("error binding tcp transport socket");
   }
+
+  socklen_t outlen = sizeof(struct sockaddr_in);
+  struct sockaddr_in outaddr;
+  getsockname(impl->socket, (struct sockaddr*)&outaddr, &outlen);
+  transport->transport_info = ntohs(outaddr.sin_port);
+
+  printf("Bound tcp to %i\n", transport->transport_info);
 
   // set non-blocking
 #ifdef _WIN32

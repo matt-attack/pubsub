@@ -87,6 +87,16 @@ void ps_node_subscribe_query(struct ps_sub_t* sub)
 	int sent_bytes = sendto(sub->node->socket, (const char*)data, off, 0, (struct sockaddr*)&address, sizeof(struct sockaddr_in));
 }
 
+static int popcnt(uint32_t i)
+{
+	// Java: use int, and use >>> instead of >>. Or use Integer.bitCount()
+	// C or C++: use uint32_t
+	i = i - ((i >> 1) & 0x55555555);        // add pairs of bits
+	i = (i & 0x33333333) + ((i >> 2) & 0x33333333);  // quads
+	i = (i + (i >> 4)) & 0x0F0F0F0F;        // groups of 8
+	return (i * 0x01010101) >> 24;          // horizontal sum of bytes
+}
+
 // advertizes the publisher via multicast
 void ps_node_advertise(struct ps_pub_t* pub)
 {
@@ -106,7 +116,14 @@ void ps_node_advertise(struct ps_pub_t* pub)
 	p->transports = pub->node->supported_transports;
 	p->group_id = pub->node->group_id;
 
-	int off = sizeof(struct ps_advertise_req_t);
+	// encode info about each supported transport
+	int num_transports = popcnt(p->transports);
+	for (int i = 0; i < num_transports; i++)
+	{
+		memcpy(&data[sizeof(struct ps_advertise_req_t) + i * 4], &pub->node->transports[i].transport_info, 4);
+	}
+
+	int off = sizeof(struct ps_advertise_req_t) + num_transports*4;
 	off += serialize_string(&data[off], pub->topic);
 	off += serialize_string(&data[off], pub->message_definition->name);
 	off += serialize_string(&data[off], pub->node->name);
@@ -202,7 +219,7 @@ char* GetPrimaryIp()
 		ip = "127.0.0.1";
 	}
 
-	printf("IP: %s\n", ip);
+	printf("Pubsub IP: %s\n", ip);
 
 #ifdef _WIN32
 	closesocket(sock);
@@ -258,6 +275,10 @@ void ps_node_init_ex(struct ps_node_t* node, const char* name, const char* ip, b
 	if (ip == 0 || strlen(ip) == 0)
 	{
 		ip = GetPrimaryIp();
+	}
+	else
+	{
+		printf("Pubsub IP: %s\n", ip);
 	}
 
 #ifdef _WIN32
@@ -321,7 +342,7 @@ void ps_node_init_ex(struct ps_node_t* node, const char* name, const char* ip, b
 	getsockname(node->socket, (struct sockaddr*)&outaddr, &outlen);
 	node->port = ntohs(outaddr.sin_port);
 
-	//printf("Bound to %i\n", node->port);
+	printf("Bound udp to %i\n", node->port);
 
 	// set non-blocking i
 #ifdef _WIN32
@@ -642,18 +663,46 @@ int ps_node_create_events(struct ps_node_t* node, struct ps_event_set_t* events)
 }
 #endif
 
+static void swap(struct ps_transport_t* xp, struct ps_transport_t* yp)
+{
+	struct ps_transport_t temp = *xp;
+	*xp = *yp;
+	*yp = temp;
+}
+
+static void selection_sort(struct ps_transport_t* arr, int n)
+{
+	int i, j, min_idx;
+
+	// One by one move boundary of unsorted subarray
+	for (i = 0; i < n - 1; i++)
+	{
+		// Find the minimum element in unsorted array
+		min_idx = i;
+		for (j = i + 1; j < n; j++)
+			if (arr[j].uuid < arr[min_idx].uuid)
+				min_idx = j;
+
+		// Swap the found minimum element with the first element
+		if (min_idx != i)
+			swap(&arr[min_idx], &arr[i]);
+	}
+}
+
 void ps_node_add_transport(struct ps_node_t* node, struct ps_transport_t* transport)
 {
 	node->num_transports++;
 
 	struct ps_transport_t* old_transports = node->transports;
-
 	node->transports = (struct ps_transport_t*)malloc(sizeof(struct ps_transport_t) * node->num_transports);
 	for (int i = 0; i < node->num_transports - 1; i++)
 	{
 		node->transports[i] = old_transports[i];
 	}
 	node->transports[node->num_transports - 1] = *transport;
+
+	// Sort the transports from least to greatest uuid
+	selection_sort(node->transports, node->num_transports);
 
 	if (old_transports)
 	{
@@ -828,6 +877,7 @@ int ps_node_spin(struct ps_node_t* node)
 				ps_deserialize_message_definition(&data[sizeof(struct ps_subscribe_accept_t)], &sub->received_message_def);
 
 				// call the callback as well
+				// todo should this really be qualified on wanting the message definition?
 				if (node->def_cb)
 				{
 					node->def_cb(&sub->received_message_def);
@@ -1014,12 +1064,14 @@ int ps_node_spin(struct ps_node_t* node)
 		{
 			//printf("Got advertise msg \n");
 			struct ps_advertise_req_t* p = (struct ps_advertise_req_t*)data;
+			int num_transports = popcnt(p->transports);
+			uint32_t* transport_data = &data[sizeof(struct ps_advertise_req_t)];
 
-			char* topic = (char*)&data[sizeof(struct ps_advertise_req_t)];
+			char* topic = &data[sizeof(struct ps_advertise_req_t) + num_transports * 4];
 
 			if (node->adv_cb)
 			{
-				char* type = (char*)&data[strlen(topic) + sizeof(struct ps_advertise_req_t) + 1];
+				char* type = topic + strlen(topic) + 1;
 				char* node_name = type + 1 + strlen(type);
 				node->adv_cb(topic, type, node_name, p);
 			}
@@ -1059,7 +1111,7 @@ int ps_node_spin(struct ps_node_t* node)
 				}
 
 				// now check that the type matches or we are dynamic...
-				char* type = (char*)&data[strlen(topic) + sizeof(struct ps_advertise_req_t) + 1];
+				char* type = topic + strlen(topic) + 1;
 				if (sub->type != 0 && strcmp(type, sub->type->name) != 0)
 				{
 					printf("The types didnt match! Ignoring\n");
@@ -1099,10 +1151,24 @@ int ps_node_spin(struct ps_node_t* node)
 					for (int i = 0; i < node->num_transports; i++)
 					{
 						struct ps_transport_t* transport = &node->transports[i];
-						if (transport->uuid & sub->preferred_transport != 0)
+						if ((transport->uuid & sub->preferred_transport) != 0)
 						{
+							int data_index = 0;
+							for (int i = 0; i < 16; i++)
+							{
+								if ((p->transports & (1 << i)) != 0)
+								{
+									if (sub->preferred_transport == (1 << i))
+									{
+										// this is it
+										break;
+									}
+									data_index++;
+								}
+							}
+
 							//printf("Found matching preferred transport\n");
-							transport->subscribe(transport, sub, &ep);
+							transport->subscribe(transport, sub, &ep, transport_data[data_index]);
 							found = true;
 							break;
 						}

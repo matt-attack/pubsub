@@ -33,7 +33,7 @@ typedef void(*ps_transport_fn_pub_t)(struct ps_transport_t* transport, struct ps
 typedef void(*ps_transport_fn_spin_t)(struct ps_transport_t* transport, struct ps_node_t* node);
 typedef void(*ps_transport_fn_add_publisher_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher);
 typedef void(*ps_transport_fn_remove_publisher_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher);
-typedef void(*ps_transport_fn_subscribe_t)(struct ps_transport_t* transport, struct ps_sub_t* subscriber, struct ps_endpoint_t* ep);
+typedef void(*ps_transport_fn_subscribe_t)(struct ps_transport_t* transport, struct ps_sub_t* subscriber, struct ps_endpoint_t* ep, uint32_t transport_info);
 typedef void(*ps_transport_fn_unsubscribe_t)(struct ps_transport_t* transport, struct ps_sub_t* subscriber);
 typedef unsigned int(*ps_transport_fn_num_subscribers_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher);
 typedef unsigned int(*ps_transport_fn_add_wait_set_t)(struct ps_transport_t* transport, struct ps_event_set_t* events);
@@ -41,6 +41,7 @@ typedef void(*ps_transport_fn_destroy_t)(struct ps_transport_t* transport);
 struct ps_transport_t
 {
 	unsigned short uuid;// unique id for this transport type, listed in advertisements for it
+	unsigned int transport_info;// could be a port number or something else, listed in each advertisement
     void* impl;
 	ps_transport_fn_pub_t pub;
 	ps_transport_fn_spin_t spin;
@@ -144,7 +145,7 @@ struct ps_advertise_req_t
 {
 	char id;
 	int addr;
-	unsigned short port;
+	unsigned short port;// port for udp communications
 	unsigned int transports;// bitmask showing supported protocols for this publisher
 	unsigned int type_hash;// to see if the type is correct
 	unsigned int group_id;// unique (hopefully) id that indicates which process this node is a part of
