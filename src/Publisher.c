@@ -95,7 +95,7 @@ void ps_pub_remove_client(struct ps_pub_t* pub, const struct ps_client_t* client
 			&& pub->clients[i].endpoint.port == client->endpoint.port
 			&& pub->clients[i].stream_id == client->stream_id)
 		{
-			printf("Found the client, removing it\n");
+			//printf("Found the client, removing it\n");
 			found = true;
 			break;
 		}
@@ -103,7 +103,7 @@ void ps_pub_remove_client(struct ps_pub_t* pub, const struct ps_client_t* client
 
 	if (found == false)
 	{
-		printf("Not removing client because we dont have it.\n");
+		//printf("Not removing client because we dont have it.\n");
 		return;
 	}
 	pub->num_clients--;

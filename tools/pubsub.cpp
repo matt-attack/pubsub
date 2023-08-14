@@ -466,25 +466,28 @@ int node_list(int num_args, char** args, ps_node_t* node)
 {
   pubsub::ArgParser parser;
   parser.SetUsage("Usage: info node list\n\nList all running nodes.");
+  parser.AddMulti({ "v" }, "Print additional info about each node.");
   parser.Parse(args, num_args, 2);
 
   wait(node);
 
-  // build a list of nodes then spit them out
-  std::map<std::string, int> nodes;
-  for (auto& topic : _topics)
-  {
-    for (auto sub : topic.second.subscribers)
-      nodes[sub] = 1;
-
-    for (auto pub : topic.second.publishers)
-      nodes[pub] = 1;
-  }
-
   std::cout << "Nodes:\n------------\n";
-  for (auto node : nodes)
+  bool verbose = parser.GetBool("v");
+  for (auto node : _nodes)
   {
-    std::cout << " " << node.first << "\n";
+    if (verbose)
+    {
+      std::cout << " " << node.first;
+      std::cout << " ("
+          << ((node.second.address & 0xFF000000) >> 24) << "."
+          << ((node.second.address & 0xFF0000) >> 16) << "."
+          << ((node.second.address & 0xFF00) >> 8) << "."
+          << ((node.second.address & 0xFF)) << ":" << node.second.port << ")\n";
+    }
+    else
+    {
+      std::cout << " " << node.first << "\n";
+    }
   }
 
   ps_node_destroy(node);
@@ -632,7 +635,7 @@ int main(int num_args_real, char** args)
   int num_args = num_args_real;
   //num_args = 5;
 
-  //char* args[] = { "aaa", "topic", "hz", "/data", "-w", "10" };
+  //char* args[] = { "aaa", "topic", "echo", "/path", "--tcp" };
   //num_args = (sizeof args / sizeof args[0]);
 
   if (num_args <= 1)

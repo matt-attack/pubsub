@@ -38,7 +38,8 @@ EXPORT int ps_create_node(const char* name, const char* ip, bool broadcast)
 	}
 
 	node_initialized[free_node] = 1;
-	ps_node_init_ex(&nodes[free_node], name, ip, broadcast, false);
+    const char* name_copy = strdup(name);// copy since we dont control the lifetime
+	ps_node_init_ex(&nodes[free_node], name_copy, ip, broadcast, false);
 
 	ps_tcp_transport_init(&tcp_transports[free_node], &nodes[free_node]);
 	ps_node_add_transport(&nodes[free_node], &tcp_transports[free_node]);
@@ -55,8 +56,10 @@ EXPORT void ps_destroy_node(int node)
 
 	if (node_initialized[node])
 	{
+        const char* name_str = nodes[node].name;
 		ps_node_destroy(&nodes[node]);
 		node_initialized[node] = 0;
+        free(name_str);
 	}
 }
 

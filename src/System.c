@@ -62,10 +62,11 @@ uint64_t GetTimeMs()
 void ps_print_socket_error(const char* description)
 {
 #ifdef _WIN32
+	int error = WSAGetLastError();
 	static char message[256] = {0};
     FormatMessage(
         FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-        0, WSAGetLastError(), 0, message, 256, 0);
+        0, error, 0, message, 256, 0);
     char *nl = strrchr(message, '\n');
     if (nl)
 	{
@@ -74,7 +75,7 @@ void ps_print_socket_error(const char* description)
 
 	if (description != 0)
 	{
-		printf("%s: \n", message);
+		printf("%s: %s\n", description, message);
 	}
 	else
 	{
