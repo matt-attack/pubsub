@@ -23,6 +23,7 @@ void ps_pub_publish_client(struct ps_pub_t* pub, struct ps_client_t* client, str
 
     if (client->transport)
     {
+      //printf("publishing to custom transport\n");
       client->transport->pub(client->transport, pub, client, msg->data, msg->len);
       return;
     }
@@ -67,6 +68,7 @@ bool ps_pub_add_client(struct ps_pub_t* pub, const struct ps_client_t* client)
 	// If we are latched, send the new client our last message
 	if (pub->last_message.data && pub->latched)
 	{
+        //printf("publishing latched\n");
 		ps_pub_publish_client(pub, &pub->clients[pub->num_clients - 1], &pub->last_message);
 	}
     return true;

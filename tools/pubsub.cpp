@@ -59,6 +59,8 @@ struct Topic
 {
   std::string type;
 
+  uint8_t flags;
+
   std::vector<std::string> subscribers;
   std::vector<std::string> publishers;
 };
@@ -116,6 +118,7 @@ int topic_info(int num_args, char** args, ps_node_t* node)
   }
 
   std::cout << "Type: " << info->second.type << "\n";
+  std::cout << "Latched: " << (((info->second.flags & PS_ADVERTISE_LATCHED) != 0) ? "True\n" : "False\n");
   std::cout << "Published by:\n";
   for (auto pub : info->second.publishers)
   {
@@ -309,7 +312,7 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
         // get and deserialize the messages
         if (sub.received_message_def.fields == 0)
         {
-          //printf("WARN: got message but no message definition yet...\n");
+          printf("WARN: got message but no message definition yet...\n");
           // queue it up, then print them out once I get it
           todo_msgs.push_back({ message, *info });
         }
@@ -667,6 +670,7 @@ int main(int num_args_real, char** args)
       Topic t;
       t.type = type;
       t.publishers.push_back(node);
+      t.flags = data->flags;
       _topics[topic] = t;
     }
     else
@@ -677,6 +681,7 @@ int main(int num_args_real, char** args)
         if (t.publishers[i] == node)
           return;
       }
+      t.flags |= data->flags;// this probably isnt the best method, but whatever
       t.publishers.push_back(node);
     }
     //printf("Get pub %s type %s node %s\n", topic, type, node);

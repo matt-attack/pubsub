@@ -74,14 +74,14 @@ struct ps_node_t
 	//lets just have one big socket for everything I guess for the moment
 	ps_socket_t socket;
 	ps_socket_t mc_socket;// socket for multicast
-	unsigned short advertise_port;
+	uint16_t advertise_port;
 
 	// my core socket port and address
-	unsigned short port;
-	unsigned int addr;
-	unsigned int advertise_addr;// in network layout because we dont need it in host
+	uint16_t port;
+	uint32_t addr;
+	uint32_t advertise_addr;// in network layout because we dont need it in host
 
-	unsigned int group_id; // indicates which group this node is a part of
+	uint32_t group_id; // indicates which group this node is a part of
 
 	int sub_index;
 
@@ -101,7 +101,7 @@ struct ps_node_t
     struct ps_event_set_t events;
 #endif
 
-	int supported_transports;
+	uint32_t supported_transports;
 
 #ifndef ARDUINO
 	unsigned int num_transports;
@@ -114,8 +114,8 @@ void ps_node_add_transport(struct ps_node_t* node, struct ps_transport_t* transp
 // describes where a message came from
 struct ps_msg_info_t
 {
-	unsigned int address;
-	unsigned int port;
+	uint32_t address;
+	uint16_t port;
 };
 
 //todo move elsewhere probably
@@ -123,11 +123,11 @@ struct ps_msg_info_t
 #pragma pack(1)
 struct ps_msg_header
 {
-	unsigned char pid;//packet type id
-	unsigned int id;//stream id
-	unsigned short seq;//sequence number
-	unsigned char index;
-	unsigned char count;
+	uint8_t pid;//packet type id
+	uint32_t id;//stream id
+	uint16_t seq;//sequence number
+	uint8_t index;
+	uint8_t count;
 };
 #pragma pack(pop)
 
@@ -139,16 +139,22 @@ enum ps_transport_protocols
 	PS_TRANSPORT_RESERVED = 1 << 5
 };
 
+enum ps_advertise_flags
+{
+	PS_ADVERTISE_LATCHED = 1
+};
+
 #pragma pack(push)
 #pragma pack(1)
 struct ps_advertise_req_t
 {
-	char id;
-	int addr;
-	unsigned short port;// port for udp communications
-	unsigned int transports;// bitmask showing supported protocols for this publisher
-	unsigned int type_hash;// to see if the type is correct
-	unsigned int group_id;// unique (hopefully) id that indicates which process this node is a part of
+	uint8_t id;
+	int32_t addr;
+	uint16_t port;// port for udp communications
+	uint8_t flags;// members of ps_advertise_flags
+	uint32_t transports;// bitmask showing supported protocols for this publisher
+	uint32_t type_hash;// to see if the type is correct
+	uint32_t group_id;// unique (hopefully) id that indicates which process this node is a part of
 };
 #pragma pack(pop)
 
@@ -156,9 +162,9 @@ struct ps_advertise_req_t
 #pragma pack(1)
 struct ps_subscribe_req_t
 {
-  char id;
-  int addr;
-  unsigned short port;
+  uint8_t id;
+  int32_t addr;
+  uint16_t port;
 };
 #pragma pack(pop)
 
@@ -166,8 +172,8 @@ struct ps_subscribe_req_t
 #pragma pack(1)
 struct ps_subscribe_accept_t
 {
-	char pid;// packet type identifier
-	unsigned int sid; //stream id
+	uint8_t pid;// packet type identifier
+	uint32_t sid; //stream id
 	//message definition goes here...
 };
 #pragma pack(pop)
@@ -201,7 +207,7 @@ struct ps_subscriber_options
 	unsigned int skip;// skips to every nth message for throttling
 	ps_subscriber_fn_cb_t cb;
 	void* cb_data;
-    unsigned int preferred_transport;// falls back to udp otherwise
+    uint32_t preferred_transport;// falls back to udp otherwise
 };
 
 void ps_subscriber_options_init(struct ps_subscriber_options* options);

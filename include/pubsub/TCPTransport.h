@@ -365,11 +365,6 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
 
                 impl->clients[i].publisher = pub;
 
-#ifdef PUBSUB_VERBOSE
-                printf("TCPTransport: Got subscribe request, adding client if we haven't already\n");
-#endif
-                ps_pub_add_client(pub, &sub_client);
-
                 // send the client the acknowledgement and message definition
                 int8_t packet_type = 0x03;//message definition
                 send(impl->clients[i].socket, (char*)&packet_type, 1, 0);
@@ -378,6 +373,12 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
                 int32_t length = ps_serialize_message_definition((void*)buf, pub->message_definition);
                 send(impl->clients[i].socket, (char*)&length, 4, 0);
                 send(impl->clients[i].socket, buf, length, 0);
+
+#ifdef PUBSUB_VERBOSE
+                printf("TCPTransport: Got subscribe request, adding client if we haven't already\n");
+#endif
+                ps_pub_add_client(pub, &sub_client);
+
                 break;
               }
             }
@@ -472,18 +473,19 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
 
         if (connection->current_size == connection->packet_size)
         {
-          //printf("message finished\n");
+          //printf("message finished type %x\n", connection->packet_type);
           if (connection->packet_type == 0x3)
           {
-            //printf("Was message definition");
+            //printf("Was message definition\n");
             if (connection->subscriber->want_message_definition)
             {
               // todo put this in a function so we cant accidentally forget it
               ps_deserialize_message_definition(connection->packet_data, &connection->subscriber->received_message_def);
 
-              if (connection->subscriber->node->def_cb)
+              // call the callback as well
+              if (node->def_cb)
               {
-                  connection->subscriber->node->def_cb(&connection->subscriber->received_message_def);
+                node->def_cb(&connection->subscriber->received_message_def);
               }
             }
 
@@ -493,6 +495,7 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
           }
           else if (connection->packet_type == 0x2)
           {
+            //printf("added to queue\n");
             // decode and add it to the queue
             struct ps_msg_info_t message_info;
             message_info.address = connection->endpoint.address;
@@ -509,6 +512,9 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
               out_data = connection->packet_data;
             }
 
+            // remove the reference to packet data so we dont try and double free it on destroy
+            // it is the queue's responsibility now
+            connection->packet_data = 0;
             ps_sub_enqueue(connection->subscriber,
               out_data,
               connection->packet_size,
@@ -600,7 +606,7 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
       return;
     }
   }
-
+  //printf("started writing\n");
   // try and write, if any of these fail, make a copy
   uint8_t packet_type = 0x02;
   int c = send(socket, (char*)&packet_type, 1, 0);
@@ -645,7 +651,7 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
     goto FAILDISCONNECT;
   }
 
-
+  //printf("sending %i bytes\n", length + 4 + 1);
   c = send(socket, (char*)ps_get_msg_start(message), length, 0);
   if (c < length && c >= 0)
   {
@@ -666,6 +672,7 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
     }
     goto FAILDISCONNECT;
   }
+  //printf("wrote all\n");
   return;
 
   char* data;

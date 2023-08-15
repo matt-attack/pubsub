@@ -112,6 +112,7 @@ void ps_node_advertise(struct ps_pub_t* pub)
 	p->id = PS_DISCOVERY_PROTOCOL_ADVERTISE;
 	p->addr = pub->node->addr;
 	p->port = pub->node->port;
+	p->flags = pub->latched ? PS_ADVERTISE_LATCHED : 0;
 	p->type_hash = pub->message_definition->hash;
 	p->transports = pub->node->supported_transports;
 	p->group_id = pub->node->group_id;
@@ -1065,7 +1066,7 @@ int ps_node_spin(struct ps_node_t* node)
 			//printf("Got advertise msg \n");
 			struct ps_advertise_req_t* p = (struct ps_advertise_req_t*)data;
 			int num_transports = popcnt(p->transports);
-			uint32_t* transport_data = &data[sizeof(struct ps_advertise_req_t)];
+			uint32_t* transport_data = (uint32_t*)&data[sizeof(struct ps_advertise_req_t)];
 
 			char* topic = &data[sizeof(struct ps_advertise_req_t) + num_transports * 4];
 

@@ -157,7 +157,7 @@ EXPORT int ps_create_publisher(int node, const char* topic, const char* definiti
                 field->name = name;
                 field->length = 1;
                 field->content_length = 0;
-                field->type = 0;// todo
+                field->type = 0;// filled in below
                 field->flags = 0;
                 if (strcmp(type, "int8") == 0)
                 {
