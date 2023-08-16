@@ -262,7 +262,7 @@ void ps_node_destroy(struct ps_node_t* node);
 enum
 {
 	PS_DISCOVERY_PROTOCOL_SUBSCRIBE_QUERY = 1,
-	PS_DISCOVERY_PROTOCOL_ADVERTISE = 2,
+	PS_DISCOVERY_PROTOCOL_ADVERTISE = 6,// 2 is old version, bumped to ensure no compatibility mismatches
 	PS_DISCOVERY_PROTOCOL_UNSUBSCRIBE = 3,
 	PS_DISCOVERY_PROTOCOL_QUERY_ALL = 4,
 	PS_DISCOVERY_PROTOCOL_QUERY_MSG_DEFINITION = 5// used for getting message formats
