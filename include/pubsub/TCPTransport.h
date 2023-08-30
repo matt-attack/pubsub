@@ -1,12 +1,14 @@
 #ifndef _PUBSUB_TCP_TRANSPORT_HEADER
 #define _PUBSUB_TCP_TRANSPORT_HEADER
 
+// Must be included first on windows
+#include <pubsub/Net.h>
 
 #include <pubsub/Node.h>
 #include <pubsub/Publisher.h>
 #include <pubsub/Subscriber.h>
 #include <pubsub/System.h>
-#include <pubsub/Net.h>
+//#include <pubsub/Net.h>
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -47,6 +49,7 @@ struct ps_tcp_transport_connection
 
   struct ps_sub_t* subscriber;
 
+  bool connecting;
   bool waiting_for_header;
   int packet_size;
 
@@ -160,7 +163,9 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
   int socket = accept(impl->socket, 0, 0);
   if (socket > 0)
   {
+#ifdef PUBSUB_VERBOSE
     printf("Got new socket connection!\n");
+#endif
 
     // add it to the list yo
     impl->num_clients++;
@@ -254,7 +259,7 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
 
       if (client->queued_message_written == client->queued_message_length)
       {
-        printf("Message sent.\n");
+        //printf("Message sent.\n");
         free(client->queued_message);
         client->queued_message = 0;
 
@@ -333,7 +338,9 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
 
         if (client->current_packet_size == client->desired_packet_size)
         {
+#ifdef PUBSUB_VERBOSE
           printf("message finished\n");
+#endif
 
           if (true)// todo look at message id
           {
@@ -358,9 +365,6 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
 
                 impl->clients[i].publisher = pub;
 
-                printf("Got subscribe request, adding client if we haven't already\n");
-                ps_pub_add_client(pub, &sub_client);
-
                 // send the client the acknowledgement and message definition
                 int8_t packet_type = 0x03;//message definition
                 send(impl->clients[i].socket, (char*)&packet_type, 1, 0);
@@ -369,6 +373,12 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
                 int32_t length = ps_serialize_message_definition((void*)buf, pub->message_definition);
                 send(impl->clients[i].socket, (char*)&length, 4, 0);
                 send(impl->clients[i].socket, buf, length, 0);
+
+#ifdef PUBSUB_VERBOSE
+                printf("TCPTransport: Got subscribe request, adding client if we haven't already\n");
+#endif
+                ps_pub_add_client(pub, &sub_client);
+
                 break;
               }
             }
@@ -386,8 +396,50 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
   {
     struct ps_tcp_transport_connection* connection = &impl->connections[i];
     char buf[1500];
+    if (connection->connecting)
+    {
+      //printf("checking for connected\n");
+      // select to check for writability
+      fd_set wfds;
+      struct timeval tv;
+      int retval;
+
+      FD_ZERO(&wfds);
+      FD_SET(connection->socket, &wfds);
+
+      tv.tv_sec = 0;
+      tv.tv_usec = 0;
+      retval = select(connection->socket + 1, NULL, &wfds, NULL, &tv);
+      if (retval == -1)
+      {
+        // error?
+        printf("socket errored while connecting\n");
+      }
+      else if (retval)
+      {
+        // socket is writable
+        //printf("socket writable\n");
+
+        // make the subscribe request in a "packet"
+        // a packet is an int length followed by data
+        int8_t packet_type = 0x01;//subscribe
+        send(connection->socket, (char*)&packet_type, 1, 0);
+
+        int32_t length = strlen(connection->subscriber->topic) + 1 + 4;
+        send(connection->socket, (char*)&length, 4, 0);
+
+        // make the request
+        char buffer[500];
+        strcpy(buffer, connection->subscriber->topic);
+        uint32_t skip = connection->subscriber->skip;
+        send(connection->socket, (char*)&skip, 4, 0);
+        send(connection->socket, buffer, length - 4, 0);
+	
+        connection->connecting = false;
+      }
+    }
     // if we havent gotten a header yet, just check for that
-    if (connection->waiting_for_header)
+    else if (connection->waiting_for_header)
     {
       const int header_size = 5;
       int len = recv(connection->socket, buf, header_size, MSG_PEEK);
@@ -421,13 +473,20 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
 
         if (connection->current_size == connection->packet_size)
         {
-          //printf("message finished\n");
+          //printf("message finished type %x\n", connection->packet_type);
           if (connection->packet_type == 0x3)
           {
-            //printf("Was message definition");
+            //printf("Was message definition\n");
             if (connection->subscriber->want_message_definition)
             {
+              // todo put this in a function so we cant accidentally forget it
               ps_deserialize_message_definition(connection->packet_data, &connection->subscriber->received_message_def);
+
+              // call the callback as well
+              if (node->def_cb)
+              {
+                node->def_cb(&connection->subscriber->received_message_def);
+              }
             }
 
             free(connection->packet_data);
@@ -436,6 +495,7 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
           }
           else if (connection->packet_type == 0x2)
           {
+            //printf("added to queue\n");
             // decode and add it to the queue
             struct ps_msg_info_t message_info;
             message_info.address = connection->endpoint.address;
@@ -452,6 +512,9 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
               out_data = connection->packet_data;
             }
 
+            // remove the reference to packet data so we dont try and double free it on destroy
+            // it is the queue's responsibility now
+            connection->packet_data = 0;
             ps_sub_enqueue(connection->subscriber,
               out_data,
               connection->packet_size,
@@ -520,12 +583,12 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
       }
       tclient->queued_messages[0].data = data;
       tclient->queued_messages[0].length = length + 5;
-      printf("dropped message on topic '%s'\n", publisher->topic);
+      //printf("dropped message on topic '%s'\n", publisher->topic);
       return;// drop it, we are out of queue space
     }
     else
     {
-      printf("queuing up message %i on topic '%s'\n", tclient->num_queued_messages, publisher->topic);
+      //printf("queuing up message %i on topic '%s'\n", tclient->num_queued_messages, publisher->topic);
 
       // add the message to the front of the queue
       tclient->num_queued_messages += 1;
@@ -543,7 +606,7 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
       return;
     }
   }
-
+  //printf("started writing\n");
   // try and write, if any of these fail, make a copy
   uint8_t packet_type = 0x02;
   int c = send(socket, (char*)&packet_type, 1, 0);
@@ -588,7 +651,7 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
     goto FAILDISCONNECT;
   }
 
-
+  //printf("sending %i bytes\n", length + 4 + 1);
   c = send(socket, (char*)ps_get_msg_start(message), length, 0);
   if (c < length && c >= 0)
   {
@@ -609,6 +672,7 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
     }
     goto FAILDISCONNECT;
   }
+  //printf("wrote all\n");
   return;
 
   char* data;
@@ -630,7 +694,7 @@ FAILCOPY:
   return;
 }
 
-void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_t* subscriber, struct ps_endpoint_t* ep)
+void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_t* subscriber, struct ps_endpoint_t* ep, uint32_t transport_info)
 {
   struct ps_tcp_transport_impl* impl = (struct ps_tcp_transport_impl*)transport->impl;
 
@@ -652,51 +716,12 @@ void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_
   int sock = socket(AF_INET, SOCK_STREAM, 0);
 #endif
 
-  struct sockaddr_in server_addr;
-  server_addr.sin_family = AF_INET;
-  server_addr.sin_addr.s_addr = htonl(ep->address);
-  server_addr.sin_port = htons(ep->port);
-  if (connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0)
-  {
-    perror("error connecting tcp socket");
-  }
-
-  //printf("%i %i %i %i\n", (ep->address & 0xFF000000) >> 24, (ep->address & 0xFF0000) >> 16, (ep->address & 0xFF00) >> 8, (ep->address & 0xFF));
-
-  // make the subscribe request in a "packet"
-  // a packet is an int length followed by data
-  int8_t packet_type = 0x01;//subscribe
-  send(sock, (char*)&packet_type, 1, 0);
-
-  int32_t length = strlen(subscriber->topic) + 1 + 4;
-  send(sock, (char*)&length, 4, 0);
-
-  // make the request
-  char buffer[500];
-  strcpy(buffer, subscriber->topic);
-  uint32_t skip = subscriber->skip;
-  send(sock, (char*)&skip, 4, 0);
-  send(sock, buffer, length - 4, 0);
-
-  // add the socket to the list of connections
-  impl->num_connections++;
-  struct ps_tcp_transport_connection* old_connections = impl->connections;
-  impl->connections = (struct ps_tcp_transport_connection*)malloc(sizeof(struct ps_tcp_transport_connection) * impl->num_connections);
-  for (int i = 0; i < impl->num_connections - 1; i++)
-  {
-    impl->connections[i] = old_connections[i];
-  }
-  impl->connections[impl->num_connections - 1].socket = sock;
-  impl->connections[impl->num_connections - 1].endpoint = *ep;
-  impl->connections[impl->num_connections - 1].waiting_for_header = true;
-  impl->connections[impl->num_connections - 1].subscriber = subscriber;
-
   // set non-blocking
 #ifdef _WIN32
   DWORD nonBlocking = 1;
   if (ioctlsocket(sock, FIONBIO, &nonBlocking) != 0)
   {
-    printf("Failed to Set Socket as Non-Blocking!\n");
+    ps_print_socket_error("Failed to Set Socket as Non-Blocking");
     closesocket(sock);
     return;
   }
@@ -708,6 +733,59 @@ void ps_tcp_transport_subscribe(struct ps_transport_t* transport, struct ps_sub_
   int flags = fcntl(sock, F_GETFL);
   fcntl(sock, F_SETFL, flags | O_NONBLOCK);
 #endif
+
+  // Actually connect
+  //printf("connecting\n");
+  struct sockaddr_in server_addr;
+  server_addr.sin_family = AF_INET;
+  server_addr.sin_addr.s_addr = htonl(ep->address);
+  server_addr.sin_port = htons(transport_info);
+  int connect_result = connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr));
+  if (connect_result != 0)
+  {
+#ifdef _WIN32
+    if (WSAGetLastError() != WSAEWOULDBLOCK)//WSAEINPROGRESS
+#else
+    if (errno != EINPROGRESS)
+#endif
+    {
+      ps_print_socket_error("error connecting tcp socket");
+	  return;
+    }
+  }
+
+  //printf("%i %i %i %i\n", (ep->address & 0xFF000000) >> 24, (ep->address & 0xFF0000) >> 16, (ep->address & 0xFF00) >> 8, (ep->address & 0xFF));
+
+  // make the subscribe request in a "packet"
+  // a packet is an int length followed by data
+  /*int8_t packet_type = 0x01;//subscribe
+  send(sock, (char*)&packet_type, 1, 0);
+
+  int32_t length = strlen(subscriber->topic) + 1 + 4;
+  send(sock, (char*)&length, 4, 0);
+
+  // make the request
+  char buffer[500];
+  strcpy(buffer, subscriber->topic);
+  uint32_t skip = subscriber->skip;
+  send(sock, (char*)&skip, 4, 0);
+  send(sock, buffer, length - 4, 0);*/
+
+  // add the socket to the list of connections
+  impl->num_connections++;
+  struct ps_tcp_transport_connection* old_connections = impl->connections;
+  impl->connections = (struct ps_tcp_transport_connection*)malloc(sizeof(struct ps_tcp_transport_connection) * impl->num_connections);
+  for (int i = 0; i < impl->num_connections - 1; i++)
+  {
+    impl->connections[i] = old_connections[i];
+  }
+  
+  struct ps_tcp_transport_connection* new_connection = &impl->connections[impl->num_connections - 1];
+  new_connection->socket = sock;
+  new_connection->endpoint = *ep;
+  new_connection->waiting_for_header = true;
+  new_connection->subscriber = subscriber;
+  new_connection->connecting = true;
 
   ps_event_set_add_socket(&subscriber->node->events, sock);
 
@@ -731,7 +809,10 @@ void ps_tcp_transport_unsubscribe(struct ps_transport_t* transport, struct ps_su
     }
   }
 
+#ifdef PUBSUB_VERBOSE
   printf("Removing %i tcp subs\n", num_to_remove);
+#endif
+
   if (num_to_remove > 0)
   {
     // Free our subscribers and any buffers
@@ -837,18 +918,25 @@ void ps_tcp_transport_init(struct ps_transport_t* transport, struct ps_node_t* n
   struct sockaddr_in server_addr;
   server_addr.sin_family = AF_INET;
   server_addr.sin_addr.s_addr = INADDR_ANY;
-  server_addr.sin_port = htons(node->port);
+  server_addr.sin_port = 0;// we want an ephemeral port
   if (bind(impl->socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0)
   {
-    perror("error binding tcp socket");
+    ps_print_socket_error("error binding tcp transport socket");
   }
+
+  socklen_t outlen = sizeof(struct sockaddr_in);
+  struct sockaddr_in outaddr;
+  getsockname(impl->socket, (struct sockaddr*)&outaddr, &outlen);
+  transport->transport_info = ntohs(outaddr.sin_port);
+
+  printf("Bound tcp to %i\n", transport->transport_info);
 
   // set non-blocking
 #ifdef _WIN32
   DWORD nonBlocking = 1;
   if (ioctlsocket(impl->socket, FIONBIO, &nonBlocking) != 0)
   {
-    printf("Failed to Set Socket as Non-Blocking!\n");
+    ps_print_socket_error("Failed to Set Socket as Non-Blocking");
     closesocket(impl->socket);
     return;
   }

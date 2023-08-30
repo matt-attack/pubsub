@@ -66,7 +66,7 @@ void* ps_sub_deque(struct ps_sub_t* sub);
 
 void ps_sub_destroy(struct ps_sub_t* sub);
 
-void ps_send_subscribe(struct ps_sub_t* sub, const struct ps_endpoint_t* ep);
+void ps_udp_subscribe(struct ps_sub_t* sub, const struct ps_endpoint_t* ep);
 
 #ifdef __cplusplus
 }

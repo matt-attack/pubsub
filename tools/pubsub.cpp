@@ -59,6 +59,8 @@ struct Topic
 {
   std::string type;
 
+  uint8_t flags;
+
   std::vector<std::string> subscribers;
   std::vector<std::string> publishers;
 };
@@ -116,6 +118,7 @@ int topic_info(int num_args, char** args, ps_node_t* node)
   }
 
   std::cout << "Type: " << info->second.type << "\n";
+  std::cout << "Latched: " << (((info->second.flags & PS_ADVERTISE_LATCHED) != 0) ? "True\n" : "False\n");
   std::cout << "Published by:\n";
   for (auto pub : info->second.publishers)
   {
@@ -190,6 +193,8 @@ int topic_show(int num_args, char** args, ps_node_t* node)
 
     return 0;
   }
+
+  return 0;// to make the compiler happy, not even possible to hit this line
 }
 
 int topic_echo(int num_args, char** args, ps_node_t* _node)
@@ -202,6 +207,7 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
   parser.AddMulti({ "skip", "s" }, "Skip factor for the subscriber.", "0");
   parser.AddMulti({ "tcp" }, "Prefer the TCP transport.");
   parser.AddMulti({ "no-arr" }, "Don't print out the contents of arrays in messages.");
+  parser.AddMulti({ "f", "field" }, "Print out just the value of a specific field.");
 
   parser.Parse(args, num_args, 2);
 
@@ -223,6 +229,9 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
   bool tcp = parser.GetBool("tcp");
 
   static bool no_arr = parser.GetBool("no-arr");
+  
+  std::string str = parser.GetString("f");
+  static const char* field_name = str.length() ? str.c_str() : 0;
 
 
   // create a subscriber
@@ -274,7 +283,7 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
                 << ((info->address & 0xFF)) << ":" << info->port << "\n";
               printf("-------------\n");
             }
-            ps_deserialize_print(msg.first, &sub.received_message_def, no_arr ? 10 : 0);
+            ps_deserialize_print(msg.first, &sub.received_message_def, no_arr ? 10 : 0, field_name);
             printf("-------------\n");
             free(msg.first);
             if (++count >= n)
@@ -303,7 +312,7 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
         // get and deserialize the messages
         if (sub.received_message_def.fields == 0)
         {
-          //printf("WARN: got message but no message definition yet...\n");
+          printf("WARN: got message but no message definition yet...\n");
           // queue it up, then print them out once I get it
           todo_msgs.push_back({ message, *info });
         }
@@ -327,7 +336,7 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
               << ((info->address & 0xFF)) << ":" << info->port << "\n";
             printf("-------------\n");
           }
-          ps_deserialize_print(message, &sub.received_message_def, no_arr ? 10 : 0);
+          ps_deserialize_print(message, &sub.received_message_def, no_arr ? 10 : 0, field_name);
           printf("-------------\n");
           free(message);
           if (++count >= n)
@@ -349,6 +358,7 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
   {
     ps_sub_destroy(&sub);
   }
+  return 0;
 }
 
 int topic_pub(int num_args, char** args, ps_node_t* node)
@@ -459,25 +469,28 @@ int node_list(int num_args, char** args, ps_node_t* node)
 {
   pubsub::ArgParser parser;
   parser.SetUsage("Usage: info node list\n\nList all running nodes.");
+  parser.AddMulti({ "v" }, "Print additional info about each node.");
   parser.Parse(args, num_args, 2);
 
   wait(node);
 
-  // build a list of nodes then spit them out
-  std::map<std::string, int> nodes;
-  for (auto& topic : _topics)
-  {
-    for (auto sub : topic.second.subscribers)
-      nodes[sub] = 1;
-
-    for (auto pub : topic.second.publishers)
-      nodes[pub] = 1;
-  }
-
   std::cout << "Nodes:\n------------\n";
-  for (auto node : nodes)
+  bool verbose = parser.GetBool("v");
+  for (auto node : _nodes)
   {
-    std::cout << " " << node.first << "\n";
+    if (verbose)
+    {
+      std::cout << " " << node.first;
+      std::cout << " ("
+          << ((node.second.address & 0xFF000000) >> 24) << "."
+          << ((node.second.address & 0xFF0000) >> 16) << "."
+          << ((node.second.address & 0xFF00) >> 8) << "."
+          << ((node.second.address & 0xFF)) << ":" << node.second.port << ")\n";
+    }
+    else
+    {
+      std::cout << " " << node.first << "\n";
+    }
   }
 
   ps_node_destroy(node);
@@ -625,7 +638,7 @@ int main(int num_args_real, char** args)
   int num_args = num_args_real;
   //num_args = 5;
 
-  //char* args[] = { "aaa", "topic", "hz", "/data", "-w", "10" };
+  //char* args[] = { "aaa", "topic", "echo", "/path", "--tcp" };
   //num_args = (sizeof args / sizeof args[0]);
 
   if (num_args <= 1)
@@ -657,6 +670,7 @@ int main(int num_args_real, char** args)
       Topic t;
       t.type = type;
       t.publishers.push_back(node);
+      t.flags = data->flags;
       _topics[topic] = t;
     }
     else
@@ -667,6 +681,7 @@ int main(int num_args_real, char** args)
         if (t.publishers[i] == node)
           return;
       }
+      t.flags |= data->flags;// this probably isnt the best method, but whatever
       t.publishers.push_back(node);
     }
     //printf("Get pub %s type %s node %s\n", topic, type, node);

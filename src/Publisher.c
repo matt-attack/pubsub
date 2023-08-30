@@ -1,5 +1,6 @@
 #include <pubsub/Publisher.h>
 #include <pubsub/Node.h>
+#include <pubsub/UDPTransport.h>
 
 #include <stdio.h>
 #ifndef ANDROID
@@ -8,9 +9,10 @@
 
 #include <pubsub/Net.h>
 
+
 void ps_pub_publish_client(struct ps_pub_t* pub, struct ps_client_t* client, struct ps_msg_t* msg)
 {
-	// handles skipping
+	// Skip messages if desired by the client
 	if (client->modulo > 0)
 	{
 		if (pub->sequence_number % client->modulo != 0)
@@ -21,30 +23,20 @@ void ps_pub_publish_client(struct ps_pub_t* pub, struct ps_client_t* client, str
 
     if (client->transport)
     {
+      //printf("publishing to custom transport\n");
       client->transport->pub(client->transport, pub, client, msg->data, msg->len);
       return;
     }
 
-	// send da udp packet!
-	struct sockaddr_in address;
-	address.sin_family = AF_INET;
-	address.sin_addr.s_addr = htonl(client->endpoint.address);
-	address.sin_port = htons(client->endpoint.port);
-
-	//need to add in the topic id
-	struct ps_msg_header* hdr = (struct ps_msg_header*)msg->data;
-	hdr->pid = PS_UDP_PROTOCOL_DATA;
-	hdr->id = client->stream_id;
-	hdr->seq = client->sequence_number++;
-	hdr->index = 0;
-	hdr->count = 1;// todo use me for larger packets
-
-	int sent_bytes = sendto(pub->node->socket, (const char*)msg->data, msg->len + sizeof(struct ps_msg_header),
-		0, (struct sockaddr*)&address, sizeof(struct sockaddr_in));
+	// Send it via UDP transport
+	ps_udp_publish(pub, client, msg);
 }
 
 bool ps_pub_add_client(struct ps_pub_t* pub, const struct ps_client_t* client)
 {
+#ifdef PUBSUB_VERBOSE
+	printf("Want to add client stream %i\n", client->stream_id);
+#endif
 	// first make sure we dont add any duplicate clients
 	for (unsigned int i = 0; i < pub->num_clients; i++)
 	{
@@ -52,11 +44,17 @@ bool ps_pub_add_client(struct ps_pub_t* pub, const struct ps_client_t* client)
 			&& pub->clients[i].endpoint.port == client->endpoint.port
 			&& pub->clients[i].stream_id == client->stream_id)
 		{
-			//printf("We already have this client, ignoring request\n");
+#ifdef PUBSUB_VERBOSE
+			printf("We already have this client, ignoring request\n");
+#endif
 			return false;
 		}
 	}
 	pub->num_clients++;
+	
+#ifdef PUBSUB_VERBOSE
+	printf("Adding client stream %i\n", client->stream_id);
+#endif
 
 	struct ps_client_t* old_clients = pub->clients;
 	pub->clients = (struct ps_client_t*)malloc(sizeof(struct ps_client_t)*pub->num_clients);
@@ -67,9 +65,10 @@ bool ps_pub_add_client(struct ps_pub_t* pub, const struct ps_client_t* client)
 	pub->clients[pub->num_clients - 1] = *client;
 
 	// todo this is probably the wrong spot for this
-	//okay, if we are latched, send it our last message
+	// If we are latched, send the new client our last message
 	if (pub->last_message.data && pub->latched)
 	{
+        //printf("publishing latched\n");
 		ps_pub_publish_client(pub, &pub->clients[pub->num_clients - 1], &pub->last_message);
 	}
     return true;
@@ -98,7 +97,7 @@ void ps_pub_remove_client(struct ps_pub_t* pub, const struct ps_client_t* client
 			&& pub->clients[i].endpoint.port == client->endpoint.port
 			&& pub->clients[i].stream_id == client->stream_id)
 		{
-			printf("Found the client, removing it\n");
+			//printf("Found the client, removing it\n");
 			found = true;
 			break;
 		}
@@ -106,7 +105,7 @@ void ps_pub_remove_client(struct ps_pub_t* pub, const struct ps_client_t* client
 
 	if (found == false)
 	{
-		printf("Not removing client because we dont have it.\n");
+		//printf("Not removing client because we dont have it.\n");
 		return;
 	}
 	pub->num_clients--;
@@ -174,7 +173,7 @@ void ps_pub_destroy(struct ps_pub_t* pub)
 {
 	free(pub->clients);
 
-	//remove it from my list of subs
+	//remove it from the node's list of pubs
 	pub->node->num_pubs--;
 	struct ps_pub_t** old_pubs = pub->node->pubs;
     if (pub->node->num_pubs)
@@ -202,7 +201,6 @@ void ps_pub_destroy(struct ps_pub_t* pub)
     // free my latched message
     if (pub->last_message.data)
 	{
-		//free the old and add the new
 		free(pub->last_message.data);// todo use allocator
 	}
 

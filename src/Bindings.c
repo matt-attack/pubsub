@@ -6,6 +6,12 @@
 #include "pubsub/Costmap.msg.h"
 #include "pubsub/Marker.msg.h"
 #include "pubsub/Pose.msg.h"
+#include "pubsub/Path.msg.h"
+
+#if defined(_WIN32) || defined(_WIN64)
+/* We are on Windows */
+# define strtok_r strtok_s
+#endif
 
 static bool node_initialized[10] = { 0 };
 static struct ps_node_t nodes[10];
@@ -37,7 +43,8 @@ EXPORT int ps_create_node(const char* name, const char* ip, bool broadcast)
 	}
 
 	node_initialized[free_node] = 1;
-	ps_node_init_ex(&nodes[free_node], name, ip, broadcast, false);
+    const char* name_copy = strdup(name);// copy since we dont control the lifetime
+	ps_node_init_ex(&nodes[free_node], name_copy, ip, broadcast, false);
 
 	ps_tcp_transport_init(&tcp_transports[free_node], &nodes[free_node]);
 	ps_node_add_transport(&nodes[free_node], &tcp_transports[free_node]);
@@ -54,8 +61,10 @@ EXPORT void ps_destroy_node(int node)
 
 	if (node_initialized[node])
 	{
+        char* name_str = (char*)nodes[node].name;
 		ps_node_destroy(&nodes[node]);
 		node_initialized[node] = 0;
+        free(name_str);
 	}
 }
 
@@ -106,6 +115,10 @@ EXPORT int ps_create_publisher(int node, const char* topic, const char* definiti
 	{
 		ps_copy_message_definition(cpy, &pubsub__Pose_def);
 	}
+	else if (strcmp(definition, "path") == 0)
+	{
+		ps_copy_message_definition(cpy, &pubsub__Path_def);
+	}
 	else
 	{
         struct ps_msg_field_t fields[50];
@@ -149,7 +162,7 @@ EXPORT int ps_create_publisher(int node, const char* topic, const char* definiti
                 field->name = name;
                 field->length = 1;
                 field->content_length = 0;
-                field->type = 0;// todo
+                field->type = 0;// filled in below
                 field->flags = 0;
                 if (strcmp(type, "int8") == 0)
                 {
@@ -202,7 +215,6 @@ EXPORT int ps_create_publisher(int node, const char* topic, const char* definiti
 
         // finish filling out the definition
         temp_def.num_fields = num_fields-1;
-        //temp_def.name = "todo name here";
         temp_def.hash = 10010101;// todo actually calculate
 		ps_copy_message_definition(cpy, &temp_def);
 	}

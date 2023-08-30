@@ -53,8 +53,11 @@ generate_messages(FILES
   Costmap.msg
   PointCloud.msg
   Marker.msg
+  Path.msg
   Parameters.msg
+  Path.msg
   Pose.msg
+  GPS.msg
 )
 
 
