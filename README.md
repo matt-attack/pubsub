@@ -28,6 +28,7 @@ As a bonus, this architecture can come in handy for debugging and visualization 
 * Code generation for message serialization/deserialization
 * UDP based best-effort networking (up to network MTU)
   * Optional publisher side per subscriber downsampling to conserve CPU/Network resources
+* TCP based ROS-like networking for larger or more reliable data streams
 * Message introspection tools to publish and subscribe to messages without having their definitions locally
   * A la "rostopic"
 * System introspection tools to view connections between "nodes"
@@ -41,12 +42,10 @@ As a bonus, this architecture can come in handy for debugging and visualization 
 
 ## Features to Come
 
-* Large message support (> MTU size)
+* Large UDP message support (> MTU size)
 * Master based discovery (better scalable than multicast)
-* TCP based networking
 * Topic remapping in C++
 * Documentation
-* Data recording tools (a la rosbag)
 * A real name
 
 ## Supported Platforms

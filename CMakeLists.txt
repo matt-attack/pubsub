@@ -113,7 +113,6 @@ function(my_export_target _target _include_dir)
     export(TARGETS ${_target} FILE "${CMAKE_CURRENT_BINARY_DIR}/${_target}Targets.cmake")
 
     # NOTE: The following call can pollute your PC's CMake package registry
-    #       See comments/alternatives below
     export(PACKAGE ${_target})
 endfunction(my_export_target)
 
