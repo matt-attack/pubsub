@@ -9,6 +9,8 @@
 #include <sstream>
 #include <algorithm>
 
+static std::string _current_file;
+
 std::vector<std::string> split(const std::string& data, char c)
 {
 	std::stringstream ss(data);
@@ -31,6 +33,7 @@ struct enumeration
 
 struct field
 {
+	int line_number;
 	std::string name;
 	std::string type;
 
@@ -85,7 +88,7 @@ struct field
 		{
 			return "double";
 		}
-		printf("ERROR: invalid type '%s' for field '%s'\n", type.c_str(), name.c_str());
+		printf("%s:%i ERROR: invalid type '%s' for field '%s'\n", _current_file.c_str(), line_number, type.c_str(), name.c_str());
 		throw 7;
 		return "invalid";
 	}
@@ -99,7 +102,7 @@ struct field
 		if (flag == "")
 			return "FF_NONE";
 		
-		printf("ERROR: Invalid flag '%s' for field '%s'\n", flag.c_str(), name.c_str());
+		printf("%s:%i ERROR: Invalid flag '%s' for field '%s'\n", _current_file.c_str(), line_number, flag.c_str(), name.c_str());
 		throw 7;
 		return "invalid";
 	}
@@ -151,7 +154,7 @@ struct field
 		{
 			return "FT_Float64";
 		}
-		printf("ERROR: Invalid type '%s' for field '%s'\n", type.c_str(), name.c_str());
+		printf("%s:%i ERROR: Invalid type '%s' for field '%s'\n", _current_file.c_str(), line_number, type.c_str(), name.c_str());
 		throw 7;
 		return "invalid";
 	}
@@ -274,8 +277,10 @@ std::string generate(const char* definition, const char* name)
 
 	// also generate the has while we are at it
 	uint32_t hash = 0;
+	int line_num = 0;
 	for (auto& line : lines)
 	{
+		line_num++;
 		for (unsigned int i = 0; i < line.length(); i++)
 		{
 			hash *= std::abs(line[i]);
@@ -306,7 +311,7 @@ std::string generate(const char* definition, const char* name)
 				name = name.substr(0, index);
 			}
 			// also fill in array size
-			fields.push_back({ name, type, size});
+			fields.push_back({ line_num, name, type, size});
 		}
 		// a line with flags maybe?
 		else if (words.size() == 3)
@@ -328,7 +333,7 @@ std::string generate(const char* definition, const char* name)
 				name = name.substr(0, index);
 			}
 			// also fill in array size
-			fields.push_back({ name, type, size, flag});
+			fields.push_back({ line_num, name, type, size, flag});
 		}
 		else
 		{
@@ -847,6 +852,8 @@ int main(int num_args, char** args)
 		file_name = file_name.substr(file_name.find_last_of('/') + 1);
 		// remove everything after the .
 		std::string name = std::string(args[i+1]) + "__" + file_name.substr(0, file_name.find_first_of('.'));
+
+		_current_file = args[i];
 
 		try
 		{
