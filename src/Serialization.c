@@ -351,7 +351,7 @@ void ps_deserialize_print(const void * data, const struct ps_message_definition_
 					ptr += 4;
 					break;
 				case FT_Int64:
-					printf("%li", (long int)*(int64_t*)ptr);
+					printf("%lli", *(int64_t*)ptr);
 					value = (uint64_t)*(int64_t*)ptr;
 					ptr += 8;
 					break;
@@ -366,12 +366,12 @@ void ps_deserialize_print(const void * data, const struct ps_message_definition_
 					ptr += 2;
 					break;
 				case FT_UInt32:
-					printf("%i", (unsigned int)*(uint32_t*)ptr);
+					printf("%i", *(uint32_t*)ptr);
 					value = (uint64_t)*(uint32_t*)ptr;
 					ptr += 4;
 					break;
 				case FT_UInt64:
-					printf("%li", (unsigned long int)*(uint64_t*)ptr);
+					printf("%llu", *(uint64_t*)ptr);
 					value = (uint64_t)*(uint64_t*)ptr;
 					ptr += 8;
 					break;
