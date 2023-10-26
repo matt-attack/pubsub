@@ -29,6 +29,9 @@ struct enumeration
 	int field_num;
 };
 
+// stupid hack
+static std::string _current_file;
+
 struct field
 {
 	std::string name;
@@ -85,7 +88,7 @@ struct field
 		{
 			return "double";
 		}
-		printf("ERROR: invalid type '%s' for field '%s'\n", type.c_str(), name.c_str());
+		printf("%s:0 ERROR: invalid type '%s' for field '%s'\n", _current_file.c_str(), type.c_str(), name.c_str());
 		throw 7;
 		return "invalid";
 	}
@@ -99,7 +102,7 @@ struct field
 		if (flag == "")
 			return "FF_NONE";
 		
-		printf("ERROR: Invalid flag '%s' for field '%s'\n", flag.c_str(), name.c_str());
+		printf("%s:0 ERROR: Invalid flag '%s' for field '%s'\n", _current_file.c_str(), flag.c_str(), name.c_str());
 		throw 7;
 		return "invalid";
 	}
@@ -151,7 +154,7 @@ struct field
 		{
 			return "FT_Float64";
 		}
-		printf("ERROR: Invalid type '%s' for field '%s'\n", type.c_str(), name.c_str());
+		printf("%s:0 ERROR: Invalid type '%s' for field '%s'\n", _current_file.c_str(), type.c_str(), name.c_str());
 		throw 7;
 		return "invalid";
 	}
@@ -224,6 +227,20 @@ struct field
 	}
 };
 
+std::string strip_whitespace(const std::string& in)
+{
+	std::string out;
+	for (int i = 0; i < in.length(); i++)
+	{
+		char c = in[i];
+		if (c != ' ' && c != '\t')
+		{
+			out += c;
+		}
+	}
+	return out;
+}
+
 std::string generate(const char* definition, const char* name)
 {
 	std::string output;
@@ -283,12 +300,14 @@ std::string generate(const char* definition, const char* name)
 		}
 
 		//okay so each of these should contain a type, then a field
+		// todo refactor me to actually tokenize
+		bool has_equal = (line.find('=') != std::string::npos);
 		auto words = split(line, ' ');
 		if (words.size() == 0)
 		{
 			continue;
 		}
-		else if (words.size() == 2)
+		else if (words.size() == 2 && !has_equal)
 		{
 			std::string name = words[1];
 			std::string type = words[0];
@@ -309,7 +328,7 @@ std::string generate(const char* definition, const char* name)
 			fields.push_back({ name, type, size});
 		}
 		// a line with flags maybe?
-		else if (words.size() == 3)
+		else if (words.size() == 3 && !has_equal)
 		{
 			std::string flag = words[0];
 			std::string type = words[1];
@@ -337,8 +356,11 @@ std::string generate(const char* definition, const char* name)
 			if (equals.size() == 2)
 			{
 				// its an enum!
+				// remove whitespace from each side
+				std::string name = strip_whitespace(equals[0]);
+				std::string value = strip_whitespace(equals[1]);
 				//printf("it was an enum: %s=%s\n", equals[0].c_str(), equals[1].c_str());
-				enumerations.push_back({equals[0], equals[1], (int)fields.size()});
+				enumerations.push_back({ name, value, (int)fields.size()});
 			}
 			else
 			{
@@ -788,6 +810,15 @@ std::string generate(const char* definition, const char* name)
 
 	return output;
 }
+#include <stdio.h>  /* defines FILENAME_MAX */
+//#define WINDOWS  /* uncomment this line to use it for windows.*/
+#ifdef WIN32
+#include <direct.h>
+#define GetCurrentDir _getcwd
+#else
+#include <unistd.h>
+#define GetCurrentDir getcwd
+#endif
 
 #include <string>
 #include <fstream>
@@ -848,8 +879,14 @@ int main(int num_args, char** args)
 		// remove everything after the .
 		std::string name = std::string(args[i+1]) + "__" + file_name.substr(0, file_name.find_first_of('.'));
 
+		char current_directory[FILENAME_MAX];
+		GetCurrentDir(current_directory, FILENAME_MAX);
+
 		try
 		{
+			_current_file = current_directory;
+			_current_file += "/";
+			_current_file += args[i];
 			std::string output = generate(str.c_str(), name.c_str());
 
 			// write it back to file
