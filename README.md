@@ -58,3 +58,20 @@ Anything with POSIX sockets
 ## Dependencies
 
 A POSIX networking stack and the C or C++ standard library.
+
+## Build and Install Instructions
+
+These instructions work on both Windows and Linux as long as you have git installed
+
+```bash
+# Like not necessary if you've done stuff like this before, not necessary (or possible) on Windows
+sudo apt-get install build-essential git
+
+# Clone the repository and change directory into it
+git clone https://github.com/matt-attack/pubsub.git
+cd pubsub
+
+# Build the respository
+cmake .
+cmake --build .
+```
