@@ -258,10 +258,15 @@ void ps_node_init_ex(struct ps_node_t* node, const char* name, const char* ip, b
 	node->subs = 0;
 
 	node->adv_cb = 0;
+	node->adv_cb_data = 0;
 	node->sub_cb = 0;
+	node->sub_cb_data = 0;
 	node->def_cb = 0;
+	node->def_cb_data = 0;
 	node->param_cb = 0;
+	node->param_cb_data = 0;
 	node->param_confirm_cb = 0;
+	node->param_confirm_cb_data = 0;
 
 	node->supported_transports = PS_TRANSPORT_UDP;
 	node->num_transports = 0;
@@ -803,7 +808,7 @@ int ps_node_spin(struct ps_node_t* node)
 			}
 			if (sub == 0)
 			{
-				printf("ERROR: Could not find sub matching stream id %i\n", hdr->id);
+				//printf("ERROR: Could not find sub matching stream id %i\n", hdr->id);
 				continue;
 			}
 
@@ -881,7 +886,7 @@ int ps_node_spin(struct ps_node_t* node)
 				// todo should this really be qualified on wanting the message definition?
 				if (node->def_cb)
 				{
-					node->def_cb(&sub->received_message_def);
+					node->def_cb(&sub->received_message_def, node->def_cb_data);
 				}
 			}
 		}
@@ -953,7 +958,7 @@ int ps_node_spin(struct ps_node_t* node)
 
 			if (node->param_confirm_cb)
 			{
-				node->param_confirm_cb(name, value);
+				node->param_confirm_cb(name, value, node->param_confirm_cb_data);
 			}
 		}
 		else if (data[0] == PS_UDP_PROTOCOL_MESSAGE_DEFINITION)
@@ -965,7 +970,7 @@ int ps_node_spin(struct ps_node_t* node)
 
 				struct ps_message_definition_t def;
 				ps_deserialize_message_definition(&data[1], &def);
-				node->def_cb(&def);
+				node->def_cb(&def, node->def_cb_data);
 				ps_free_message_definition(&def);
 			}
 		}
@@ -1004,7 +1009,7 @@ int ps_node_spin(struct ps_node_t* node)
 			{
 				char* type = (char*)&data[strlen(topic) + 8];
 				char* node_name = type + 1 + strlen(type);
-				node->sub_cb(topic, type, node_name, req);
+				node->sub_cb(topic, type, node_name, req, node->sub_cb_data);
 			}
 
 			//check if we have a sub matching that topic
@@ -1074,7 +1079,7 @@ int ps_node_spin(struct ps_node_t* node)
 			{
 				char* type = topic + strlen(topic) + 1;
 				char* node_name = type + 1 + strlen(type);
-				node->adv_cb(topic, type, node_name, p);
+				node->adv_cb(topic, type, node_name, p, node->adv_cb_data);
 			}
 
 			//printf("Got advertise notice\n");
@@ -1194,7 +1199,7 @@ int ps_node_spin(struct ps_node_t* node)
 			double new_value = 0.0;
 			if (node->param_cb)
 			{
-				new_value = node->param_cb(name, value);
+				new_value = node->param_cb(name, value, node->param_cb_data);
 				send_ack = (new_value == new_value);// nan check
 			}
 

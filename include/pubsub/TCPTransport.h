@@ -485,7 +485,7 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
               // call the callback as well
               if (node->def_cb)
               {
-                node->def_cb(&connection->subscriber->received_message_def);
+                node->def_cb(&connection->subscriber->received_message_def, node->def_cb_data);
               }
             }
 

@@ -54,11 +54,11 @@ struct ps_transport_t
     ps_transport_fn_destroy_t destroy;
 };
 
-typedef void(*ps_adv_cb_t)(const char* topic, const char* type, const char* node, const struct ps_advertise_req_t* data);
-typedef void(*ps_sub_cb_t)(const char* topic, const char* type, const char* node, const struct ps_subscribe_req_t* data);
-typedef void(*ps_msg_def_cb_t)(const struct ps_message_definition_t* definition);
-typedef double(*ps_param_change_cb_t)(const char* name, double value);
-typedef void(*ps_param_confirm_cb_t)(const char* name, double value);
+typedef void(*ps_adv_cb_t)(const char* topic, const char* type, const char* node, const struct ps_advertise_req_t* adv_data, void* data);
+typedef void(*ps_sub_cb_t)(const char* topic, const char* type, const char* node, const struct ps_subscribe_req_t* sub_data, void* data);
+typedef void(*ps_msg_def_cb_t)(const struct ps_message_definition_t* definition, void* data);
+typedef double(*ps_param_change_cb_t)(const char* name, double value, void* data);
+typedef void(*ps_param_confirm_cb_t)(const char* name, double value, void* data);
 
 #ifndef PUBSUB_REAL_TIME
 #include <pubsub/Events.h>
@@ -87,10 +87,15 @@ struct ps_node_t
 
 	//optional callbacks
 	ps_adv_cb_t adv_cb;
+	void* adv_cb_data;
 	ps_sub_cb_t sub_cb;
+	void* sub_cb_data;
 	ps_msg_def_cb_t def_cb;
+	void* def_cb_data;
 	ps_param_change_cb_t param_cb;
+	void* param_cb_data;
 	ps_param_confirm_cb_t param_confirm_cb;
+	void* param_confirm_cb_data;
 
 	//implementation data
 	unsigned long long _last_advertise;
