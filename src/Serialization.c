@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <inttypes.h>
 
 #pragma pack(push)
 #pragma pack(1)
@@ -351,7 +352,7 @@ void ps_deserialize_print(const void * data, const struct ps_message_definition_
 					ptr += 4;
 					break;
 				case FT_Int64:
-					printf("%lli", *(int64_t*)ptr);
+					printf("%" PRId64 "", *(int64_t*)ptr);
 					value = (uint64_t)*(int64_t*)ptr;
 					ptr += 8;
 					break;
@@ -371,7 +372,7 @@ void ps_deserialize_print(const void * data, const struct ps_message_definition_
 					ptr += 4;
 					break;
 				case FT_UInt64:
-					printf("%llu", *(uint64_t*)ptr);
+					printf("%" PRIu64 "", *(uint64_t*)ptr);
 					value = (uint64_t)*(uint64_t*)ptr;
 					ptr += 8;
 					break;
