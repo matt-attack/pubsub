@@ -255,7 +255,7 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
       subscribed = true;
 
       // override this to handle latched messages properly
-      node->def_cb = [](const ps_message_definition_t* def)
+      node->def_cb = [](const ps_message_definition_t* def, void* data)
       {
         //printf("got message definition info");
         ps_copy_message_definition(&definition, def);
@@ -595,7 +595,7 @@ int param_set(int num_args, char** args, ps_node_t* node)
   static std::string name = param_name;
   static double new_value;
   static bool confirmed = false;
-  node->param_confirm_cb = [](const char* pname, double value)
+  node->param_confirm_cb = [](const char* pname, double value, void* data)
   {
   	if (strcmp(pname, name.c_str()) == 0)
   	{
@@ -656,7 +656,7 @@ int main(int num_args_real, char** args)
   ps_node_add_transport(&node, &tcp_transport);
 
   // Setup introspection callbacks
-  node.adv_cb = [](const char* topic, const char* type, const char* node, const ps_advertise_req_t* data)
+  node.adv_cb = [](const char* topic, const char* type, const char* node, const ps_advertise_req_t* data, void* data2)
   {
     NodeInfo info;
     info.address = data->addr;
@@ -688,7 +688,7 @@ int main(int num_args_real, char** args)
     return;
   };
 
-  node.sub_cb = [](const char* topic, const char* type, const char* node, const ps_subscribe_req_t* data)
+  node.sub_cb = [](const char* topic, const char* type, const char* node, const ps_subscribe_req_t* data, void* data2)
   {
     auto iter = _nodes.find(node);
     if (iter == _nodes.end())
@@ -726,7 +726,7 @@ int main(int num_args_real, char** args)
     return;
   };
 
-  node.def_cb = [](const ps_message_definition_t* def)
+  node.def_cb = [](const ps_message_definition_t* def, void* data)
   {
     //printf("got message definition info");
     ps_copy_message_definition(&definition, def);
