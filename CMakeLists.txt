@@ -57,7 +57,7 @@ endif()
 
 add_library (pubsub_cpp
   "high_level_api/Node.cpp"
- )
+)
 target_link_libraries(pubsub_cpp pubsub ${CMAKE_THREAD_LIBS_INIT})
 target_include_directories(pubsub_cpp PUBLIC include)
 add_dependencies(pubsub_cpp pubsub)
@@ -106,7 +106,11 @@ function(my_export_target _target _include_dir)
                     set(MESSAGE_DEPS \${MESSAGE_DEPS} \${PROJECT_SOURCE_DIR}/\${ARG_DIRECTORY}/../include/\${PROJECT_NAME}/\${_file}.h)
                 endforeach()
 
-                add_custom_target(\${ARG_TARGET}
+				
+                add_custom_target(\${ARG_TARGET}_mkdir ALL
+    COMMAND \${CMAKE_COMMAND} -E make_directory \${PROJECT_SOURCE_DIR}/\${ARG_DIRECTORY}/../include/\${PROJECT_NAME}/)
+
+                add_custom_target(\${ARG_TARGET} ALL
                     DEPENDS \${MESSAGE_DEPS} 
                 )
             endmacro()
@@ -122,7 +126,6 @@ endfunction(my_export_target)
 my_export_target(pubsub "${CMAKE_CURRENT_SOURCE_DIR}/include")
 my_export_target(pubsub_cpp "${CMAKE_CURRENT_SOURCE_DIR}/include")
 my_export_target(pubsub_msg_gen "${CMAKE_CURRENT_SOURCE_DIR}/include")
-#my_export_target(pubsub_msgs "${CMAKE_CURRENT_SOURCE_DIR}")
 
 install (TARGETS pubsub
   ARCHIVE DESTINATION lib
