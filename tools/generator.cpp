@@ -41,6 +41,8 @@ struct field
 	
 	std::string flag;
 
+	uint32_t line_number;
+
 	std::string getBaseType()
 	{
 		if (type == "int64")
@@ -88,7 +90,7 @@ struct field
 		{
 			return "double";
 		}
-		printf("%s:0 ERROR: invalid type '%s' for field '%s'\n", _current_file.c_str(), type.c_str(), name.c_str());
+		printf("%s:%i ERROR: invalid type '%s' for field '%s'\n", _current_file.c_str(), line_number, type.c_str(), name.c_str());
 		throw 7;
 		return "invalid";
 	}
@@ -102,7 +104,7 @@ struct field
 		if (flag == "")
 			return "FF_NONE";
 		
-		printf("%s:0 ERROR: Invalid flag '%s' for field '%s'\n", _current_file.c_str(), flag.c_str(), name.c_str());
+		printf("%s:%i ERROR: Invalid flag '%s' for field '%s'\n", _current_file.c_str(), line_number, flag.c_str(), name.c_str());
 		throw 7;
 		return "invalid";
 	}
@@ -154,7 +156,7 @@ struct field
 		{
 			return "FT_Float64";
 		}
-		printf("%s:0 ERROR: Invalid type '%s' for field '%s'\n", _current_file.c_str(), type.c_str(), name.c_str());
+		printf("%s:%i ERROR: Invalid type '%s' for field '%s'\n", _current_file.c_str(), line_number, type.c_str(), name.c_str());
 		throw 7;
 		return "invalid";
 	}
@@ -263,7 +265,7 @@ std::string generate(const char* definition, const char* name)
 	auto lines = split(cleaned.c_str(), '\n');
 
 	// now lets remove comments from lines so we can generate a hash from it
-	// todo, also remove extra spacing
+	// todo, also remove extra spacing so it doesn't effect hash
 	for (auto& line : lines)
 	{
 		// go through and remove everything after a #
@@ -289,17 +291,19 @@ std::string generate(const char* definition, const char* name)
 		line = cp;
 	}
 
-	// also generate the has while we are at it
+	// also generate the hash while we are at it
 	uint32_t hash = 0;
+	uint32_t line_number = 0;
 	for (auto& line : lines)
 	{
+		line_number++;
 		for (unsigned int i = 0; i < line.length(); i++)
 		{
 			hash *= std::abs(line[i]);
 			hash += i;
 		}
 
-		//okay so each of these should contain a type, then a field
+		// okay so each of these should contain a type, then a field
 		// todo refactor me to actually tokenize
 		bool has_equal = (line.find('=') != std::string::npos);
 		auto words = split(line, ' ');
@@ -325,7 +329,7 @@ std::string generate(const char* definition, const char* name)
 				name = name.substr(0, index);
 			}
 			// also fill in array size
-			fields.push_back({ name, type, size});
+			fields.push_back({ name, type, size, "", line_number });
 		}
 		// a line with flags maybe?
 		else if (words.size() == 3 && !has_equal)
@@ -347,7 +351,7 @@ std::string generate(const char* definition, const char* name)
 				name = name.substr(0, index);
 			}
 			// also fill in array size
-			fields.push_back({ name, type, size, flag});
+			fields.push_back({ name, type, size, flag, line_number});
 		}
 		else
 		{
@@ -364,7 +368,8 @@ std::string generate(const char* definition, const char* name)
 			}
 			else
 			{
-				printf("WARNING: Unexpectedly formatted line in message.\n");
+				printf("%s:%i ERROR: Invalid syntax. Expected either a name or a value.\n", _current_file.c_str(), line_number);
+				throw 7;
 			}
 		}
 	}
@@ -892,6 +897,11 @@ int main(int num_args, char** args)
 			// write it back to file
 			std::string out_name = args[i+2];
 			std::ofstream o(out_name, std::ios::binary);
+			if (o.is_open() == false)
+			{
+				printf("Failed to create output file %s\n", out_name.c_str());
+				return -1;
+			}
 			o << output;
 		}
 		catch (int ex)
