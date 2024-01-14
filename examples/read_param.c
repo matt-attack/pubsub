@@ -61,7 +61,7 @@ static double param_internal_callback(const char* name, double value, void* data
 void ps_create_parameters(struct ps_node_t* node, struct parameters* params_out, ps_param_fancy_cb_t callback, void* data)
 {
   node->param_cb = param_internal_callback;
-  node->param_cb_data = (void*)&params_out;
+  node->param_cb_data = (void*)params_out;
   params_out->callback = callback;
   params_out->cb_data = data;
   params_out->msg.name_length = 0;
