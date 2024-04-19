@@ -14,7 +14,7 @@ PATH_XYZ=1
 PATH_XY_Y=2
 PATH_XYZ_Y=3
 PATH_XYZ_YPR=4
-uint8 path_type
+enum uint8 path_type
 
 # Points of the path
 double points[]

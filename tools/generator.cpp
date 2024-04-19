@@ -29,13 +29,22 @@ struct enumeration
 	int field_num;
 };
 
+struct Type
+{
+	std::string name;
+	std::string base_type;
+	std::string type_enum;
+	// if zero size, a basic type
+	std::vector<std::pair<Type*, std::string>> fields;
+};
+
 // stupid hack
 static std::string _current_file;
 
 struct field
 {
 	std::string name;
-	std::string type;
+	Type* type;
 
 	int array_size;
 	
@@ -45,54 +54,7 @@ struct field
 
 	std::string getBaseType()
 	{
-		if (type == "int64")
-		{
-			return "int64_t";
-		}
-		if (type == "int32")
-		{
-			return "int32_t";
-		}
-		if (type == "int16")
-		{
-			return "int16_t";
-		}
-		if (type == "int8")
-		{
-			return "int8_t";
-		}
-		if (type == "uint64")
-		{
-			return "uint64_t";
-		}
-		if (type == "uint32")
-		{
-			return "uint32_t";
-		}
-		if (type == "uint16")
-		{
-			return "uint16_t";
-		}
-		if (type == "uint8")
-		{
-			return "uint8_t";
-		}
-		if (type == "string")
-		{
-			// probably should revamp this later
-			return "char*";
-		}
-		if (type == "float")
-		{
-			return "float";
-		}
-		if (type == "double")
-		{
-			return "double";
-		}
-		printf("%s:%i ERROR: invalid type '%s' for field '%s'\n", _current_file.c_str(), line_number, type.c_str(), name.c_str());
-		throw 7;
-		return "invalid";
+		return type->base_type;
 	}
 	
 	std::string getFlags()
@@ -111,59 +73,12 @@ struct field
 
 	std::string getTypeEnum()
 	{
-		if (type == "int64")
-		{
-			return "FT_Int64";
-		}
-		if (type == "int32")
-		{
-			return "FT_Int32";
-		}
-		if (type == "int16")
-		{
-			return "FT_Int16";
-		}
-		if (type == "int8")
-		{
-			return "FT_Int8";
-		}
-		if (type == "uint64")
-		{
-			return "FT_UInt64";
-		}
-		if (type == "uint32")
-		{
-			return "FT_UInt32";
-		}
-		if (type == "uint16")
-		{
-			return "FT_UInt16";
-		}
-		if (type == "uint8")
-		{
-			return "FT_UInt8";
-		}
-		if (type == "string")
-		{
-			// probably should revamp this later
-			return "FT_String";
-		}
-		if (type == "float")
-		{
-			return "FT_Float32";
-		}
-		if (type == "double")
-		{
-			return "FT_Float64";
-		}
-		printf("%s:%i ERROR: Invalid type '%s' for field '%s'\n", _current_file.c_str(), line_number, type.c_str(), name.c_str());
-		throw 7;
-		return "invalid";
+		return type->type_enum;
 	}
 	
 	void GenerateFree(std::string& output)
 	{
-		if (type == "string" && array_size != 1)
+		if (type->name == "string" && array_size != 1)
 		{
 			if (array_size == 0)
 			{
@@ -178,7 +93,7 @@ struct field
 			output += "    }\n";
 		}
 		
-		if (type == "string" || array_size != 1)
+		if (type->name == "string" || array_size != 1)
 		{
 			output += "    if (this->" + name + ")\n";
 			output += "      free(this->" + name + ");\n";
@@ -187,7 +102,7 @@ struct field
 	
 	void GenerateCopy(std::string& output, const std::string& source)
 	{
-		if (type == "string")
+		if (type->name == "string")
 		{
 			if (array_size == 1)
 			{
@@ -291,6 +206,22 @@ std::string generate(const char* definition, const char* name)
 		line = cp;
 	}
 
+	// A table of supported types and their information
+	Type* current_struct = 0;
+	std::map<std::string, Type*> types;// todo fix this memory leak
+
+	// add default types
+	auto string_type = new Type{"string", "char*", "FT_String", {}};
+	types["string"] = string_type;
+	types["uint32"] = new Type{"uint32", "uint32_t", "FT_UInt32", {}};
+	types["int32"] = new Type{"int32", "int32_t", "FT_Int32", {}};
+	types["uint16"] = new Type{"uint16", "uint16_t", "FT_UInt16", {}};
+	types["int16"] = new Type{"int16", "int16_t", "FT_Int16", {}};
+	types["uint8"] = new Type{"uint8", "uint8_t", "FT_UInt8", {}};
+	types["int8"] = new Type{"int8", "int8_t", "FT_Int8", {}};
+	types["float"] = new Type{"float", "float", "FT_Float32", {}};
+	types["double"] = new Type{"double", "double", "FT_Float64", {}};
+
 	// also generate the hash while we are at it
 	uint32_t hash = 0;
 	uint32_t line_number = 0;
@@ -311,6 +242,19 @@ std::string generate(const char* definition, const char* name)
 		{
 			continue;
 		}
+		else if (words.size() == 1 && words[0] == "end_struct")
+		{
+			if (current_struct)
+			{
+				types[current_struct->name] = current_struct;
+				current_struct = 0;
+			}
+			else
+			{
+				printf("%s:%i ERROR: Invalid syntax. Unexpected end_struct without a start.\n", _current_file.c_str(), line_number);
+				throw 7;
+			}			
+		}
 		else if (words.size() == 2 && !has_equal)
 		{
 			std::string name = words[1];
@@ -328,8 +272,50 @@ std::string generate(const char* definition, const char* name)
 				size = std::stoi(name.substr(index + 1));
 				name = name.substr(0, index);
 			}
+
+			if (type == "struct")
+			{
+				if (current_struct)
+				{
+					printf("%s:%i ERROR: Invalid syntax. Cannot have a struct inside of a struct.\n", _current_file.c_str(), line_number);
+					throw 7;
+				}
+
+				// make sure no type with this name exists
+				if (types.find(name) != types.end())
+				{
+					printf("%s:%i ERROR: A type with the name '%s' already exists.\n", _current_file.c_str(), line_number, name.c_str());
+					throw 7;
+				}
+
+				current_struct = new Type();
+				current_struct->name = name;
+				current_struct->base_type = name;
+				current_struct->type_enum = "FT_Struct";
+				continue;
+			}
+
+			// lookup the type
+			Type* real_type = 0;
+			auto res = types.find(type);
+			if (res != types.end())
+			{
+				real_type = res->second;
+			}
+			else
+			{
+				printf("%s:%i ERROR: Invalid type '%s'\n", _current_file.c_str(), line_number, type.c_str());
+				throw 7;
+			}
+			
+			if (current_struct)
+			{
+				// this belongs in the struct
+				current_struct->fields.push_back({real_type, name});
+				continue;
+			}
 			// also fill in array size
-			fields.push_back({ name, type, size, "", line_number });
+			fields.push_back({ name, real_type, size, "", line_number });
 		}
 		// a line with flags maybe?
 		else if (words.size() == 3 && !has_equal)
@@ -350,8 +336,22 @@ std::string generate(const char* definition, const char* name)
 				size = std::stoi(name.substr(index + 1));
 				name = name.substr(0, index);
 			}
+
+			// lookup the type
+			Type* real_type = 0;
+			auto res = types.find(type);
+			if (res != types.end())
+			{
+				real_type = res->second;
+			}
+			else
+			{
+				printf("%s:%i ERROR: Invalid type '%s'\n", _current_file.c_str(), line_number, type.c_str());
+				throw 7;
+			}
+
 			// also fill in array size
-			fields.push_back({ name, type, size, flag, line_number});
+			fields.push_back({ name, real_type, size, flag, line_number});
 		}
 		else
 		{
@@ -372,11 +372,6 @@ std::string generate(const char* definition, const char* name)
 				throw 7;
 			}
 		}
-	}
-
-	for (auto field : fields)
-	{
-		//printf("Got field '%s' of type %s\n", field.name.c_str(), field.type.c_str());
 	}
 
 	std::string raw_name = split(name, '_').back();
@@ -407,6 +402,39 @@ std::string generate(const char* definition, const char* name)
 
 	// now that we have these, generate stuff!, start with the struct
 	output += "#pragma pack(push, 1)\n";
+
+	// first generate any internal structs
+	for (auto& type: types)
+	{
+		if (type.second->type_enum != "FT_Struct")
+		{
+			continue;
+		}
+
+		std::string struct_name = type_name + "_" + type.second->name;
+		type.second->base_type = struct_name;
+		output += "struct " + struct_name + "\n{\n";
+		for (auto& field: type.second->fields)
+		{
+			// dont allow strings yet
+			if (field.first->base_type == "char*")
+			{
+				printf("%s:%i ERROR: Strings not yet allowed in structs.\n", _current_file.c_str(), line_number);
+				throw 7;
+			}
+
+			if (field.first->type_enum == "FT_Struct")
+			{
+				printf("%s:%i ERROR: Structs not yet allowed in structs.\n", _current_file.c_str(), line_number);
+				throw 7;
+			}
+
+			output += "  " + field.first->base_type + " " + field.second + ";\n";
+		}
+		output += "};\n\n";
+	}
+
+	// finally generate our own struct
 	output += "struct " + type_name + "\n{\n";
 	for (auto& field : fields)
 	{
@@ -435,8 +463,25 @@ std::string generate(const char* definition, const char* name)
 	output += "struct ps_msg_field_t " + type_name + "_fields[] = {\n";
 	for (auto& field : fields)
 	{
-		output += "  { " + field.getTypeEnum() + ", " + field.getFlags() + ", \"" + field.name + "\", ";
-		output += std::to_string(field.array_size) + ", 0 }, \n";// todo use for array types
+		if (field.getTypeEnum() == "FT_Struct")
+		{
+			// struct
+			auto& members = field.type->fields;
+			output += "  { " + field.getTypeEnum() + ", " + field.getFlags() + ", \"" + field.name + "\", ";
+			output += std::to_string(field.array_size) + ", " + std::to_string(members.size()) + " }, \n";// todo use for array types
+
+			// now add struct fields
+			for (auto& m : members)
+			{
+				output += "  { " + m.first->type_enum + ", " + "FF_NONE" + ", \"" + m.second + "\", ";
+				output += std::to_string(1) + ", 0 }, \n";// todo support array members
+			}
+		}
+		else
+		{
+			output += "  { " + field.getTypeEnum() + ", " + field.getFlags() + ", \"" + field.name + "\", ";
+			output += std::to_string(field.array_size) + ", 0 }, \n";// todo use for array types
+		}
 	}
 	output += "};\n\n";
 	
@@ -474,7 +519,7 @@ std::string generate(const char* definition, const char* name)
 	// determine if we are a pure structure (nothing dynamic)
 	for (auto& field : fields)
 	{
-		if (field.type == "string")
+		if (field.type == string_type)
 		{
 			is_pure = false;
 			break;
@@ -513,7 +558,7 @@ std::string generate(const char* definition, const char* name)
 		// for now lets just decode non strings
 		for (size_t i = 0; i < fields.size(); i++)
 		{
-			if (fields[i].type == "string")
+			if (fields[i].type == string_type)
 			{
 				if (fields[i].array_size == 1)
 				{
@@ -587,7 +632,7 @@ std::string generate(const char* definition, const char* name)
 		int n_arr = 0;
 		for (size_t i = 0; i < fields.size(); i++)
 		{
-			if (fields[i].type == "string")
+			if (fields[i].type == string_type)
 			{
 				if (fields[i].array_size == 1)
 				{
@@ -626,7 +671,7 @@ std::string generate(const char* definition, const char* name)
 		output += "  char* start = (char*)ps_get_msg_start(omsg.data);\n";
 		for (size_t i = 0; i < fields.size(); i++)
 		{
-			if (fields[i].type == "string")
+			if (fields[i].type == string_type)
 			{
 				if (fields[i].array_size == 1)
 				{
@@ -686,6 +731,10 @@ std::string generate(const char* definition, const char* name)
 
 	// generate the actual message definition
 	int field_count = fields.size();
+	for (auto& f: fields)
+	{
+		field_count += f.type->fields.size();
+	}
 	output += "struct ps_message_definition_t " + type_name + "_def = { ";
 	if (enumerations.size() == 0)
 	{
@@ -698,6 +747,9 @@ std::string generate(const char* definition, const char* name)
 
 	output += "\n#ifdef __cplusplus\n";
 	output += "#include <memory>\n";
+	output += "#include <string>\n";
+	output += "#include <vector>\n";
+	output += "#include <pubsub_cpp/array_vector.h>\n";
 	output += "namespace " + ns + "\n{\n";
     output += "namespace msg\n{\n";
 	output += "struct " + raw_name + ": public " + type_name + "\n{\n";
@@ -726,7 +778,7 @@ std::string generate(const char* definition, const char* name)
 	bool needs_destructor = false;
 	for (int i = 0; i < fields.size(); i++)
 	{
-		if (fields[i].type == "string" || fields[i].array_size == 0)
+		if (fields[i].type == string_type || fields[i].array_size == 0)
 		{
 			needs_destructor = true;
 		}
@@ -766,7 +818,7 @@ std::string generate(const char* definition, const char* name)
 		output += "  " + raw_name + "()\n  {\n";
 		for (size_t i = 0; i < fields.size(); i++)
 		{
-			if (fields[i].type == "string")
+			if (fields[i].type == string_type)
 			{
 				output += "    " + fields[i].name + " = 0;\n";
 				if (fields[i].array_size == 0)
@@ -790,6 +842,63 @@ std::string generate(const char* definition, const char* name)
 	output += "    return (" + raw_name + "*)" + ns + "__" + raw_name + "_decode(data, &ps_default_allocator);\n  }\n";// + ns + "__" + raw_name + "_encode(0, this);\n  }\n";
 	output += "};\n";
 	output += "typedef std::shared_ptr<" + raw_name + "> " + raw_name + "SharedPtr;\n";
+
+	output += "struct " + raw_name + "CPP" + "\n{\n";
+	for (auto f: fields)
+	{
+		std::string type = f.type == string_type ? "std::string" : f.getBaseType();
+		if (f.array_size == 1)
+		{
+			output += "  " + type + " " + f.name + ";\n";
+		}
+		else if (f.array_size == 0)
+		{
+			output += "  ArrayVector<" + type + "> " + f.name + ";\n";
+		}
+		else
+		{
+			output += "  " + type + " " + f.name + "["+std::to_string(f.array_size) + "];\n";
+		}
+	}
+	output += "\n  " + type_name + " ToMsg()\n  {\n";
+	output += "    " + type_name + " o;\n";
+	for (auto f: fields)
+	{
+		if (f.array_size == 1)
+		{
+			if (f.type == string_type)
+			{
+				output += "    o." + f.name + " = (char*)" + f.name + ".c_str();\n";
+			}
+			else
+			{
+				output += "    o." + f.name + " = " + f.name + ";\n";
+			}
+		}
+		else if (f.array_size == 0)
+		{
+			// hmm, this fails for string arrays...
+			if (f.type == string_type)
+			{
+				continue;// todo fix
+			}
+			output += "    o." + f.name + " = " + f.name + ".data();\n";
+			output += "    o." + f.name + "_length = " + f.name + ".size();\n";
+			output += "    \n";
+		}
+		else
+		{
+			// todo
+			output += "    memcpy(o." + f.name + ", " + f.name + ", sizeof(" + f.getBaseType() + ")*" + std::to_string(f.array_size) + ");\n";
+			//output += "    o." + f.name + " = " + f.name + ";\n";
+			output += "    \n";
+		}
+	}
+	output += "    return o;\n";
+	output += "  }\n";
+	output += "};\n";
+
+	
 	output += "}\n";
 	output += "}\n";
 	// add any enumerations for C
