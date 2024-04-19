@@ -36,9 +36,9 @@
 //   gcc -Ipath/to/mini_mock/folder -E -CC path/to/my_test.cpp
 
 
-#if(__cplusplus<201103)
-#warning "C++ >= 11 is required to use std::function and std::deque"
-#endif
+//#if(__cplusplus<201103)
+//#warning "C++ >= 11 is required to use std::function and std::deque"
+//#endif
 
 #include <string>
 #include <cmath>
