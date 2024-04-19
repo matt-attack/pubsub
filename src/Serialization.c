@@ -175,7 +175,7 @@ void ps_free_message_definition(struct ps_message_definition_t * definition)
 	free(definition->enums);
 }
 
-inline int GetFieldSize(int type)
+static int GetFieldSize(int type)
 {
 	int field_size = 0;
 	if (type == FT_Int8 || type == FT_UInt8)
