@@ -175,6 +175,28 @@ void ps_free_message_definition(struct ps_message_definition_t * definition)
 	free(definition->enums);
 }
 
+inline int GetFieldSize(int type)
+{
+	int field_size = 0;
+	if (type == FT_Int8 || type == FT_UInt8)
+	{
+		field_size = 1;
+	}
+	else if (type == FT_Int16 || type == FT_UInt16)
+	{
+		field_size = 2;
+	}
+	else if (type == FT_Int32 || type == FT_UInt32 || type == FT_Float32)
+	{
+		field_size = 4;
+	}
+	else if (type == FT_Int64 || type == FT_UInt64 || type == FT_Float64)
+	{
+		field_size = 8;
+	}
+	return field_size;
+}
+
 struct ps_deserialize_iterator ps_deserialize_start(const char* msg, const struct ps_message_definition_t* definition)
 {
 	struct ps_deserialize_iterator iter;
@@ -226,31 +248,42 @@ const char* ps_deserialize_iterate(struct ps_deserialize_iterator* iter, const s
 			}
 		}
 	}
-	else if (field->type == FT_Array)
+	else if (field->type == FT_Struct)
 	{
+		// lets just treat this as a normal element, and leave it to the iterator to handle this
 		// iterate again, todo show this recursion somehow in the iter
 		// okay, lets just not allow struct arrays in arrays for now?
 		// TODO, i dont think this is even implemented in code gen
+		
+		// calculate element *width*
+		uint32_t width = 0;
+		for (int i = 0; i < field->content_length; i++)
+		{
+			const struct ps_msg_field_t* member = &iter->fields[iter->next_field_index++];
+			width += GetFieldSize(member->type);
+		}
+
+		iter->struct_num_fields = field->content_length;
+
+		if (field->length > 0)
+		{
+			// fixed array
+			iter->next_position += width*field->length;
+			*l = field->length;
+		}
+		else
+		{
+			// dynamic array
+			uint32_t length = *(uint32_t*)position;
+			iter->next_position += 4;
+			*l = length;
+			position += 4;// skip over the length for the end user
+			iter->next_position += length*width;
+		}
 	}
 	else
 	{
-		int field_size = 0;
-		if (field->type == FT_Int8 || field->type == FT_UInt8)
-		{
-			field_size = 1;
-		}
-		else if (field->type == FT_Int16 || field->type == FT_UInt16)
-		{
-			field_size = 2;
-		}
-		else if (field->type == FT_Int32 || field->type == FT_UInt32 || field->type == FT_Float32)
-		{
-			field_size = 4;
-		}
-		else if (field->type == FT_Int64 || field->type == FT_UInt64 || field->type == FT_Float64)
-		{
-			field_size = 8;
-		}
+		int field_size = GetFieldSize(field->type);
 		
 		// now handle length
 		if (field->length > 0)
@@ -269,6 +302,66 @@ const char* ps_deserialize_iterate(struct ps_deserialize_iterator* iter, const s
 		}
 	}
 	return position;
+}
+
+static uint64_t print_field(int type, const char** ptr)
+{
+	uint64_t value = 0;
+				// non dynamic types 
+				switch (type)
+				{
+				case FT_Int8:
+					printf("%i", (int)*(int8_t*)*ptr);
+					value = (uint64_t)*(int8_t*)*ptr;
+					*ptr += 1;
+					break;
+				case FT_Int16:
+					printf("%i", (int)*(int16_t*)*ptr);
+					value = (uint64_t)*(int16_t*)*ptr;
+					*ptr += 2;
+					break;
+				case FT_Int32:
+					printf("%i", (int)*(int32_t*)*ptr);
+					value = (uint64_t)*(int32_t*)*ptr;
+					*ptr += 4;
+					break;
+				case FT_Int64:
+					printf("%" PRId64 "", *(int64_t*)*ptr);
+					value = (uint64_t)*(int64_t*)*ptr;
+					*ptr += 8;
+					break;
+				case FT_UInt8:
+					printf("%i", (int)*(uint8_t*)*ptr);
+					value = (uint64_t)*(uint8_t*)*ptr;
+					*ptr += 1;
+					break;
+				case FT_UInt16:
+					printf("%i", (int)*(uint16_t*)*ptr);
+					value = (uint64_t)*(uint16_t*)*ptr;
+					*ptr += 2;
+					break;
+				case FT_UInt32:
+					printf("%i", *(uint32_t*)*ptr);
+					value = (uint64_t)*(uint32_t*)*ptr;
+					*ptr += 4;
+					break;
+				case FT_UInt64:
+					printf("%" PRIu64 "", *(uint64_t*)*ptr);
+					value = (uint64_t)*(uint64_t*)*ptr;
+					*ptr += 8;
+					break;
+				case FT_Float32:
+					printf("%f", *(float*)*ptr);
+					*ptr += 4;
+					break;
+				case FT_Float64:
+					printf("%lf", *(double*)*ptr);
+					*ptr += 8;
+					break;
+				default:
+					printf("ERROR: unhandled field type when parsing....\n");
+				}
+	return value;
 }
 
 void ps_deserialize_print(const void * data, const struct ps_message_definition_t* definition, unsigned int max_array_size, const char* field_name)
@@ -308,6 +401,44 @@ void ps_deserialize_print(const void * data, const struct ps_message_definition_
 				printf("]\n");
 			}
 		}
+		else if (field->type == FT_Struct)
+		{
+			if (length == 1)
+			{
+				printf("%s:", field->name);
+			}
+			else
+			{
+				printf("%s: [", field->name);
+			}
+
+			if (length > max_array_size && max_array_size != 0)
+			{
+				printf("%i elements hidden...]\n", length);
+				continue;
+			}
+
+			for (int i = 0; i < length; i++)
+			{
+				printf(" { ");
+				for (int f = 0; f < iter.struct_num_fields; f++)
+				{
+					printf("%s: ", (field+1+f)->name);
+					print_field((field+1+f)->type, &ptr);
+					printf(" ");
+				}
+				printf(" }");
+			}
+
+			if (field->length != 1)
+			{
+				printf(" ]\n");
+			}
+			else
+			{
+				printf("\n");
+			}
+		}
 		else
 		{
 			if (field->length == 1)
@@ -327,66 +458,13 @@ void ps_deserialize_print(const void * data, const struct ps_message_definition_
 			if (length > max_array_size && max_array_size != 0)
 			{
 				printf("%i elements hidden...]\n", length);
-				length = 0;
+				continue;
 			}
 
 			for (unsigned int i = 0; i < length; i++)
 			{
 				uint64_t value = 0;
-				// non dynamic types 
-				switch (field->type)
-				{
-				case FT_Int8:
-					printf("%i", (int)*(int8_t*)ptr);
-					value = (uint64_t)*(int8_t*)ptr;
-					ptr += 1;
-					break;
-				case FT_Int16:
-					printf("%i", (int)*(int16_t*)ptr);
-					value = (uint64_t)*(int16_t*)ptr;
-					ptr += 2;
-					break;
-				case FT_Int32:
-					printf("%i", (int)*(int32_t*)ptr);
-					value = (uint64_t)*(int32_t*)ptr;
-					ptr += 4;
-					break;
-				case FT_Int64:
-					printf("%" PRId64 "", *(int64_t*)ptr);
-					value = (uint64_t)*(int64_t*)ptr;
-					ptr += 8;
-					break;
-				case FT_UInt8:
-					printf("%i", (int)*(uint8_t*)ptr);
-					value = (uint64_t)*(uint8_t*)ptr;
-					ptr += 1;
-					break;
-				case FT_UInt16:
-					printf("%i", (int)*(uint16_t*)ptr);
-					value = (uint64_t)*(uint16_t*)ptr;
-					ptr += 2;
-					break;
-				case FT_UInt32:
-					printf("%i", *(uint32_t*)ptr);
-					value = (uint64_t)*(uint32_t*)ptr;
-					ptr += 4;
-					break;
-				case FT_UInt64:
-					printf("%" PRIu64 "", *(uint64_t*)ptr);
-					value = (uint64_t)*(uint64_t*)ptr;
-					ptr += 8;
-					break;
-				case FT_Float32:
-					printf("%f", *(float*)ptr);
-					ptr += 4;
-					break;
-				case FT_Float64:
-					printf("%lf", *(double*)ptr);
-					ptr += 8;
-					break;
-				default:
-					printf("ERROR: unhandled field type when parsing....\n");
-				}
+				value = print_field(field->type, &ptr);
 				
 				if (field->flags > 0)
 				{

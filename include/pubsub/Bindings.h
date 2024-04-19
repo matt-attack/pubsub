@@ -15,6 +15,7 @@ EXPORT void ps_spin_node(int node);
 
 EXPORT void ps_destroy_node(int node);
 
+// the format will be "namehere;int32 field_one;float32 field_two;"
 EXPORT int ps_create_publisher(int node, const char* topic, const char* definition, bool latched);
 
 // publishes already encoded messages

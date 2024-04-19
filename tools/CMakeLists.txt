@@ -40,7 +40,7 @@ macro(generate_messages)
     set(MESSAGE_DEPS ${MESSAGE_DEPS} ${PROJECT_SOURCE_DIR}/${ARG_DIRECTORY}/../include/${PROJECT_NAME}/${_file}.h)
   endforeach()
 
-  add_custom_target(${ARG_TARGET}
+  add_custom_target(${ARG_TARGET} ALL
     DEPENDS ${MESSAGE_DEPS} 
   )
 endmacro()
@@ -58,6 +58,7 @@ generate_messages(FILES
   Path.msg
   Pose.msg
   GPS.msg
+  Path2D.msg
 )
 
 
@@ -71,11 +72,3 @@ add_executable(throughput_test "throughput_test.cpp")
 target_link_libraries(throughput_test pubsub pubsub_cpp)
 add_dependencies(throughput_test pubsub pubsub_cpp pubsub_msgs)
 set_property(TARGET throughput_test PROPERTY CXX_STANDARD 11)
-
-# TODO: Add tests and install targets if needed.
-
-install(TARGETS pubsub_msg_gen
-  ARCHIVE DESTINATION "s"
-  LIBRARY DESTINATION "s"
-  RUNTIME DESTINATION "s"
-)

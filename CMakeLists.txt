@@ -8,6 +8,8 @@ if(MSVC)
     add_definitions(-D_CRT_SECURE_NO_WARNINGS)
 endif()
 
+add_subdirectory("tests")
+
 # Include sub-projects with non-exported targets.
 add_subdirectory("tools")
 add_subdirectory("examples")

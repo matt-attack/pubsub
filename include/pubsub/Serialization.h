@@ -32,8 +32,7 @@ extern "C"
 		FT_Float64 = 10,
 		FT_MaxFloat,// all floats and ints are less than this, not present in messages
 		FT_String,
-		FT_Array, //indicates the number of fields following contained in it
-				  // recurses down if we hit another array type without advancing
+		FT_Struct,//indicates the number of fields following contained in it
 	};
 	typedef enum ps_field_types ps_field_types;
 
@@ -51,7 +50,7 @@ extern "C"
 		ps_field_flags flags;// packed in upper bits of type, but broken out here
 		const char* name;
 		unsigned int length;//length of the array, 0 if dynamic
-		unsigned short content_length;//number of fields inside this array
+		unsigned short content_length;//number of fields inside this struct
 	};
 	
 	struct ps_msg_enum_t
@@ -103,6 +102,8 @@ extern "C"
 	
 		int num_fields;
 		const struct ps_msg_field_t* fields;
+
+		int struct_num_fields;
 	};
 	
 	// Create an iteratator to iterate through the fields of a serialized message

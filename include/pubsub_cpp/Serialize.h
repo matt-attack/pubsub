@@ -99,7 +99,7 @@ ps_msg_t serialize_value(const Value& value, const ps_message_definition_t& defi
 			}
 			message_size += size * field.length;
 		}
-		else if (field.type == FT_Array)
+		else if (field.type == FT_Struct)
 		{
 			//unhandled for now
 			throw std::string("Unhandled field type");

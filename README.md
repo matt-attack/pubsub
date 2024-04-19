@@ -22,6 +22,12 @@ This helps facilitate code re-use by enabling you to write more modular code.
 
 As a bonus, this architecture can come in handy for debugging and visualization as it enables outside access to data flowing through your system.
 
+## Why not just use ROS?
+
+If you are in it for the ecosystem, definitely use ROS!
+
+If you just want something small with the same functionality as ROS and easily works on most platforms, this could be a good option!
+
 ## Features
 
 * Multicast or broadcast Publisher/Subscriber discovery
@@ -52,19 +58,19 @@ As a bonus, this architecture can come in handy for debugging and visualization 
 
 Anything with POSIX sockets
 - Windows
-- Linux
-- Arduino (ESP32 tested)
+- Linux (tested on Ubuntu variants)
+- Arduino (tested on ESP32)
 
 ## Dependencies
 
 A POSIX networking stack and the C or C++ standard library.
 
-## Build and Install Instructions
+## Install and Build Instructions
 
 These instructions work on both Windows and Linux as long as you have git installed
 
 ```bash
-# Like not necessary if you've done stuff like this before, not necessary (or possible) on Windows
+# Likely not necessary if you've done stuff like this before, not necessary (or possible) on Windows
 sudo apt-get install build-essential git
 
 # Clone the repository and change directory into it
