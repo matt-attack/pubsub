@@ -549,6 +549,8 @@ const char* TypeToString(ps_field_types type)
 		// statements executed if the expression equals the
 		// value of this constant_expression
 		return "string";
+	case FT_Struct:
+		return "struct";
 	default:
 		return "Unknown Type";
 	}
@@ -556,10 +558,11 @@ const char* TypeToString(ps_field_types type)
 
 void ps_print_definition(const struct ps_message_definition_t* definition, bool print_name)
 {
-    if (print_name)
-    {
-	    printf("%s\n\n", definition->name);
-    }
+	if (print_name)
+	{
+		printf("%s\n\n", definition->name);
+	}
+	int end_tab = 0;
 	for (unsigned int i = 0; i < definition->num_fields; i++)
 	{
 		//print out any relevant enums
@@ -581,17 +584,23 @@ void ps_print_definition(const struct ps_message_definition_t* definition, bool 
 		{
 			printf("bitmask ");
 		}
+		const char* tab = i < end_tab ? "  " : "";
 		if (definition->fields[i].length > 1)
 		{
-			printf("%s %s[%i]\n", TypeToString(definition->fields[i].type), definition->fields[i].name, definition->fields[i].length);
+			printf("%s%s %s[%i]\n", tab, TypeToString(definition->fields[i].type), definition->fields[i].name, definition->fields[i].length);
 		}
 		else if (definition->fields[i].length == 0)
 		{
-			printf("%s[] %s\n", TypeToString(definition->fields[i].type), definition->fields[i].name);// dynamic array
+			printf("%s%s[] %s\n", tab, TypeToString(definition->fields[i].type), definition->fields[i].name);// dynamic array
 		}
 		else
 		{
-			printf("%s %s\n", TypeToString(definition->fields[i].type), definition->fields[i].name);
+			printf("%s%s %s\n", tab, TypeToString(definition->fields[i].type), definition->fields[i].name);
+		}
+
+		if (definition->fields[i].type == FT_Struct)
+		{
+			end_tab = i + 1 + definition->fields[i].content_length;
 		}
 	}
 }

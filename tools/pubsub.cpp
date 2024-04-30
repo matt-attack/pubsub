@@ -158,12 +158,12 @@ int topic_show(int num_args, char** args, ps_node_t* node)
   bool got_data = false;
   while (ps_okay())
   {
-    ps_node_wait(node, 1000);
+    ps_node_wait(node, 100);
     ps_node_spin(node);
 
     // spin until we get the topic
     auto info = _topics.find(topic);
-    if (!got_data && info != _topics.end())
+    if (!got_data && info != _topics.end() && info->second.type.length())
     {
       std::cout << "Topic " << topic << " found!\n";
       //std::cout << info->first.c_str() << " " << info->second.type.c_str();
@@ -365,7 +365,7 @@ int topic_pub(int num_args, char** args, ps_node_t* node)
 {
   pubsub::ArgParser parser;
   parser.AddMulti({ "r", "rate" }, "Publish rate in Hz.", "1.0");
-  parser.AddMulti({ "l", "latch" }, "Latches the topic.", "true");
+  parser.AddMulti({ "l", "latch" }, "Latches the topic.");
   parser.SetUsage("Usage: info topic pub TOPIC MESSAGE\n\nPublishes a particular topic.");
   parser.Parse(args, num_args, 2);
 
@@ -388,16 +388,18 @@ int topic_pub(int num_args, char** args, ps_node_t* node)
   // subscribe to the topic and publish anything we get
   bool got_data = false;
   bool got_message = false;
+  bool published = false;
+
   while (ps_okay())
   {
+    ps_node_wait(node, 1000);
     ps_node_spin(node);
 
     // spin until we get the topic
     auto info = _topics.find(topic);
-    if (!got_data && info != _topics.end())
+    if (!got_data && info != _topics.end() && info->second.type.length())
     {
-      std::cout << "Topic " << topic << " found!\n";
-      std::cout << "Type: " << " " << info->second.type.c_str() << "\n";
+      std::cout << "Topic " << topic << " of type " << info->second.type << " found!\n";
       got_data = true;
 
       //get the message definition from it
@@ -438,9 +440,11 @@ int topic_pub(int num_args, char** args, ps_node_t* node)
       }
       catch (std::string error)
       {
-        printf("Failure parsing message value: %s", error.c_str());
+        printf("Failure parsing message value: %s\n", error.c_str());
         return -1;
       }
+
+      //out.Print();
 
       try
       {
@@ -448,16 +452,39 @@ int topic_pub(int num_args, char** args, ps_node_t* node)
       }
       catch (std::string error)
       {
-        printf("Serializing failed: %s", error.c_str());
+        printf("Serializing failed: %s\n", error.c_str());
         return -1;
       }
-    }
 
-    //publish
-    // copy the message
-    ps_msg_t cpy = ps_msg_cpy(&msg);
-    ps_pub_publish(&pub, &cpy);
-    ps_sleep(1000.0 / rate);
+      // do initial publish
+      ps_msg_t cpy = ps_msg_cpy(&msg);
+      ps_pub_publish(&pub, &cpy);
+      break;
+    }
+  }
+
+  // if rate is set to zero, just wait
+  while (ps_okay() && rate == 0.0)
+  {
+    ps_node_wait(node, 1000);
+    ps_node_spin(node);
+  }
+
+  // otherwise publish at that interval
+  pubsub::Time next = pubsub::Time::now() + pubsub::Duration(1.0/rate);
+  while (ps_okay())
+  {
+    // publish loop
+    auto remaining = next - pubsub::Time::now();
+    int wait = std::max(1.0, remaining.toSec()*1000.0);
+    ps_node_wait(node, wait);
+    ps_node_spin(node);
+    if (rate != 0 && remaining < pubsub::Duration(0.0))
+    {
+      ps_msg_t cpy = ps_msg_cpy(&msg);
+      ps_pub_publish(&pub, &cpy);
+      next = next + pubsub::Duration(1.0/rate);
+    }
   }
 
   ps_node_destroy(node);
@@ -721,6 +748,10 @@ int main(int num_args_real, char** args)
           return;
       }
       t.subscribers.push_back(node);
+      if (t.type.length() == 0)
+      {
+        t.type = type;
+      }
     }
     //printf("Get sub %s type %s node %s\n", topic, type, node);
     return;
@@ -786,6 +817,12 @@ int main(int num_args_real, char** args)
 
       std::deque<std::pair<pubsub::Time, unsigned int>> message_times;
       static size_t window = parser.GetDouble("w");
+      if (window <= 1)
+      {
+        printf("Error: Window must be set to at least 2.\n");
+        exit(2);
+      }
+
       // subscribe to the topic
       while (ps_okay())
       {

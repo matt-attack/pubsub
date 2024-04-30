@@ -157,7 +157,37 @@ void remove_client_socket(struct ps_tcp_transport_impl* transport, int socket, s
   free(old_clients);
 }
 
-void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* node)
+void ps_tcp_remove_connection(struct ps_tcp_transport_impl* impl, int index)
+{
+    // Free our subscribers and any buffers
+    int iter = 0;
+    int new_size = impl->num_connections - 1;
+    struct ps_tcp_transport_connection* new_connections = new_size == 0 ? 0 : (struct ps_tcp_transport_connection*)malloc(sizeof(struct ps_tcp_transport_connection) * new_size);
+    for (int i = 0; i < impl->num_connections; i++)
+    {
+      if (i != index)
+      {
+        new_connections[iter++] = impl->connections[i];
+        continue;
+      }
+
+      if (!impl->connections[i].waiting_for_header)
+      {
+        free(impl->connections[i].packet_data);
+      }
+      ps_event_set_remove_socket(&impl->node->events, impl->connections[i].socket);
+#ifdef _WIN32
+      closesocket(impl->connections[i].socket);
+#else
+      close(impl->connections[i].socket);
+#endif
+    }
+    impl->num_connections = new_size;
+    free(impl->connections);
+    impl->connections = new_connections;
+}
+
+int ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* node)
 {
   struct ps_tcp_transport_impl* impl = (struct ps_tcp_transport_impl*)transport->impl;
   int socket = accept(impl->socket, 0, 0);
@@ -392,6 +422,7 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
     }
   }
 
+  int message_count = 0;
   for (int i = 0; i < impl->num_connections; i++)
   {
     struct ps_tcp_transport_connection* connection = &impl->connections[i];
@@ -443,7 +474,15 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
     {
       const int header_size = 5;
       int len = recv(connection->socket, buf, header_size, MSG_PEEK);
-      if (len < header_size)
+      //printf("peek got: %i\n", len);
+      if (len == 0)
+      {
+        // we got disconnected
+        ps_tcp_remove_connection(impl, i);
+        i--;
+        continue;
+      }
+      else if (len < header_size)
       {
         continue;// no header yet
       }
@@ -466,7 +505,14 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
 
       // check for new messages and read until we hit packet size
       int len = recv(connection->socket, &connection->packet_data[connection->current_size], remaining_size, 0);
-      if (len > 0)
+      if (len == 0)
+      {
+        // we got disconnected
+        ps_tcp_remove_connection(impl, i);
+        i--;
+        continue;
+      }
+      else if (len > 0)
       {
         //printf("Read %i bytes of message\n", len);
         connection->current_size += len;
@@ -490,8 +536,6 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
             }
 
             free(connection->packet_data);
-            connection->waiting_for_header = true;
-            return;
           }
           else if (connection->packet_type == 0x2)
           {
@@ -519,6 +563,8 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
               out_data,
               connection->packet_size,
               &message_info);
+
+            message_count++;
           }
           else
           {
@@ -530,6 +576,7 @@ void ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* n
       }
     }
   }
+  return message_count;
 }
 
 void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* publisher, struct ps_client_t* client, const void* message, uint32_t length)

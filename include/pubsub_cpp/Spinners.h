@@ -40,17 +40,21 @@ public:
                     ps_node_wait(node_->getNode(), 1000);
 				}
 				node_->lock_.lock();
-				ps_node_spin(node_->getNode());
+				int res = 0;
+				if (res = ps_node_spin(node_->getNode()))
+				{
+                	//printf("Received %i messages\n", res);
+					// we got a message, now call a subscriber
+					for (size_t i = 0; i < node_->subscribers_.size(); i++)
+					{
+						// this doesnt ensure switching subs, but works
+						while (node_->subscribers_[i]->CallOne()) {};
+					}
+				}
+				//printf("loop\n");
 
 				// todo how to make this not scale with subscriber count...
-				// though, it isnt very important here
-				// its probably worth more effort just make it not run any of this if we get no messages
-				// we got a message, now call a subscriber
-				for (size_t i = 0; i < node_->subscribers_.size(); i++)
-				{
-					// this doesnt ensure switching subs, but works
-					while (node_->subscribers_[i]->CallOne()) {};
-				}
+				// though, it isnt very important here messages
 				node_->lock_.unlock();
 			}
 		});
@@ -160,7 +164,7 @@ public:
 				}
 				else
 				{
-					int timeout = 1000;
+					int timeout = 1000000;// in us
 					if (timers_.size())
 					{
 						// get time to neareast timer
@@ -174,17 +178,24 @@ public:
 							}
 						}
 						Duration delay = next - now;
-						timeout = std::max<int>(delay.usec / 1000, 1);
+						timeout = std::max<int>(delay.usec, 100);// 10khz is max rate
 						// todo there seems to be some kind of bug here that causes the timeout to be
 						// occasionally exceptionally long
 
 						// this line is necessary anyways, but happens to work around the above bug
-						timeout = std::min<int>(timeout, 1000);// make sure we dont block too long
+						timeout = std::min<int>(timeout, 1000000);// make sure we dont block too long
                         //printf("setting timeout to %i\n", timeout);
 					}
 					list_mutex_.unlock();
-                    ps_node_wait(node_->getNode(), timeout);
-					//ps_event_set_wait(&events_, timeout);
+                    //ps_node_wait(node_->getNode(), 0);
+					// todo allow finer grained waits
+					//if (timeout > 2)
+					{
+						// allows for fine grained waits
+                        ps_event_set_set_timer(&node_->getNode()->events, timeout);// in us
+						ps_node_wait(node_->getNode(), 1000);
+						//ps_event_set_wait(&events_, timeout);
+					}
 					list_mutex_.lock();
 				}
 
@@ -194,10 +205,8 @@ public:
 					Time now = Time::now();
 					if (now >= timer.next_trigger)
 					{
-						// so either trigger at least 2 ms from now or at the next desired time
-						// this makes sure we dont develop a backlog
                         //printf("Calling timer\n");
-						timer.next_trigger = std::max(now + Duration(0, 2000), timer.next_trigger + timer.period);
+						timer.next_trigger = timer.next_trigger + timer.period;
 						timer.fn();
 					}
 				}
@@ -287,19 +296,20 @@ public:
 				for (auto node : nodes_)
 				{
 					node->lock_.lock();
-					if (ps_node_spin(node->getNode()))
+					int res = 0;
+					if (res = ps_node_spin(node->getNode()))
 					{
-
+                    	printf("Received %i messages\n", res);
+						// we got a message, now call a subscriber
+						// todo how to make this not scale with subscriber count...
+						for (size_t i = 0; i < node->subscribers_.size(); i++)
+						{
+							// this doesnt ensure switching subs, but works
+							while (node->subscribers_[i]->CallOne()) {};
+						}
 					}
-					// todo how to make this not scale with subscriber count...
-					// though, it isnt very important here
-					// its probably worth more effort just make it not run any of this if we get no messages
-					// we got a message, now call a subscriber
-					for (size_t i = 0; i < node->subscribers_.size(); i++)
-					{
-						// this doesnt ensure switching subs, but works
-						while (node->subscribers_[i]->CallOne()) {};
-					}
+					
+					
 					node->lock_.unlock();
 				}
 				list_mutex_.unlock();

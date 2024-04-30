@@ -3,18 +3,19 @@
 
 #include <vector>
 
+
+#pragma pack(push, 1)
 // Vector like array that's able to take ownership of C malloced arrays
 template <class T>
 class ArrayVector
 {
 	T* data_;
 	uint32_t length_;
-	uint32_t capacity_;
 public:
 
 	ArrayVector()
 	{
-		length_ = capacity_ = 0;
+		length_ = 0;
 		data_ = 0;
 	}
 
@@ -22,13 +23,11 @@ public:
 	{
 		data_ = arr;
 		length_ = len;
-		capacity_ = len;
 	}
 
 	ArrayVector(const ArrayVector<T>& obj)
 	{
 		length_ = obj.length_;
-		capacity_ = obj.capacity_;
 		data_ = (T*)malloc(sizeof(T)*length_);
 		for (int i = 0; i < length_; i++)
 		{
@@ -47,10 +46,11 @@ public:
 	ArrayVector<T>& operator=(const ArrayVector<T>& obj)
 	{
 		if (data_)
+		{
 			free(data_);
+		}
 
 		length_ = obj.length_;
-		capacity_ = obj.capacity_;
 		data_ = (T*)malloc(sizeof(T)*length_);
 		for (int i = 0; i < length_; i++)
 		{
@@ -62,9 +62,11 @@ public:
 	ArrayVector<T>& operator=(const std::vector<T>& arr)
 	{
 		if (data_)
+		{
 			free(data_);
+		}
 
-		capacity_ = length_ = arr.size();
+		length_ = arr.size();
 		data_ = (T*)malloc(sizeof(T)*length_);
 		for (int i = 0; i < length_; i++)
 		{
@@ -73,31 +75,46 @@ public:
 		return *this;
 	}
 
-	void reserve(const uint32_t l)
+	// resizes to the given side, leaving memory uninitalized for new values
+	void resize(const uint32_t size)
 	{
-		if (l <= capacity_) { return; }
-		auto n = (T*)malloc(sizeof(T)*l);
-		capacity_ = l;
-		for (int i = 0; i < length_; i++)
+		if (size == length_) { return; }
+
+		auto new_data = (T*)malloc(sizeof(T)*size);
+		auto copy_len = std::min(size, length_);
+		for (int i = 0; i < copy_len; i++)
 		{
-			n[i] = std::move(data_[i]);
+			new_data[i] = data_[i];
 		}
-		data_ = n;
+		length_ = size;
+		if (data_)
+		{
+			free(data_);
+		}
+		data_ = new_data;
 	}
 
-	void push_back(const T& v)
+	void clear()
 	{
-		if (length_ + 1 > capacity_)
-		{
-			reserve(capacity_*2);// good enough for now
-		}
-
-		data_[length_++] = v;
+		length_ = 0;
+		free(data_);
+		data_ = 0;
 	}
 
-	inline T& operator[](const uint32_t index) { return data_[length_]; }
+	inline const T& operator[](const uint32_t index) const { return data_[index]; }
+
+	inline T& operator[](const uint32_t index) { return data_[index]; }
 
 	inline T* data() const { return data_; }
 
 	inline uint32_t size() const { return length_; }
+
+	T* iterator;
+	typedef const T* const_iterator;
+
+	inline iterator begin() { return &data_[0]; }
+	inline const_iterator begin() const { return &data_[0]; }
+	inline iterator end() { return &data_[length_]; }
+	inline const_iterator end() const { return &data_[length_]; }
 };
+#pragma pack(pop)
