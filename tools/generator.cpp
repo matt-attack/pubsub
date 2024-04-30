@@ -749,10 +749,30 @@ std::string generate(const char* definition, const char* name)
 	output += "#include <memory>\n";
 	output += "#include <string>\n";
 	output += "#include <vector>\n";
+	//output += "#include <iostream>\n";
 	output += "#include <pubsub_cpp/array_vector.h>\n";
 	output += "namespace " + ns + "\n{\n";
     output += "namespace msg\n{\n";
-	output += "struct " + raw_name + ": public " + type_name + "\n{\n";
+	output += "#pragma pack(push, 1)\n";
+	output += "struct " + raw_name + "\n{\n";
+
+	for (auto f: fields)
+	{
+		std::string type = f.type == string_type ? "char*" : f.getBaseType();
+		if (f.array_size == 1)
+		{
+			output += "  " + type + " " + f.name + ";\n";
+		}
+		else if (f.array_size == 0)
+		{
+			output += "  ArrayVector<" + type + "> " + f.name + ";\n";
+		}
+		else
+		{
+			output += "  " + type + " " + f.name + "["+std::to_string(f.array_size) + "];\n";
+		}
+	}
+	output += "\n";
 	
 	// add any enumerations
 	if (enumerations.size() > 0)
@@ -773,67 +793,28 @@ std::string generate(const char* definition, const char* name)
 		}
 		output += "  };\n\n";
 	}
-	
-	// create destructor
-	bool needs_destructor = false;
-	for (int i = 0; i < fields.size(); i++)
-	{
-		if (fields[i].type == string_type || fields[i].array_size == 0)
-		{
-			needs_destructor = true;
-		}
-	}
-	
-	if (needs_destructor)
-	{
-		output += "  ~" + raw_name + "()\n  {\n";
-		for (int i = 0; i < fields.size(); i++)
-		{
-			fields[i].GenerateFree(output);
-		}
-		output += "  }\n\n";
 
-		// add a copy constructor and constructor now...
-		output += "  " + raw_name + "(const " + raw_name + "& obj)\n  {\n";
-		for (size_t i = 0; i < fields.size(); i++)
-		{
-			fields[i].GenerateCopy(output, "obj");
-		}
-		output += "  }\n\n";
-		// todo maybe just use stl types for strings/arrays?
+	/*output += "  ~" + raw_name + "()\n  {\n";
+	output += "std::cout <<\"destructor\\n\";\n";
+	output += "  }\n\n";
 
-		output += "  " + raw_name + "& operator=(const " + raw_name + "& obj)\n  {\n";
-		for (int i = 0; i < fields.size(); i++)
-		{
-			fields[i].GenerateFree(output);
-		}
-		output += "\n";
-		for (size_t i = 0; i < fields.size(); i++)
-		{
-			fields[i].GenerateCopy(output, "obj");
-		}
-		output += "    return *this;\n  }\n\n";
+	output += "  " + raw_name + "()\n  {\n";
+	output += "std::cout <<\"constructor\\n\";\n";
+	output += "  }\n\n";*/
 
-		// mark all pointers as null to avoid crashes
-		output += "  " + raw_name + "()\n  {\n";
-		for (size_t i = 0; i < fields.size(); i++)
-		{
-			if (fields[i].type == string_type)
-			{
-				output += "    " + fields[i].name + " = 0;\n";
-				if (fields[i].array_size == 0)
-				{
-					output += "    " + fields[i].name + "_length = 0;\n";
-				}
-			}
-			else if (fields[i].array_size == 0)
-			{
-				output += "    " + fields[i].name + " = 0;\n";
-				output += "    " + fields[i].name + "_length = 0;\n";
-			}
-		}
-		output += "  }\n\n";
-	}
+	// generate new and delete that use malloc/free to interop correctly with our C allocation
+	output += "  void* operator new(size_t size)\n";
+    output += "  {\n";
+    //output += "    std::cout<< \"Overloading new operator with size: \" << size << std::endl;\n";
+    output += "    return malloc(size);\n";
+    output += "  }\n\n";
+ 
+    output += "  void operator delete(void * p)\n";
+    output += "  {\n";
+    //output += "    std::cout<< \"Overloading delete operator \" << std::endl;\n";
+    output += "    free(p);\n";
+    output += "  }\n\n";
+
 	output += "  static const ps_message_definition_t* GetDefinition()\n  {\n";
 	output += "    return &" + type_name + "_def;\n  }\n\n";
 	output += "  ps_msg_t Encode() const\n  {\n";
@@ -841,63 +822,8 @@ std::string generate(const char* definition, const char* name)
 	output += "  static " + raw_name + "* Decode(const void* data)\n  {\n";
 	output += "    return (" + raw_name + "*)" + ns + "__" + raw_name + "_decode(data, &ps_default_allocator);\n  }\n";// + ns + "__" + raw_name + "_encode(0, this);\n  }\n";
 	output += "};\n";
+	output += "#pragma pack(pop)\n";
 	output += "typedef std::shared_ptr<" + raw_name + "> " + raw_name + "SharedPtr;\n";
-
-	output += "struct " + raw_name + "CPP" + "\n{\n";
-	for (auto f: fields)
-	{
-		std::string type = f.type == string_type ? "std::string" : f.getBaseType();
-		if (f.array_size == 1)
-		{
-			output += "  " + type + " " + f.name + ";\n";
-		}
-		else if (f.array_size == 0)
-		{
-			output += "  ArrayVector<" + type + "> " + f.name + ";\n";
-		}
-		else
-		{
-			output += "  " + type + " " + f.name + "["+std::to_string(f.array_size) + "];\n";
-		}
-	}
-	output += "\n  " + type_name + " ToMsg()\n  {\n";
-	output += "    " + type_name + " o;\n";
-	for (auto f: fields)
-	{
-		if (f.array_size == 1)
-		{
-			if (f.type == string_type)
-			{
-				output += "    o." + f.name + " = (char*)" + f.name + ".c_str();\n";
-			}
-			else
-			{
-				output += "    o." + f.name + " = " + f.name + ";\n";
-			}
-		}
-		else if (f.array_size == 0)
-		{
-			// hmm, this fails for string arrays...
-			if (f.type == string_type)
-			{
-				continue;// todo fix
-			}
-			output += "    o." + f.name + " = " + f.name + ".data();\n";
-			output += "    o." + f.name + "_length = " + f.name + ".size();\n";
-			output += "    \n";
-		}
-		else
-		{
-			// todo
-			output += "    memcpy(o." + f.name + ", " + f.name + ", sizeof(" + f.getBaseType() + ")*" + std::to_string(f.array_size) + ");\n";
-			//output += "    o." + f.name + " = " + f.name + ";\n";
-			output += "    \n";
-		}
-	}
-	output += "    return o;\n";
-	output += "  }\n";
-	output += "};\n";
-
 	
 	output += "}\n";
 	output += "}\n";

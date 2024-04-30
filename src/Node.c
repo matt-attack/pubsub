@@ -57,6 +57,7 @@ void ps_node_query_message_definition(struct ps_node_t* node, const char* messag
 	int off = 7;
 	off += serialize_string(&data[off], message);
 
+    //printf("Sending query for '%s'\n", message);
 	//add topic name, node, and 
 	int sent_bytes = sendto(node->socket, (const char*)data, off, 0, (struct sockaddr*)&address, sizeof(struct sockaddr_in));
 }
@@ -719,7 +720,7 @@ void ps_node_add_transport(struct ps_node_t* node, struct ps_transport_t* transp
 }
 
 // Update the node and checks if we got new messages
-// Returns the number of UDP messages we got
+// Returns the number of messages we got
 int ps_node_spin(struct ps_node_t* node)
 {
 	// look for any subs/requests and process them
@@ -756,14 +757,15 @@ int ps_node_spin(struct ps_node_t* node)
 		}
 	}
 
+	int message_count = 0;
+
 	// Update any other transports
 	for (unsigned int i = 0; i < node->num_transports; i++)
 	{
-		node->transports[i].spin(&node->transports[i], node);
+		message_count += node->transports[i].spin(&node->transports[i], node);
 	}
 
 	// Update the main UDP protocol and discovery
-	int packet_count = 0;
 	while (true)
 	{
 		struct sockaddr_in from;
@@ -835,7 +837,7 @@ int ps_node_spin(struct ps_node_t* node)
 			//printf("Got message, queue len %i\n", sub->queue_len);
 #endif
 
-			packet_count++;
+			message_count++;
 		}
 		else if (data[0] == PS_UDP_PROTOCOL_KEEP_ALIVE)
 		{
@@ -1275,7 +1277,7 @@ int ps_node_spin(struct ps_node_t* node)
 			unsigned short* port = (unsigned short*)&data[5];
 
 			char* type = (char*)&data[7];
-			//printf("Got query message definition for %s", type);
+			//printf("Got query message definition for '%s'\n", type);
 
 			// check if we have that message type
 			const struct ps_message_definition_t* def = 0;
@@ -1342,7 +1344,7 @@ int ps_node_spin(struct ps_node_t* node)
 			}
 		}
 	}
-	return packet_count;
+	return message_count;
 }
 
 int serialize_string(char* data, const char* str)

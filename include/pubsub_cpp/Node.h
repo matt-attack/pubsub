@@ -504,7 +504,7 @@ class Subscriber: public SubscriberBase
 
 public:
 
-	Subscriber(Node& node, const std::string& topic, std::function<void(const std::shared_ptr<T>&)> cb, unsigned int queue_size = 1) : cb_(cb), queue_size_(queue_size)
+	Subscriber(Node& node, const std::string& topic, std::function<void(const std::shared_ptr<T>&)> cb, unsigned int queue_size = 1, int preferred_transport = 0) : cb_(cb), queue_size_(queue_size)
 	{
 		node_ = &node;
 
@@ -529,9 +529,20 @@ public:
 			//real_this->cb_(msg_ptr);
 		};
 
-		node.lock_.lock();
-		ps_node_create_subscriber_cb(node.getNode(), remapped_topic_.c_str(), T::GetDefinition(), &subscriber_, cb2, this, false, 0, true);
+		struct ps_subscriber_options options;
+		ps_subscriber_options_init(&options);
 
+		options.queue_size = 0;
+		options.cb = cb2;
+		options.cb_data = this;
+		options.want_message_def = false;
+		options.allocator = 0;
+		options.ignore_local = true;
+		options.preferred_transport = preferred_transport;
+
+
+		node.lock_.lock();
+		ps_node_create_subscriber_adv(node.getNode(), remapped_topic_.c_str(), T::GetDefinition(), &subscriber_, &options);
 		node.subscribers_.push_back(this);
 		node.lock_.unlock();
 

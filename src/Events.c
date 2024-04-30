@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <sys/epoll.h>
 #include <sys/eventfd.h>
+#include <sys/timerfd.h>
 #else
 #include <WinSock2.h>
 #endif
@@ -25,6 +26,7 @@ void ps_event_set_create(struct ps_event_set_t* set)
 
   // create the pipe for manual triggers
   set->event_fd = eventfd(0, 0);
+  set->timer_fd = 0;
 
   struct epoll_event event;
   event.events = EPOLLIN;
@@ -234,5 +236,29 @@ void ps_event_set_wait(struct ps_event_set_t* set, unsigned int timeout_ms)
   {
     perror("poll error");
   }
+#endif
+}
+
+void ps_event_set_set_timer(struct ps_event_set_t* set, unsigned int timeout_us)
+{
+#ifdef WIN32
+  // todo
+#else
+  if (set->timer_fd == 0)
+  {
+    set->timer_fd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC|TFD_NONBLOCK);
+    struct epoll_event event;
+    event.data.fd = set->timer_fd;
+    event.events = EPOLLIN | EPOLLET;
+    epoll_ctl(set->fd, EPOLL_CTL_ADD, set->timer_fd, &event);
+  }
+
+  // set it!
+  struct itimerspec its;
+  its.it_value.tv_sec = 0;
+  its.it_value.tv_nsec = timeout_us*1000;
+  its.it_interval.tv_nsec = 0;
+  its.it_interval.tv_nsec = 0;
+  timerfd_settime(set->timer_fd, 0, &its, NULL);
 #endif
 }
