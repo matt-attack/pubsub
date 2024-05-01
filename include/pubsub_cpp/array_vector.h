@@ -109,7 +109,7 @@ public:
 
 	inline uint32_t size() const { return length_; }
 
-	T* iterator;
+	typedef T* iterator;
 	typedef const T* const_iterator;
 
 	inline iterator begin() { return &data_[0]; }
