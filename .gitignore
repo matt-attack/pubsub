@@ -264,6 +264,7 @@ __pycache__/
 CMakeFiles/*
 examples/CMakeFiles/*
 tools/CMakeFiles/*
+tests/CMakeFiles/*
 *.a
 *Config.cmake
 *Targets.cmake

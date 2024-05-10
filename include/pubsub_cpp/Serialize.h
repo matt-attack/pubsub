@@ -64,10 +64,7 @@ ps_msg_t serialize_value(const Value& value, const ps_message_definition_t& defi
 	for (unsigned int i = 0; i < definition.num_fields; i++)
 	{
 		auto& field = definition.fields[i];
-		Value& value = mapping[field.name];// its okay if it doesnt exist, it gets filled with Value()
-
-										   // now serialize based on the field type
-										   // change it to the prefered type if necessary
+		Value& value = mapping[field.name];
 		if (field.type == FT_String)
 		{
 			if (value.type == None)
@@ -89,15 +86,21 @@ ps_msg_t serialize_value(const Value& value, const ps_message_definition_t& defi
 		{
 			// fixed size
 			int size = ps_field_sizes[field.type];
-			if (value.type == Array && field.length > 1)
+			if (field.length >= 1)
 			{
 				// this is fine
+				
+				message_size += size * field.length;
+			}
+			else if (field.length == 0)
+			{
+				// dynamic array
+				message_size += size * value.arr.size() + 4;
 			}
 			else if (value.type != Number && value.type != None)
 			{
 				throw std::string("Cannot map value to number");
 			}
-			message_size += size * field.length;
 		}
 		else if (field.type == FT_Struct)
 		{
@@ -112,10 +115,12 @@ ps_msg_t serialize_value(const Value& value, const ps_message_definition_t& defi
 	}
 
 	//allocate message
+	//printf("Allocated %i bytes for message\n", message_size);
 	ps_msg_alloc(message_size, 0, &msg);
 
 	// finally serialize
 	char* pos = (char*)ps_get_msg_start(msg.data);
+	char* start = pos;
 	for (unsigned int i = 0; i < definition.num_fields; i++)
 	{
 		auto& field = definition.fields[i];
@@ -136,14 +141,40 @@ ps_msg_t serialize_value(const Value& value, const ps_message_definition_t& defi
 			// check range
 			if (data >= max)
 			{
-				printf("WARNING: field is out of range for its type");
+				printf("WARNING: field is out of range for its type\n");
 			}
+
+			// write the length if necessary
+			if (field.length == 0)
+			{
+				uint32_t len = 0;
+				memcpy(pos, &len, 4);
+				pos += 4;
+			}
+
+			if (value.type == Array)
+			{
+
+			}
+			else
+			{
+				
+			}
+
+			//need to handle arrays and write the correct length
 
 			memcpy(pos, &data, size);
 			pos += size;
 		}
 		else if (field.type == FT_Float32)
 		{
+			if (field.length == 0)
+			{
+				uint32_t len = 0;
+				memcpy(pos, &len, 4);
+				pos += 4;
+			}
+
 			// do da float
 			if (value.type != Array)
 			{
@@ -162,7 +193,8 @@ ps_msg_t serialize_value(const Value& value, const ps_message_definition_t& defi
 				// just write the same value n times
 				int size = ps_field_sizes[field.type];
 				float data = value.type == None ? 0.0 : value.flt;
-				for (unsigned int i = 0; i < field.length; i++)
+				int len = field.length == 0 ? value.arr.size() : field.length;
+				for (unsigned int i = 0; i < len; i++)
 				{
 					float data = i < value.arr.size() ? value.arr[i].flt : 0.0;
 					memcpy(pos, &data, size);
@@ -172,21 +204,51 @@ ps_msg_t serialize_value(const Value& value, const ps_message_definition_t& defi
 		}
 		else if (field.type == FT_Float64)
 		{
-			// do da float
-			if (value.type != Array)
+			if (value.type == None)
 			{
-				// just write the same value n times
-				int size = ps_field_sizes[field.type];
-				double data = value.type == None ? 0.0 : value.flt;
-				for (unsigned int i = 0; i < field.length; i++)
+				// just pad it
+				if (field.length == 0)
 				{
-					memcpy(pos, &data, size);
-					pos += size;
+					uint32_t len = 0;
+					memcpy(pos, &len, 4);
+					pos += 4;
+				}
+				auto len = field.length*ps_field_sizes[field.type];
+				memset(pos, 0, len);
+				pos += len;
+			}
+			else if (value.type == Number)
+			{
+				if (field.length != 1)
+				{
+					throw std::string("Cannot provide a number for an array.");
+				}
+
+				double v = value.flt;
+				memcpy(pos, &v, 8);
+				v += 8;
+			}
+			else if (value.type == Array)
+			{
+				uint32_t len = field.length;
+				if (field.length == 0)
+				{
+					len = value.arr.size();
+					memcpy(pos, &len, 4);
+					pos += 4;
+				}
+                //printf("len: %i at %i\n", len, pos-start);
+				int size = ps_field_sizes[field.type];
+				for (unsigned int j = 0; j < len; j++)
+				{
+					double data = j < value.arr.size() ? value.arr[j].flt : 0.0;
+					memcpy(pos, &data, 8);
+					pos += 8;
 				}
 			}
 			else
 			{
-
+				throw std::string("unhandled type");
 			}
 		}
 		else
@@ -194,6 +256,7 @@ ps_msg_t serialize_value(const Value& value, const ps_message_definition_t& defi
 			throw std::string("Unhandled field type");
 		}
 	}
+	//printf("totlen: %i\n", pos-start);
 
 	printf("Publishing The Message Below:\n");
 	ps_deserialize_print(ps_get_msg_start(msg.data), &definition, 0, 0);
