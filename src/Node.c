@@ -512,7 +512,7 @@ struct ps_allocator_t ps_default_allocator = { ps_malloc_alloc, ps_malloc_free, 
 void ps_subscriber_options_init(struct ps_subscriber_options* options)
 {
 	options->queue_size = 1;
-	options->ignore_local = true;
+	options->ignore_local = false;
 	options->allocator = 0;
 	options->skip = 0;
 	options->want_message_def = false;

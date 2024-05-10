@@ -35,6 +35,34 @@ public:
 	bool boolean;
 	std::map<std::string, Value> map;
 	std::vector<Value> arr;
+
+	void Print() const
+	{
+		if (type == Bool) printf("%s", boolean ? "true" : "false");
+		if (type == Number) printf("%f", flt);
+		if (type == String) printf("%s", str.c_str());
+		if (type == Array)
+		{
+			printf("[");
+			for (const auto& v: arr)
+			{
+				v.Print();
+				printf(",");
+			}
+			printf("]");
+		}
+		if (type == Map)
+		{
+			printf("{");
+			for (const auto& kv: map)
+			{
+				printf("%s: ", kv.first.c_str());
+				kv.second.Print();
+				printf(",");
+			}
+			printf("}");
+		}
+	}
 };
 
 bool is_character(char c)
@@ -215,6 +243,12 @@ void grab(const std::vector<Token>& tokens, unsigned int index, TokenTypes type)
 // now lets parse using these tokens
 int parse(const std::vector<Token>& tokens, int start, Value& value)
 {
+	if (tokens.size() == 0)
+	{
+		value.type = Map;
+		return 1;
+	}
+
 	const Token& t = tokens[start];
 	if (t.type == TokenTypes::OpenBracket)
 	{

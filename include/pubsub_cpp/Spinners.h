@@ -41,7 +41,7 @@ public:
 				}
 				node_->lock_.lock();
 				int res = 0;
-				if (res = ps_node_spin(node_->getNode()))
+				if (res = ps_node_spin(node_->getNode()) || node_->marked())
 				{
                 	//printf("Received %i messages\n", res);
 					// we got a message, now call a subscriber
@@ -64,7 +64,7 @@ public:
 	{
 		if (running_)
 		{
-			stop();
+			stop(true);
 		}
 	}
 
@@ -82,7 +82,7 @@ public:
 		thread_.join();
 	}
 
-	void stop()
+	void stop(bool join = false)
 	{
 		// kill everything
 		if (!running_)
@@ -91,7 +91,7 @@ public:
 		}
 
 		running_ = false;
-        if (thread_.joinable())
+        if (join && thread_.joinable())
 		    thread_.join();// wait for it to stop
 	}
 };
@@ -129,7 +129,7 @@ public:
 	{
 		if (running_)
 		{
-			stop();
+			stop(true);
 		}
 
 		// close out any events
@@ -216,16 +216,18 @@ public:
                 if (node_)
 				{
 					node_->lock_.lock();
-					ps_node_spin(node_->getNode());
-
-					// todo how to make this not scale with subscriber count...
-					// though, it isnt very important here
-					// its probably worth more effort just make it not run any of this if we get no messages
-					// we got a message, now call a subscriber
-					for (size_t i = 0; i < node_->subscribers_.size(); i++)
+					if (ps_node_spin(node_->getNode()) || node_->marked())
 					{
-						// this doesnt ensure switching subs, but works
-						while (node_->subscribers_[i]->CallOne()) {};
+						// todo how to make this not scale with subscriber count...
+						// though, it isnt very important here
+						// its probably worth more effort just make it not run any of this if we get no messages
+						// we got a message, now call a subscriber
+						for (size_t i = 0; i < node_->subscribers_.size(); i++)
+						{
+							// this doesnt ensure switching subs, but works
+							// hmm, I shouldnt lock node during this todo fix me
+							while (node_->subscribers_[i]->CallOne()) {};
+						}
 					}
 					node_->lock_.unlock();
 				}
@@ -254,7 +256,7 @@ public:
 		thread_.join();
 	}
 
-	void stop()
+	void stop(bool join = false)
 	{
 		// kill everything
 		if (!running_)
@@ -263,7 +265,7 @@ public:
 		}
 
 		running_ = false;
-        if (thread_.joinable())
+        if (join && thread_.joinable())
 		    thread_.join();// wait for it to stop
 	}
 };
@@ -297,7 +299,7 @@ public:
 				{
 					node->lock_.lock();
 					int res = 0;
-					if (res = ps_node_spin(node->getNode()))
+					if (res = ps_node_spin(node->getNode()) || node->marked())
 					{
                     	printf("Received %i messages\n", res);
 						// we got a message, now call a subscriber
@@ -323,7 +325,7 @@ public:
 	{
 		if (running_)
 		{
-			stop();
+			stop(true);
 		}
 	}
 
@@ -343,7 +345,7 @@ public:
 		thread_.join();
 	}
 
-	void stop()
+	void stop(bool join = false)
 	{
 		// kill everything
 		if (!running_)
@@ -352,6 +354,7 @@ public:
 		}
 
 		running_ = false;
+		if (join && thread_.joinable())
 		thread_.join();// wait for it to stop
 	}
 };

@@ -172,6 +172,7 @@ class Node
 	std::string qualified_name_;// necessary to hold the pointer to the name for C
 
 	ps_node_t node_;
+	bool marked_ = false;
 
 	ps_event_set_t* event_set_;
 public:
@@ -243,6 +244,11 @@ public:
 	{
 		return event_set_;
 	}
+
+	// mark that we have a message to process
+	void mark() { marked_ = true; }
+
+	bool marked() { bool res = marked_; marked_ = false; return res;}
 };
 
 class SubscriberBase;
@@ -252,6 +258,7 @@ class PublisherBase
 protected:
 	std::string topic_;
 	std::string remapped_topic_;
+	bool latched_;
 
 	Node* node_;
 
@@ -276,13 +283,15 @@ class Subscriber;
 template<class T> 
 class Publisher: public PublisherBase
 {
-
+	std::shared_ptr<T> latched_msg_;
 public:
+	friend class Subscriber<T>;
 
 	Publisher(Node& node, const std::string& topic, bool latched = false)// : topic_(topic)
 	{
 		node_ = &node;
 		topic_ = topic;
+		latched_ = latched;
 
 		// clean up the topic
 		std::string real_topic = validate_name(topic_);
@@ -334,6 +343,11 @@ public:
 	// this does not copy the message for intraprocess
 	void publish(const std::shared_ptr<T>& msg)
 	{
+		if (latched_)
+		{
+			latched_msg_ = msg;
+		}
+
 		// loop through shared subscribers
 		node_->lock_.lock();
 		// now go through my local subscriber list
@@ -352,7 +366,7 @@ public:
 				specific_sub->queue_.pop_back();
 			}
 			specific_sub->queue_mutex_.unlock();
-			//specific_sub->cb_(copy);
+			specific_sub->node_->mark();
 		}
 
 		ps_pub_publish_ez(&publisher_, (void*)msg.get());
@@ -364,7 +378,12 @@ public:
 	void publish(const T& msg)
 	{
 		std::shared_ptr<T> copy;
-	
+		if (latched_) {
+			copy = std::shared_ptr<T>(new T);
+			*copy = msg;
+			// save for later
+			latched_msg_ = copy;
+		}
 		node_->lock_.lock();
 		// now go through my local subscriber list
 		for (size_t i = 0; i < subs_.size(); i++)
@@ -379,7 +398,7 @@ public:
 				*copy = msg;
 			}
 
-			// help this isnt thread safe
+			// help this isnt thread safe (or is it?)
 			auto specific_sub = (Subscriber<T>*)sub;
 			ps_event_set_trigger(specific_sub->node_->getEventSet());
 			specific_sub->queue_mutex_.lock();
@@ -389,7 +408,7 @@ public:
 				specific_sub->queue_.pop_back();
 			}
 			specific_sub->queue_mutex_.unlock();
-			//specific_sub->cb_(copy);
+			specific_sub->node_->mark();
 		}
 
 		// note this still copies unnecessarily if the topic is latched
@@ -422,7 +441,7 @@ protected:
 	Node* node_;
 	
 	// note only one pub/sub can be created/destroyed at a time
-	static void AddSubscriber(const std::string& topic, SubscriberBase* sub)
+	static void AddSubscriber(const std::string& topic, SubscriberBase* sub, std::function<void(void*)> cb)
 	{
 		_publisher_mutex.lock();
 
@@ -434,6 +453,11 @@ protected:
 				// todo verify that the message type is the same or that I'm a generic sub
 				// also todo add generic C++ subs
 				it->second->GetNode()->lock_.lock();
+				// if its latched, get the message from it
+				if (it->second->latched_)
+				{
+					cb(it->second);
+				}
 				// add me to its sub list
 				it->second->subs_.push_back(sub);
 				it->second->GetNode()->lock_.unlock();
@@ -526,7 +550,6 @@ public:
 				real_this->queue_.pop_back();
 			}
 			real_this->queue_mutex_.unlock();
-			//real_this->cb_(msg_ptr);
 		};
 
 		struct ps_subscriber_options options;
@@ -546,7 +569,18 @@ public:
 		node.subscribers_.push_back(this);
 		node.lock_.unlock();
 
-		AddSubscriber(remapped_topic_, this);
+		AddSubscriber(remapped_topic_, this, [&](void* p){
+			auto pub = (Publisher<T>*)p;
+			ps_event_set_trigger(node_->getEventSet());
+			queue_mutex_.lock();
+			queue_.push_front(pub->latched_msg_);
+			if (queue_.size() > queue_size_)
+			{
+				queue_.pop_back();
+			}
+			queue_mutex_.unlock();
+			node_->mark();
+		});
 	}
 
 	virtual bool CallOne()
