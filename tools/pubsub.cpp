@@ -21,6 +21,8 @@
 #include <string>
 #include <string.h>
 
+#include <sstream>
+#include <fstream>
 
 
 using namespace std;
@@ -366,6 +368,7 @@ int topic_pub(int num_args, char** args, ps_node_t* node)
   pubsub::ArgParser parser;
   parser.AddMulti({ "r", "rate" }, "Publish rate in Hz.", "1.0");
   parser.AddMulti({ "l", "latch" }, "Latches the topic.");
+  parser.AddMulti({ "f", "file" }, "Publishes the message contained in the specified file.");
   parser.SetUsage("Usage: info topic pub TOPIC MESSAGE\n\nPublishes a particular topic.");
   parser.Parse(args, num_args, 2);
 
@@ -427,10 +430,26 @@ int topic_pub(int num_args, char** args, ps_node_t* node)
       // then actually serialize the message
       // build the input string from arguments
       std::string input;
-      for (int i = 4; i < num_args; i++)
+      std::string file = parser.GetString("f");
+      if (file.length())
       {
-        input += args[i];
-        input += ' ';
+        auto stream = std::ifstream(file);
+        if (!stream)
+        {
+          printf("File %s not found.\n", file.c_str());
+          return -1;
+        }
+        std::ostringstream sstr;
+        sstr << stream.rdbuf();
+        input = sstr.str();
+      }
+      else
+      {
+        for (int i = 4; i < num_args; i++)
+        {
+          input += args[i];
+          input += ' ';
+        }
       }
       Value out;
 

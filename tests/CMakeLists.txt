@@ -1,6 +1,6 @@
 enable_testing()
 
-set(tests "test_serialization" "test_pubsub_c" "test_pubsub_cpp")
+set(tests "test_serialization" "test_pubsub_c" "test_pubsub_cpp" "test_cli")
 foreach(test_file ${tests})
   set(test_source "${test_file}.cpp")
   message(STATUS "create ${test_file} executable from source: ${test_source}")
