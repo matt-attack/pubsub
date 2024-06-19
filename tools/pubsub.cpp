@@ -204,12 +204,12 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
   static ps_node_t* node = _node;
   pubsub::ArgParser parser;
   parser.SetUsage("Usage: info topic echo TOPIC\n\nEchos a particular topic.");
-  parser.AddMulti({ "i" }, "Print info about the publisher with each message.");
-  parser.AddMulti({ "n" }, "Number of messages to echo.", "0");
-  parser.AddMulti({ "skip", "s" }, "Skip factor for the subscriber.", "0");
-  parser.AddMulti({ "tcp" }, "Prefer the TCP transport.");
-  parser.AddMulti({ "no-arr" }, "Don't print out the contents of arrays in messages.");
-  parser.AddMulti({ "f", "field" }, "Print out just the value of a specific field.");
+  parser.AddFlag({ "i" }, "Print info about the publisher with each message.");
+  parser.AddOption({ "n" }, "Number of messages to echo.", "0");
+  parser.AddOption({ "skip", "s" }, "Skip factor for the subscriber.", "0");
+  parser.AddFlag({ "tcp" }, "Prefer the TCP transport.");
+  parser.AddFlag({ "no-arr" }, "Don't print out the contents of arrays in messages.");
+  parser.AddOption({ "f", "field" }, "Print out just the value of a specific field.");
 
   parser.Parse(args, num_args, 2);
 
@@ -305,7 +305,6 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
       ps_subscriber_options_init(&options);
       options.skip = skip;
       options.queue_size = 0;
-      options.want_message_def = true;
       options.allocator = 0;
       options.ignore_local = false;
       options.preferred_transport = tcp ? 1 : 0;
@@ -366,9 +365,9 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
 int topic_pub(int num_args, char** args, ps_node_t* node)
 {
   pubsub::ArgParser parser;
-  parser.AddMulti({ "r", "rate" }, "Publish rate in Hz.", "1.0");
-  parser.AddMulti({ "l", "latch" }, "Latches the topic.");
-  parser.AddMulti({ "f", "file" }, "Publishes the message contained in the specified file.");
+  parser.AddOption({ "r", "rate" }, "Publish rate in Hz.", "1.0");
+  parser.AddFlag({ "l", "latch" }, "Latches the topic.");
+  parser.AddOption({ "f", "file" }, "Publishes the message contained in the specified file.");
   parser.SetUsage("Usage: info topic pub TOPIC MESSAGE\n\nPublishes a particular topic.");
   parser.Parse(args, num_args, 2);
 
@@ -515,7 +514,7 @@ int node_list(int num_args, char** args, ps_node_t* node)
 {
   pubsub::ArgParser parser;
   parser.SetUsage("Usage: info node list\n\nList all running nodes.");
-  parser.AddMulti({ "v" }, "Print additional info about each node.");
+  parser.AddFlag({ "v" }, "Print additional info about each node.");
   parser.Parse(args, num_args, 2);
 
   wait(node);
@@ -822,8 +821,8 @@ int main(int num_args_real, char** args)
     else if (subverb == "hz" || subverb == "bw")
     {
       pubsub::ArgParser parser;
-      parser.AddMulti({ "w", "window" }, "Window size for averaging.", "100");
-      parser.AddMulti({ "tcp" }, "Prefer the TCP transport.");
+      parser.AddOption({ "w", "window" }, "Window size for averaging.", "100");
+      parser.AddFlag({ "tcp" }, "Prefer the TCP transport.");
       if (subverb == "hz")
         parser.SetUsage("Usage: info topic hz TOPIC\n\nDetermines the rate of publication for a given topic.");
       else

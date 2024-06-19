@@ -213,6 +213,8 @@ std::string generate(const char* definition, const char* name)
 	// add default types
 	auto string_type = new Type{"string", "char*", "FT_String", {}};
 	types["string"] = string_type;
+	types["uint64"] = new Type{"uint64", "uint64_t", "FT_UInt64", {}};
+	types["int64"] = new Type{"int64", "int64_t", "FT_Int64", {}};
 	types["uint32"] = new Type{"uint32", "uint32_t", "FT_UInt32", {}};
 	types["int32"] = new Type{"int32", "int32_t", "FT_Int32", {}};
 	types["uint16"] = new Type{"uint16", "uint16_t", "FT_UInt16", {}};

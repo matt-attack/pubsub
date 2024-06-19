@@ -185,7 +185,7 @@ void ps_event_set_remove_socket(struct ps_event_set_t* set, int socket)
   struct epoll_event event;
   event.events = EPOLLIN;
   epoll_ctl(set->fd, EPOLL_CTL_DEL, socket, &event);
-  set->num_events++;
+  set->num_events--;
 #endif
 }
 

@@ -32,6 +32,19 @@ TEST(test_publish_subscribe_latched_cpp, []() {
 	EXPECT(got_message);
 });
 
+// Make sure close works on publishers/subscribers and doesnt result in them getting closed multiple times
+TEST(test_publisher_subscriber_close_cpp, []() {
+	pubsub::Node node("simple_publisher");
+
+	pubsub::Publisher<pubsub::msg::String> pub(node, "/data", true);
+	pubsub::Subscriber<pubsub::msg::String> sub(node, "/data", [&](const pubsub::msg::StringSharedPtr& msg) {});
+
+	pub.close();
+	pub.close();
+
+	sub.close();
+	sub.close();
+});
 TEST(test_publish_subscribe_cpp, []() {
 	// test that normal messages make it through message passing
 	pubsub::Node node("simple_publisher");
