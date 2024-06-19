@@ -23,7 +23,7 @@ int main()
 	ps_node_create_publisher(&node, "/joy", &pubsub__Joy_def, &adv_pub, false);
 
 	ps_sub_t string_sub;
-	ps_node_create_subscriber(&node, "/data", &pubsub__String_def, &string_sub, 10, false, 0, false);
+	ps_node_create_subscriber(&node, "/data", &pubsub__String_def, &string_sub, 10, 0, false);
 
 	// wait until we get the subscription request
 	while (ps_pub_get_subscriber_count(&string_pub) == 0) 

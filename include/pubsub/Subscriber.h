@@ -21,8 +21,7 @@ struct ps_sub_t
 	const char* topic;
 	const struct ps_message_definition_t* type;
 
-	// for dynamic subscribers
-	bool want_message_definition;
+	// for dynamic subscribers (type == 0)
 	struct ps_message_definition_t received_message_def;
 
 	// ignores local publications

@@ -1,52 +1,37 @@
 #include <cstdlib>
 #include <stdio.h>
+#include <cmath>
 
 #include <pubsub_cpp/Node.h>
 #include <pubsub_cpp/Spinners.h>
 #include <pubsub/System.h>
 
 #include <pubsub/String.msg.h>
-#include <pubsub/Image.msg.h>
+
+#include <pubsub/TCPTransport.h>
 
 int main()
 {
 	pubsub::Node node("simple_publisher");
+	
+	struct ps_transport_t tcp_transport;
+	ps_tcp_transport_init(&tcp_transport, node.getNode());
+	ps_node_add_transport(node.getNode(), &tcp_transport);
 
 	pubsub::Publisher<pubsub::msg::String> string_pub(node, "/data");
-
-	pubsub::Publisher<pubsub::msg::Image> image_pub(node, "/image");
 
 	pubsub::BlockingSpinnerWithTimers spinner;
 	spinner.setNode(node);
 
-	int i = 0;
-	spinner.addTimer(0.3333, [&]()
+	auto start = pubsub::Time::now();
+	spinner.addTimer(1.0, [&]()
 	{
+		auto now = pubsub::Time::now();
 		pubsub::msg::String msg;
 		char value[20];
-		sprintf(value, "Hello %i", i++);
+		sprintf(value, "Hello %f", (now-start).toSec());
 		msg.value = value;
 		string_pub.publish(msg);
-
-		// okay, since we are publishing with shared pointer we actually need to allocate the string properly
-		auto shared = pubsub::msg::StringSharedPtr(new pubsub::msg::String);
-		shared->value = new char[strlen(msg.value) + 1];
-		strcpy(shared->value, msg.value);
-		string_pub.publish(shared);
-
-		msg.value = 0;// so it doesnt get freed by the destructor since we allocated it ourself
-
-		auto img = pubsub::msg::ImageSharedPtr(new pubsub::msg::Image);
-		int len = rand() % 10 + 2;
-		img->width = 1;
-		img->height = len;
-		img->data = new uint8_t[len];
-		img->data_length = len;
-		for (int i = 0; i < len; i++)
-		{
-			img->data[i] = rand() % 10;
-		}
-		image_pub.publish(img);
 	});
 
 	spinner.wait();

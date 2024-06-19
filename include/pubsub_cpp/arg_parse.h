@@ -5,6 +5,8 @@
 #include <vector>
 #include <string>
 
+#include <stdexcept>
+
 namespace pubsub
 {
 
@@ -15,6 +17,7 @@ struct Argument
 	std::string description;
 	std::vector<std::string> names;
 	bool present;
+	bool flag;
 };
 
 class ArgParser
@@ -22,52 +25,73 @@ class ArgParser
 	std::vector<Argument*> arg_list_;
 	std::map<std::string, Argument*> args_;
 	std::vector<std::string> positional_;
-    std::string usage_;
-public:
+	std::string usage_;
 
-	ArgParser()
-	{
-		std::vector<std::string> names = { "h", "help" };
-		AddMulti(names, "Display this message.");
-	}
-
-    ~ArgParser()
-    {
-        for (auto& arg: arg_list_)
-        {
-            delete arg;
-        }
-    }
-
-	void AddMulti(std::vector<std::string> names,
-                  const std::string& description,
-                  const std::string& default_value = "")
+	// internal option add function
+	void add(std::vector<std::string> names,
+             const std::string& description,
+             const std::string& default_value = "",
+			 bool flag_ = false)
 	{
 		Argument* a = new Argument;
 		a->default_value = default_value;
 		a->description = description;
 		a->names = names;
 		a->present = false;
+		a->flag = flag_;
 		arg_list_.push_back(a);
 
 		for (auto& name : names)
 		{
 			// todo check for duplicates
+			if (args_.find(name) != args_.end())
+			{
+				throw std::runtime_error("Cannot have multiple arguments with same name '" + name + "'");
+			}
 			args_[name] = a;
 		}
 	}
 
-	void Add(const std::string& name,
+public:
+
+	ArgParser()
+	{
+		std::vector<std::string> names = { "h", "help" };
+		AddFlag(names, "Display this message.");
+	}
+
+	~ArgParser()
+	{
+		for (auto& arg: arg_list_)
+		{
+			delete arg;
+		}
+	}
+
+	void AddFlag(const char* name,
+                 const std::string& description)
+	{
+		add({name}, description, "", true);
+	}
+
+	void AddFlag(std::vector<std::string> names,
+                 const std::string& description)
+	{
+		add(names, description, "", true);
+	}
+
+	void AddOption(std::vector<std::string> names,
+                  const std::string& description,
+                  const std::string& default_value = "")
+	{
+		add(names, description, default_value);
+	}
+
+	void AddOption(const char* name,
              const std::string& description,
              const std::string& default_value = "")
 	{
-		Argument* a = new Argument;
-		a->description = description;
-		a->default_value = default_value;
-		a->present = false;
-		a->names.push_back(name);
-		args_[name] = a;
-		arg_list_.push_back(a);
+		add({name}, description, default_value);
 	}
 
 	void Parse(char** args, int argc, int skip = 0)
@@ -87,17 +111,30 @@ public:
 					continue;
 				}
 
+				if (args_.find(s) == args_.end())
+				{
+					PrintInvalid(s);
+					continue;
+				}
+
+				if (args_[s]->flag)
+				{
+					if (s == "h" || s == "help")
+					{
+						PrintHelp();
+						exit(0);
+						return;
+					}
+					args_[s]->value = "true";
+					args_[s]->present = true;
+					continue;
+				}
+
 				std::string value;
 				if (i + 1 < argc && args[i + 1][0] != '-')
 				{
 					value = args[i + 1];
 					i++;
-				}
-
-				if (args_.find(s) == args_.end())
-				{
-					PrintInvalid(s);
-					continue;
 				}
 
 				args_[s]->value = value;
@@ -106,6 +143,33 @@ public:
 			else if (s.length() > 1 && s[0] == '-')
 			{
 				s = s.substr(1);
+				std::string option_name = s.substr(0, 1);
+
+				if (args_.find(option_name) == args_.end())
+				{
+					PrintInvalid(option_name);
+					continue;
+				}
+
+				if (args_[option_name]->flag)
+				{
+					if (s != option_name)
+					{
+						printf("Cannot provide arguments for flag option '%s'\n", option_name.c_str());
+						exit(1);
+					}
+
+					if (option_name == "h" || option_name == "help")
+					{
+						PrintHelp();
+						exit(0);
+						return;
+					}
+
+					args_[option_name]->value = "true";
+					args_[option_name]->present = true;
+					continue;
+				}
 
 				std::string value;
 				if (s.length() > 1)
@@ -132,13 +196,6 @@ public:
 			else
 			{
 				positional_.push_back(s);
-			}
-
-			if (s == "h" || s == "help")
-			{
-				PrintHelp();
-				exit(0);
-				return;
 			}
 		}
 

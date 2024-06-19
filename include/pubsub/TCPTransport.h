@@ -338,6 +338,11 @@ int ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* no
     {
       const int header_size = 5;
       int len = recv(client->socket, buf, header_size, MSG_PEEK);
+      if (len == 0)
+      {
+        client->needs_removal = true;
+        continue;
+      }
       if (len < header_size)
       {
         continue;// no header yet
@@ -523,10 +528,13 @@ int ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* no
           if (connection->packet_type == 0x3)
           {
             //printf("Was message definition\n");
-            if (connection->subscriber->want_message_definition)
+            if (connection->subscriber->type == 0)
             {
               // todo put this in a function so we cant accidentally forget it
-              ps_deserialize_message_definition(connection->packet_data, &connection->subscriber->received_message_def);
+              if (connection->subscriber->received_message_def.fields == 0)
+              {
+                ps_deserialize_message_definition(connection->packet_data, &connection->subscriber->received_message_def);
+              }
 
               // call the callback as well
               if (node->def_cb)

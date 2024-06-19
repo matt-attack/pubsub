@@ -195,6 +195,12 @@ int ps_okay()
 // Tries to find a good IP to bind to for discovery by looking for one which has a route out
 char* GetPrimaryIp()
 {
+	// allow IP override through environment variable
+	const char* override = getenv("PUBSUB_IP");
+	if (override && strlen(override) > 0)
+	{
+		return override;
+	}
 	//assert(buflen >= 16);
 
 	ps_socket_t sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -220,8 +226,6 @@ char* GetPrimaryIp()
 	{
 		ip = "127.0.0.1";
 	}
-
-	printf("Pubsub IP: %s\n", ip);
 
 #ifdef _WIN32
 	closesocket(sock);
@@ -278,15 +282,20 @@ void ps_node_init_ex(struct ps_node_t* node, const char* name, const char* ip, b
 
 	node->advertise_port = 11311;// todo make this configurable
 
+	// allow overriding broadcast
+	const char* override = getenv("PUBSUB_BROADCAST");
+	if (override && strlen(override) > 0)
+	{
+		broadcast = override[0] == '1' ? true : false;
+		printf("Overrode broadcast to: %s\n", broadcast ? "true" : "false");
+	}
+
 	// If no IP is given, try and find one
 	if (ip == 0 || strlen(ip) == 0)
 	{
 		ip = GetPrimaryIp();
 	}
-	else
-	{
-		printf("Pubsub IP: %s\n", ip);
-	}
+	printf("Pubsub IP: %s\n", ip);
 
 #ifdef _WIN32
 	node->group_id = GetCurrentProcessId() + (10000 * ((inet_addr(ip) >> 24) && 0xFF));
@@ -301,7 +310,6 @@ void ps_node_init_ex(struct ps_node_t* node, const char* name, const char* ip, b
 		// hack for localhost
 		broadcast = true;
 		node->advertise_addr = inet_addr("127.255.255.255");
-		mc_bind_addr = mc_bind_addr;// this seems like a typo....
 	}
 	else if (broadcast)
 	{
@@ -515,7 +523,6 @@ void ps_subscriber_options_init(struct ps_subscriber_options* options)
 	options->ignore_local = false;
 	options->allocator = 0;
 	options->skip = 0;
-	options->want_message_def = false;
 	options->cb = 0;
 	options->cb_data = 0;
 	options->preferred_transport = PS_TRANSPORT_UDP;
@@ -550,7 +557,6 @@ void ps_node_create_subscriber_adv(struct ps_node_t* node, const char* topic, co
 	sub->skip = options->skip;
 	sub->preferred_transport = options->preferred_transport;
 
-	sub->want_message_definition = type ? options->want_message_def : true;
 	sub->received_message_def.fields = 0;
 	sub->received_message_def.hash = 0;
 	sub->received_message_def.num_fields = 0;
@@ -592,7 +598,6 @@ void ps_node_create_subscriber_adv(struct ps_node_t* node, const char* topic, co
 void ps_node_create_subscriber(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,
 	struct ps_sub_t* sub,
 	unsigned int queue_size,
-	bool want_message_def,
 	struct ps_allocator_t* allocator,
 	bool ignore_local)
 {
@@ -600,7 +605,6 @@ void ps_node_create_subscriber(struct ps_node_t* node, const char* topic, const 
 	ps_subscriber_options_init(&options);
 
 	options.queue_size = queue_size;
-	options.want_message_def = want_message_def;
 	options.allocator = allocator;
 	options.ignore_local = ignore_local;
 
@@ -611,7 +615,6 @@ void ps_node_create_subscriber_cb(struct ps_node_t* node, const char* topic, con
 	struct ps_sub_t* sub,
 	ps_subscriber_fn_cb_t cb,
 	void* cb_data,
-	bool want_message_def,
 	struct ps_allocator_t* allocator,
 	bool ignore_local
 )
@@ -622,7 +625,6 @@ void ps_node_create_subscriber_cb(struct ps_node_t* node, const char* topic, con
 	options.queue_size = 0;
 	options.cb = cb;
 	options.cb_data = cb_data;
-	options.want_message_def = want_message_def;
 	options.allocator = allocator;
 	options.ignore_local = ignore_local;
 
@@ -823,6 +825,7 @@ int ps_node_spin(struct ps_node_t* node)
 			void* out_data;
 			if (sub->type)
 			{
+//theres a leak if you use this and the queue fills up with complex types
 				out_data = sub->type->decode(data + sizeof(struct ps_msg_header), sub->allocator);
 			}
 			else
@@ -880,9 +883,15 @@ int ps_node_spin(struct ps_node_t* node)
 				continue;
 			}
 
-			if (sub->want_message_definition)
+			// if no message type was provided, we need the received message definition
+			if (sub->type == 0)
 			{
-				ps_deserialize_message_definition(&data[sizeof(struct ps_subscribe_accept_t)], &sub->received_message_def);
+				// only receive the type once
+				// todo need to error/drop subs with different types than the first one
+				if (sub->received_message_def.fields == 0)
+				{
+					ps_deserialize_message_definition(&data[sizeof(struct ps_subscribe_accept_t)], &sub->received_message_def);
+				}
 
 				// call the callback as well
 				// todo should this really be qualified on wanting the message definition?
@@ -1107,7 +1116,7 @@ int ps_node_spin(struct ps_node_t* node)
 
 				if (sub->ignore_local && sub->node->port == p->port && sub->node->addr == p->addr)
 				{
-					printf("Got advertise notice, but it was for a local pub which we are set to ignore\n");
+					//printf("Got advertise notice, but it was for a local pub which we are set to ignore\n");
 					continue;
 				}
 

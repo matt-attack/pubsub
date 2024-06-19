@@ -196,7 +196,6 @@ void ps_node_create_publisher(struct ps_node_t* node, const char* topic, const s
 void ps_node_create_subscriber(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,
 	struct ps_sub_t* sub,
 	unsigned int queue_size,//make >= 1
-	bool want_message_def,//usually want false
 	struct ps_allocator_t* allocator,//give null to use default
 	bool ignore_local);// if ignore local is set, this node ignores publications from itself
 							 // this facilitiates passing messages through shared memory
@@ -208,7 +207,6 @@ struct ps_subscriber_options
 	unsigned int queue_size;
 	bool ignore_local;
 	struct ps_allocator_t* allocator;
-	bool want_message_def;
 	unsigned int skip;// skips to every nth message for throttling
 	ps_subscriber_fn_cb_t cb;
 	void* cb_data;
@@ -225,7 +223,6 @@ void ps_node_create_subscriber_cb(struct ps_node_t* node, const char* topic, con
 	struct ps_sub_t* sub,
 	ps_subscriber_fn_cb_t cb,
 	void* cb_data,
-	bool want_message_def,
 	struct ps_allocator_t* allocator,
 	bool ignore_local
 );

@@ -31,18 +31,25 @@ macro(generate_messages)
   set(MESSAGE_DEPS)
   foreach (_file ${ARG_FILES})
     add_custom_command(
-	  COMMAND $<TARGET_FILE:pubsub_msg_gen> ${_file} ${PROJECT_NAME} ../include/${PROJECT_NAME}/${_file}.h
+	  COMMAND $<TARGET_FILE:pubsub_msg_gen> ${_file} ${PROJECT_NAME} ${CMAKE_CURRENT_BINARY_DIR}/include/${PROJECT_NAME}/${_file}.h
       WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}/${ARG_DIRECTORY}/
       DEPENDS ${PROJECT_SOURCE_DIR}/${ARG_DIRECTORY}/${_file} pubsub_msg_gen
-      OUTPUT ${PROJECT_SOURCE_DIR}/${ARG_DIRECTORY}/../include/${PROJECT_NAME}/${_file}.h
+      OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/include/${PROJECT_NAME}/${_file}.h
     )
 
-    set(MESSAGE_DEPS ${MESSAGE_DEPS} ${PROJECT_SOURCE_DIR}/${ARG_DIRECTORY}/../include/${PROJECT_NAME}/${_file}.h)
+    set(MESSAGE_DEPS ${MESSAGE_DEPS} ${CMAKE_CURRENT_BINARY_DIR}/include/${PROJECT_NAME}/${_file}.h)
   endforeach()
 
-  add_custom_target(${ARG_TARGET} ALL
-    DEPENDS ${MESSAGE_DEPS} 
+  add_custom_target(${ARG_TARGET}_mkdir ALL
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/include/${PROJECT_NAME}/)
+
+  add_custom_target(${ARG_TARGET}_all ALL
+    DEPENDS ${MESSAGE_DEPS} ${ARG_TARGET}_mkdir
   )
+
+  add_library(${ARG_TARGET} INTERFACE)
+  add_dependencies(${ARG_TARGET} ${ARG_TARGET}_mkdir ${ARG_TARGET}_all)
+  target_include_directories(${ARG_TARGET} INTERFACE ${CMAKE_CURRENT_BINARY_DIR}/include/)
 endmacro()
 
 generate_messages(FILES 
@@ -58,17 +65,19 @@ generate_messages(FILES
   Path.msg
   Pose.msg
   GPS.msg
+  Log.msg
   Path2D.msg
+  Odom.msg
 )
 
 
 # Build the test program
 add_executable(pubsubtest "PubSubTest.cpp")
-target_link_libraries(pubsubtest pubsub)
+target_link_libraries(pubsubtest pubsub pubsub_msgs)
 add_dependencies(pubsubtest pubsub pubsub_msgs)
 set_property(TARGET pubsubtest PROPERTY CXX_STANDARD 11)
 
 add_executable(throughput_test "throughput_test.cpp")
-target_link_libraries(throughput_test pubsub pubsub_cpp)
+target_link_libraries(throughput_test pubsub pubsub_cpp pubsub_msgs)
 add_dependencies(throughput_test pubsub pubsub_cpp pubsub_msgs)
 set_property(TARGET throughput_test PROPERTY CXX_STANDARD 11)

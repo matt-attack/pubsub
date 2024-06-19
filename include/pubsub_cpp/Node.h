@@ -320,6 +320,16 @@ public:
 
 	~Publisher()
 	{
+		close();
+	}
+
+	void close()
+	{
+		if (!node_)
+		{
+			return;
+		}
+
 		//remove me from the publisher list
 		_publisher_mutex.lock();
 		// remove me from the list
@@ -337,6 +347,8 @@ public:
 		node_->lock_.lock();
 		ps_pub_destroy(&publisher_);
 		node_->lock_.unlock();
+
+		node_ = 0;
 	}
 
 	// note due to locking only one publish can happen on a node at a time
@@ -456,6 +468,7 @@ protected:
 				// if its latched, get the message from it
 				if (it->second->latched_)
 				{
+					// hmm, this should just queue not call
 					cb(it->second);
 				}
 				// add me to its sub list
@@ -558,7 +571,6 @@ public:
 		options.queue_size = 0;
 		options.cb = cb2;
 		options.cb_data = this;
-		options.want_message_def = false;
 		options.allocator = 0;
 		options.ignore_local = true;
 		options.preferred_transport = preferred_transport;
@@ -601,6 +613,16 @@ public:
 
 	~Subscriber()
 	{
+		close();
+	}
+
+	void close()
+	{
+		if (!node_)
+		{
+			return;
+		}
+
 		RemoveSubscriber(remapped_topic_, this);
 
 		node_->lock_.lock();
@@ -609,6 +631,8 @@ public:
 			node_->subscribers_.erase(it);
 		ps_sub_destroy(&subscriber_);
 		node_->lock_.unlock();
+
+		node_ = 0;
 	}
 
 	T* deque()

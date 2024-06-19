@@ -27,6 +27,7 @@ add_library (pubsub
   "src/UDPTransport.c"
 )
 if (UNIX)
+target_link_libraries(pubsub pubsub_msgs)
 else()
 target_link_libraries(pubsub winmm)
 endif()
@@ -47,12 +48,12 @@ add_library (pubsub_shared SHARED
   "src/UDPTransport.c"
   "src/Bindings.c")
 if (UNIX)
+target_link_libraries(pubsub_shared PUBLIC pubsub_msgs)
 else()
-target_link_libraries(pubsub_shared winmm)
+target_link_libraries(pubsub_shared pubsub_msgs winmm)
 endif()
 set_target_properties(pubsub_shared PROPERTIES DEBUG_POSTFIX "d")
 target_include_directories(pubsub_shared PUBLIC include/)
-add_dependencies(pubsub_shared pubsub_msgs)
 if (PUBSUB_VERBOSE)
 target_compile_definitions(pubsub_shared PUBLIC PUBSUB_VERBOSE)
 endif()
@@ -69,7 +70,7 @@ set_target_properties(pubsub_cpp PROPERTIES DEBUG_POSTFIX "d")
 #set(${PROJECT_NAME}_INCLUDE_DIRS ${PROJECT_SOURCE_DIR}/include
 #    CACHE INTERNAL "${PROJECT_NAME}: Include Directories" FORCE)
 
-function(my_export_target _target _include_dir)
+function(my_export_target _target _include_dir _import)
     file(
         WRITE "${CMAKE_CURRENT_BINARY_DIR}/${_target}Config.cmake"
         "
@@ -99,35 +100,39 @@ function(my_export_target _target _include_dir)
                 set(MESSAGE_DEPS)
                 foreach (_file \${ARG_FILES})
                     add_custom_command(
-	                    COMMAND pubsub_msg_gen \${_file} \${PROJECT_NAME} ../include/\${PROJECT_NAME}/\${_file}.h
+	                    COMMAND pubsub_msg_gen \${_file} \${PROJECT_NAME} \${CMAKE_CURRENT_BINARY_DIR}/include/\${PROJECT_NAME}/\${_file}.h
                         WORKING_DIRECTORY \${PROJECT_SOURCE_DIR}/\${ARG_DIRECTORY}/
                         DEPENDS \${PROJECT_SOURCE_DIR}/\${ARG_DIRECTORY}/\${_file} pubsub_msg_gen
-                        OUTPUT \${PROJECT_SOURCE_DIR}/\${ARG_DIRECTORY}/../include/\${PROJECT_NAME}/\${_file}.h
+                        OUTPUT \${CMAKE_CURRENT_BINARY_DIR}/include/\${PROJECT_NAME}/\${_file}.h
                     )
 
-                    set(MESSAGE_DEPS \${MESSAGE_DEPS} \${PROJECT_SOURCE_DIR}/\${ARG_DIRECTORY}/../include/\${PROJECT_NAME}/\${_file}.h)
+                    set(MESSAGE_DEPS \${MESSAGE_DEPS} \${CMAKE_CURRENT_BINARY_DIR}/include/\${PROJECT_NAME}/\${_file}.h)
                 endforeach()
 
-				
                 add_custom_target(\${ARG_TARGET}_mkdir ALL
-    COMMAND \${CMAKE_COMMAND} -E make_directory \${PROJECT_SOURCE_DIR}/\${ARG_DIRECTORY}/../include/\${PROJECT_NAME}/)
-
-                add_custom_target(\${ARG_TARGET} ALL
-                    DEPENDS \${MESSAGE_DEPS} 
+                    COMMAND \${CMAKE_COMMAND} -E make_directory \${CMAKE_CURRENT_BINARY_DIR}/include/\${PROJECT_NAME}/
                 )
+
+                add_custom_target(\${ARG_TARGET}_all ALL
+                    DEPENDS \${MESSAGE_DEPS} \${ARG_TARGET}_mkdir
+                )
+
+                add_library(\${ARG_TARGET} INTERFACE)
+                add_dependencies(\${ARG_TARGET} \${ARG_TARGET}_mkdir \${ARG_TARGET}_all)
+                target_include_directories(\${ARG_TARGET} INTERFACE \${CMAKE_CURRENT_BINARY_DIR}/include/)
             endmacro()
         "
     )
 
-    export(TARGETS ${_target} FILE "${CMAKE_CURRENT_BINARY_DIR}/${_target}Targets.cmake")
+    export(TARGETS ${_target} ${_import} FILE "${CMAKE_CURRENT_BINARY_DIR}/${_target}Targets.cmake")
 
     # NOTE: The following call can pollute your PC's CMake package registry
     export(PACKAGE ${_target})
 endfunction(my_export_target)
 
-my_export_target(pubsub "${CMAKE_CURRENT_SOURCE_DIR}/include")
-my_export_target(pubsub_cpp "${CMAKE_CURRENT_SOURCE_DIR}/include")
-my_export_target(pubsub_msg_gen "${CMAKE_CURRENT_SOURCE_DIR}/include")
+my_export_target(pubsub "${CMAKE_CURRENT_SOURCE_DIR}/include" pubsub_msgs)
+my_export_target(pubsub_cpp "${CMAKE_CURRENT_SOURCE_DIR}/include" "")
+my_export_target(pubsub_msg_gen "${CMAKE_CURRENT_SOURCE_DIR}/include" "")
 
 install (TARGETS pubsub
   ARCHIVE DESTINATION lib
