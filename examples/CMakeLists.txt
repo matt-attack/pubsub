@@ -15,19 +15,10 @@ add_executable(binding_test "binding_test.c")
 target_link_libraries(binding_test pubsub_shared pubsub_msgs)
 add_dependencies(binding_test pubsub_shared pubsub_msgs)
 
-add_executable(light_simulator "light_simulator.cpp")
-target_link_libraries(light_simulator pubsub_shared pubsub_msgs)
-add_dependencies(light_simulator pubsub_shared pubsub_msgs)
-
 add_executable(simple_pub_cpp "simple_pub.cpp")
 target_link_libraries(simple_pub_cpp pubsub_cpp pubsub_msgs)
 add_dependencies(simple_pub_cpp pubsub_cpp pubsub_msgs)
 set_property(TARGET simple_pub_cpp PROPERTY CXX_STANDARD 11)
-
-add_executable(array_members "array_members.cpp")
-target_link_libraries(array_members pubsub_cpp pubsub_msgs)
-add_dependencies(array_members pubsub_cpp pubsub_msgs)
-set_property(TARGET array_members PROPERTY CXX_STANDARD 11)
 
 add_executable(simple_logger_cpp "simple_logger.cpp")
 target_link_libraries(simple_logger_cpp pubsub_cpp pubsub_msgs)

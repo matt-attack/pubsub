@@ -9,9 +9,9 @@ This is a principal that I am getting behind for this project.
 
 ## What is this package?
 
-This contains the C implementation of the core of the middleware as well as simple debugging tools.
+This contains the implementation of the core of the middleware as well as simple debugging tools. It also contains higher level C++ wrappers that implement additional functionality (such as timers).
 
-It handles networking, topic discovery, advertisement and code generation for serializing messages.
+It handles networking, discovery, advertisement and code generation for serializing messages.
 
 It can be used directly or wrapped up into larger apis giving closer to ROS like interfaces.
 
@@ -32,7 +32,7 @@ If you just want something small with the same functionality as ROS and easily w
 
 * Multicast or broadcast Publisher/Subscriber discovery
 * Code generation for message serialization/deserialization
-* UDP based best-effort networking (up to network MTU)
+* UDP based best-effort networking (up to ~1500 bytes)
   * Optional publisher side per subscriber downsampling to conserve CPU/Network resources
 * TCP based ROS-like networking for larger or more reliable data streams
 * Message introspection tools to publish and subscribe to messages without having their definitions locally
@@ -48,7 +48,7 @@ If you just want something small with the same functionality as ROS and easily w
 
 ## Features to Come
 
-* Large UDP message support (> MTU size)
+* Large UDP message support
 * Master based discovery (better scalable than multicast)
 * Topic remapping in C++
 * Documentation
@@ -78,6 +78,67 @@ git clone https://github.com/matt-attack/pubsub.git
 cd pubsub
 
 # Build the respository
-cmake .
-cmake --build .
+cmake . -B build
+cmake --build build
 ```
+
+## Running Tests
+
+You can use `ctest` to run tests on the library. To do that, build the package, then navigate to the `tests` directory in your build directory. There you can run `ctest` to execute them.
+
+## Usage Instructions
+
+### Introspection Tool (pubsub)
+
+PubSub comes with a runtime introspection tool used to view connections in the system and look at data streaming within.
+
+See the help text below for a list of commands it supports.
+
+```
+Usage: pubsub <verb> <subverb> (arg1) (arg2)
+ Verbs:
+   topic -
+      list
+      hz (topic name)
+      bw (topic name)
+      info (topic name)
+      show (topic name)
+      echo (topic name)
+      pub (topic name) (message)
+   node -
+      list
+      info (node name)
+   param -
+      set (param) (value)
+```
+
+### Message Generation
+
+Add your msg files to your project in the `msg` folder then tell CMake to generate message files for them like below:
+
+```
+project("your_project")
+
+# your CMake here
+
+find_package( pubsub_msg_gen )
+
+generate_messages(FILES 
+  YourMessage.msg
+)
+```
+
+See the `msg` folder for standard messages to use as examples.
+
+This creates a target named `your_project_msgs` as well as generates `your_project_msgs/YourMessage.msg.h`.
+
+To use the messages, simply include the generated file and add `your_project_msgs` to your link libraries list.
+
+
+### Sending Messages
+
+See `simple_pub.cpp` and `simple_pub.c` examples.
+
+### Receiving Messages
+
+See `simple_sub.cpp` and `simple_sub.c` examples.

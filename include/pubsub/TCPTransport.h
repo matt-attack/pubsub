@@ -18,6 +18,8 @@
 #include <signal.h>
 #endif
 
+#define PUBSUB_TCP_TRANSPORT 1
+
 /*
 
 typedef void(*ps_transport_fn_pub_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher, void* message);
