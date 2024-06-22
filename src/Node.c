@@ -193,7 +193,7 @@ int ps_okay()
 }
 
 // Tries to find a good IP to bind to for discovery by looking for one which has a route out
-char* GetPrimaryIp()
+const char* GetPrimaryIp()
 {
 	// allow IP override through environment variable
 	const char* override = getenv("PUBSUB_IP");
@@ -201,10 +201,8 @@ char* GetPrimaryIp()
 	{
 		return override;
 	}
-	//assert(buflen >= 16);
 
 	ps_socket_t sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-	//assert(sock != -1);
 
 	struct sockaddr_in serv;
 	memset(&serv, 0, sizeof(serv));
@@ -219,8 +217,8 @@ char* GetPrimaryIp()
 	socklen_t namelen = sizeof(name);
 	err = getsockname(sock, (struct sockaddr*)&name, &namelen);
 	//assert(err != -1);
-	char* ip = inet_ntoa(name.sin_addr);
-	//assert(p);
+	const char* ip = inet_ntoa(name.sin_addr);
+	//assert(ip);
 
 	if (name.sin_addr.s_addr == 0)
 	{

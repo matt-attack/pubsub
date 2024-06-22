@@ -12,30 +12,40 @@
 
 int main()
 {
-	pubsub::Node node("simple_publisher");
-	
-	struct ps_transport_t tcp_transport;
-	ps_tcp_transport_init(&tcp_transport, node.getNode());
-	ps_node_add_transport(node.getNode(), &tcp_transport);
+  // Create the node
+  pubsub::Node node("simple_publisher"/*node name*/);
 
-	pubsub::Publisher<pubsub::msg::String> string_pub(node, "/data");
+  // Adds TCP transport (optional)
+  struct ps_transport_t tcp_transport;
+  ps_tcp_transport_init(&tcp_transport, node.getNode());
+  ps_node_add_transport(node.getNode(), &tcp_transport);
 
-	pubsub::BlockingSpinnerWithTimers spinner;
-	spinner.setNode(node);
+  // Create the publisher
+  pubsub::Publisher<pubsub::msg::String> string_pub(node, "/data"/*topic name*/,
+                                                    false/*true to "latch" the topic*/);
 
-	auto start = pubsub::Time::now();
-	spinner.addTimer(1.0, [&]()
-	{
-		auto now = pubsub::Time::now();
-		pubsub::msg::String msg;
-		char value[20];
-		sprintf(value, "Hello %f", (now-start).toSec());
-		msg.value = value;
-		string_pub.publish(msg);
-	});
+  // Create the "spinner" which executes callbacks and timers in a background thread
+  pubsub::BlockingSpinnerWithTimers spinner;
+  spinner.setNode(node);// Add the node to the spinner
 
-	spinner.wait();
+  auto start = pubsub::Time::now();// Gets the current time
 
-    return 0;
+  // Create a timer which will run at a prescribed interval
+  spinner.addTimer(1.0/*timer is run every this many seconds*/, [&]()
+  {
+    auto now = pubsub::Time::now();
+
+	// Build and publish the message
+    pubsub::msg::String msg;
+    char value[20];
+    sprintf(value, "Hello %f", (now-start).toSec());
+    msg.value = value;
+    string_pub.publish(msg);
+  });
+
+  // Wait for the spinner to exit (on control-c)
+  spinner.wait();
+
+  return 0;
 }
 

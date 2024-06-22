@@ -9,17 +9,22 @@
 
 int main()
 {
-	pubsub::Node node("simple_subscriber");
+  // Create the node
+  pubsub::Node node("simple_subscriber"/*node name*/);
 
-	pubsub::Subscriber<pubsub::msg::String> subscriber(node, "data", [](const pubsub::msg::StringSharedPtr& msg) {
-		printf("Got message %s\n", msg->value);
-	}, 10);
+  // Create the subscriber, the provided callback will be called each time a message comes in
+  pubsub::Subscriber<pubsub::msg::String> subscriber(node, "data"/*topic name*/,
+    [](const pubsub::msg::StringSharedPtr& msg) {
+      printf("Got message %s\n", msg->value);
+    }, 10/*maximum queue size, after this many messages build up the oldest will get dropped*/);
 
-	pubsub::BlockingSpinner spinner;
-	spinner.setNode(node);
+  // Create the "spinner" which executes callbacks and timers in a background thread
+  pubsub::BlockingSpinner spinner;
+  spinner.setNode(node);// Add the node to the spinner
 
-	spinner.wait();
+  // Wait for the spinner to exit (on control-c)
+  spinner.wait();
 
-    return 0;
+  return 0;
 }
 

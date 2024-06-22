@@ -7,6 +7,7 @@ add_executable (info "pubsub.cpp")
 target_link_libraries(info pubsub)
 add_dependencies(info pubsub)
 set_property(TARGET info PROPERTY CXX_STANDARD 11)
+set_target_properties(info PROPERTIES OUTPUT_NAME "pubsub")
 
 # Build the serialization generator
 add_executable(pubsub_msg_gen "generator.cpp")
