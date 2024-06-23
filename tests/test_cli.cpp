@@ -20,6 +20,9 @@ int ps_okay();
 #include <sstream>
 #include <fstream>
 
+#ifdef _WIN32
+#include <io.h>
+#endif
 #include <pubsub_cpp/Node.h>
 #include <pubsub_cpp/Spinners.h>
 
@@ -41,7 +44,9 @@ std::string execute_command(const std::vector<std::string>& args)
 	int bak, nnew;
 	fflush(stdout);
 	bak = dup(1);
+#ifndef _WIN32
 	nnew = open(tmp_file, O_WRONLY|O_CREAT, S_IRUSR|S_IWUSR);
+#endif
 	dup2(nnew, 1);
 	close(nnew);
 
@@ -55,7 +60,9 @@ std::string execute_command(const std::vector<std::string>& args)
 
 	// Restore stdout
 	fflush(stdout);
+#ifndef _WIN32
 	dup2(bak, STDOUT_FILENO);
+#endif
 	close(nnew);
 
 	// Read in captured std out output

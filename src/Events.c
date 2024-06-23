@@ -86,7 +86,7 @@ void ps_event_set_add_socket_write(struct ps_event_set_t* set, int socket)
 {
 #ifdef WIN32
   // find the handle and change the select
-  for (int i = 0; i < set->num_handles; i++)
+  for (unsigned int i = 0; i < set->num_handles; i++)
   {
     if (set->sockets[i] == socket)
     {
@@ -117,7 +117,7 @@ void ps_event_set_remove_socket_write(struct ps_event_set_t* set, int socket)
 {
 #ifdef WIN32
   // find the handle and change the select
-  for (int i = 0; i < set->num_handles; i++)
+  for (unsigned int i = 0; i < set->num_handles; i++)
   {
     if (set->sockets[i] == socket)
     {
@@ -139,7 +139,7 @@ void ps_event_set_remove_socket(struct ps_event_set_t* set, int socket)
 #ifdef WIN32
   // find the socket to remove then remove it
   bool found = false;
-  int index = 0;
+  unsigned int index = 0;
   for (; index < set->num_handles; index++)
   {
     if (set->sockets[index] == socket)

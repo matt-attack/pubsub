@@ -48,7 +48,7 @@ void ps_sub_destroy(struct ps_sub_t* sub)
 	ps_udp_unsubscribe(sub);
 	
 	// unsubcribe from all other transports
-	for (int i = 0; i < sub->node->num_transports; i++)
+	for (unsigned int i = 0; i < sub->node->num_transports; i++)
 	{
 		sub->node->transports[i].unsubscribe(&sub->node->transports[i], sub);
     }

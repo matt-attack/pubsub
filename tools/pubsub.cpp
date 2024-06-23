@@ -24,6 +24,9 @@
 #include <sstream>
 #include <fstream>
 
+#undef max
+#undef min
+
 
 using namespace std;
 

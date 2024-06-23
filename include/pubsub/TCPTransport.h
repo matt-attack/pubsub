@@ -227,7 +227,7 @@ int ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* no
     {
       printf("Failed to Set Socket as Non-Blocking!\n");
       closesocket(socket);
-      return;
+      return 0;
     }
 #endif
 #ifdef ARDUINO
