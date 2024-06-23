@@ -179,7 +179,7 @@ ps_msg_t serialize_value(const Value& value, const ps_message_definition_t& defi
 			if (value.type != Array)
 			{
 				// just write the same value n times
-				int size = ps_field_sizes[field.type];
+				size_t size = ps_field_sizes[field.type];
 				float data = value.type == None ? 0.0 : value.flt;
 				for (unsigned int i = 0; i < field.length; i++)
 				{
@@ -191,9 +191,9 @@ ps_msg_t serialize_value(const Value& value, const ps_message_definition_t& defi
 			{
 				// fill it in using the array
 				// just write the same value n times
-				int size = ps_field_sizes[field.type];
+				size_t size = ps_field_sizes[field.type];
 				float data = value.type == None ? 0.0 : value.flt;
-				int len = field.length == 0 ? value.arr.size() : field.length;
+				size_t len = field.length == 0 ? value.arr.size() : field.length;
 				for (unsigned int i = 0; i < len; i++)
 				{
 					float data = i < value.arr.size() ? value.arr[i].flt : 0.0;
@@ -238,8 +238,8 @@ ps_msg_t serialize_value(const Value& value, const ps_message_definition_t& defi
 					pos += 4;
 				}
                 //printf("len: %i at %i\n", len, pos-start);
-				int size = ps_field_sizes[field.type];
-				for (unsigned int j = 0; j < len; j++)
+				size_t size = ps_field_sizes[field.type];
+				for (size_t j = 0; j < len; j++)
 				{
 					double data = j < value.arr.size() ? value.arr[j].flt : 0.0;
 					memcpy(pos, &data, 8);

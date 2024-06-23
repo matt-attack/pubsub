@@ -17,7 +17,11 @@
 #include <memory>
 
 
-//#include <WS2tcpip.h>
+// todo sometime fix this needing to be here for windows
+// might be a tcp issue
+#ifdef _WIN32
+#include <WS2tcpip.h>
+#endif
 #include <pubsub/Events.h>
 
 namespace pubsub
