@@ -11,7 +11,7 @@ extern "C"
     struct ps_allocator_t
     {
 	    void*(*alloc)(unsigned int size, void* context);
-	    void(*free)(void*);
+	    void(*free)(void*, void* context);
 	    void* context;
     };
 
@@ -71,6 +71,7 @@ extern "C"
 	struct ps_allocator_t;
 	typedef struct ps_msg_t(*ps_fn_encode_t)(struct ps_allocator_t* allocator, const void* msg);
 	typedef void*(*ps_fn_decode_t)(const void* data, struct ps_allocator_t* allocator);// allocates the message
+	typedef void (*ps_fn_free_t)(struct ps_allocator_t* allocator, void* msg);// frees the message
 	struct ps_message_definition_t
 	{
 		unsigned int hash;
@@ -79,6 +80,7 @@ extern "C"
 		struct ps_msg_field_t* fields;
 		ps_fn_encode_t encode;
 		ps_fn_decode_t decode;
+		ps_fn_free_t free;
 		unsigned int num_enums;
 		struct ps_msg_enum_t* enums;
 	};

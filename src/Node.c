@@ -514,7 +514,7 @@ void* ps_malloc_alloc(unsigned int size, void* _)
 	return malloc(size);
 }
 
-void ps_malloc_free(void* data)
+void ps_malloc_free(void* data, void* _)
 {
 	free(data);
 }

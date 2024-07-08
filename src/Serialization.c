@@ -78,6 +78,9 @@ int ps_serialize_message_definition(void* start, const struct ps_message_definit
 
 void ps_copy_message_definition(struct ps_message_definition_t* dst, const struct ps_message_definition_t* src)
 {
+	dst->encode = src->encode;
+	dst->decode = src->decode;
+	dst->free = src->free;
 	dst->num_fields = src->num_fields;
 	dst->hash = src->hash;
 	dst->fields = (struct ps_msg_field_t*)malloc(sizeof(struct ps_msg_field_t)*dst->num_fields);
@@ -115,6 +118,7 @@ void ps_deserialize_message_definition(const void * start, struct ps_message_def
 	definition->num_enums = hdr->num_enums;
 	definition->decode = 0;
 	definition->encode = 0;
+	definition->free = 0;
 	definition->name = 0;
 
 	definition->fields = (struct ps_msg_field_t*)malloc(sizeof(struct ps_msg_field_t)*definition->num_fields);

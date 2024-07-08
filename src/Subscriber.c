@@ -28,8 +28,14 @@ void ps_sub_enqueue(struct ps_sub_t* sub, void* data, int data_size, const struc
   else if (sub->queue_size == sub->queue_len)
   {
     // we'll replace the item at the back by shifting the queue around
-//okay, we can try and keep the message as serialized then only deserialize on deque
-    free(sub->queue[sub->queue_start]);// hmm, this is a memory leak for complex types....
+    if (sub->type)
+    {
+      sub->type->free(sub->allocator, sub->queue[sub->queue_start]);
+    }
+    else
+    {
+      free(sub->queue[sub->queue_start]);
+    }
     // add at the front
     sub->queue[new_start] = data;
     sub->queue_start = new_start;
@@ -56,28 +62,28 @@ void ps_sub_destroy(struct ps_sub_t* sub)
 
 	//remove it from my list of subs
 	sub->node->num_subs--;
-    if (sub->node->num_subs == 0)
-    {
-      free(sub->node->subs);
-      sub->node->subs = 0;
-    }
-    else
-    {
-	  struct ps_sub_t** old_subs = sub->node->subs;
-	  sub->node->subs = (struct ps_sub_t**)malloc(sizeof(struct ps_sub_t*)*sub->node->num_subs);
-	  int ind = 0;
-	  for (unsigned int i = 0; i < sub->node->num_subs+1; i++)
-	  {
-		if (old_subs[i] == sub)
+	if (sub->node->num_subs == 0)
+	{
+		free(sub->node->subs);
+		sub->node->subs = 0;
+	}
+	else
+	{
+		struct ps_sub_t** old_subs = sub->node->subs;
+		sub->node->subs = (struct ps_sub_t**)malloc(sizeof(struct ps_sub_t*)*sub->node->num_subs);
+		int ind = 0;
+		for (unsigned int i = 0; i < sub->node->num_subs+1; i++)
 		{
-		  //skip me
+			if (old_subs[i] == sub)
+			{
+				//skip me
+			}
+			else
+			{
+				sub->node->subs[ind++] = old_subs[i];
+			}
 		}
-		else
-		{
-          sub->node->subs[ind++] = old_subs[i];
-		}
-	  }
-      free(old_subs);
+		free(old_subs);
     }
 
 	// free any queued up received messages and the queue itself
@@ -85,7 +91,16 @@ void ps_sub_destroy(struct ps_sub_t* sub)
 	{
 		int index = (sub->queue_start + i)%sub->queue_size;
 		if (sub->queue[index] != 0)
-			free(sub->queue[index]);// memory leak for complex types
+		{
+			if (sub->type)
+			{
+				sub->type->free(sub->allocator, sub->queue[index]);
+			}
+			else
+			{
+				free(sub->queue[index]);
+			}
+		}
 	}
 	free(sub->queue);
 }

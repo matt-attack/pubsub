@@ -548,7 +548,12 @@ std::string generate(const char* definition, const char* name)
 		output += "  struct ps_msg_t omsg;\n";
 		output += "  ps_msg_alloc(len, allocator, &omsg);\n";
 		output += "  memcpy(ps_get_msg_start(omsg.data), msg, len);\n";
-		output += "  return omsg;\n}\n";
+		output += "  return omsg;\n}\n\n";
+
+		// finally free todo use allocator
+		output += "static void " + type_name + "_free(struct ps_allocator_t* allocator, void* msg)\n{\n";
+		output += "  allocator->free(msg, allocator->context);\n";
+		output += "}\n\n";
 	}
 	else
 	{
@@ -729,6 +734,42 @@ std::string generate(const char* definition, const char* name)
 		}
 		output += "  return omsg;\n";
 		output += "}\n";
+
+		// finally free
+		output += "static void " + type_name + "_free(struct ps_allocator_t* allocator, void* data)\n{\n";
+		output += "  struct " + type_name + "* msg = (struct " + type_name + "*)data;\n";
+		for (size_t i = 0; i < fields.size(); i++)
+		{
+			if (fields[i].type == string_type)
+			{
+				if (fields[i].array_size == 1)
+				{
+					output += "  allocator->free(msg->" + fields[i].name + ", allocator->context);\n";
+				}
+				else
+				{
+					if (fields[i].array_size == 0)
+					{
+						output += "  int num_" + fields[i].name + " = msg->" + fields[i].name + "_length;\n";
+					}
+					else
+					{
+						output += "  int num_" + fields[i].name + " = " + std::to_string(fields[i].array_size) + ";\n";
+					}
+
+					output += "  for (int i = 0; i < num_" + fields[i].name + "; i++) {\n";
+					output += "    allocator->free(msg->" + fields[i].name + "[i], allocator->context);\n";
+					output += "  }\n";
+					output += "  allocator->free(msg->" + fields[i].name + ", allocator->context);\n";
+				}
+			}
+			else if (fields[i].array_size == 0)
+			{
+				output += "  allocator->free(msg->" + fields[i].name + ", allocator->context);\n";
+			}
+		}
+		output += "  allocator->free(msg, allocator->context);\n";
+		output += "}\n\n";
 	}
 
 	// generate the actual message definition
@@ -740,11 +781,11 @@ std::string generate(const char* definition, const char* name)
 	output += "static struct ps_message_definition_t " + type_name + "_def = { ";
 	if (enumerations.size() == 0)
 	{
-		output += std::to_string(hash) + ", \"" + name + "\", " + std::to_string(field_count) + ", " + type_name + "_fields, " + type_name + "_encode, " + type_name + "_decode, 0, 0 };\n";
+		output += std::to_string(hash) + ", \"" + name + "\", " + std::to_string(field_count) + ", " + type_name + "_fields, " + type_name + "_encode, " + type_name + "_decode, " + type_name + "_free, 0, 0 };\n";
 	}
 	else
 	{
-		output += std::to_string(hash) + ", \"" + name + "\", " + std::to_string(field_count) + ", " + type_name + "_fields, " + type_name + "_encode, " + type_name + "_decode, " + std::to_string(enumerations.size()) + ", " + type_name + "_enums };\n";
+		output += std::to_string(hash) + ", \"" + name + "\", " + std::to_string(field_count) + ", " + type_name + "_fields, " + type_name + "_encode, " + type_name + "_decode, " + type_name + "_free, " + std::to_string(enumerations.size()) + ", " + type_name + "_enums };\n";
 	}
 
 	output += "\n#ifdef __cplusplus\n";
