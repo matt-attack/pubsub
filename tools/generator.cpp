@@ -462,7 +462,7 @@ std::string generate(const char* definition, const char* name)
 	//ps_message_definition_t std_msgs_String_def = { 123456789, "std_msgs/String", 1, std_msgs_String_fields };
 
 	// generate the fields
-	output += "struct ps_msg_field_t " + type_name + "_fields[] = {\n";
+	output += "static struct ps_msg_field_t " + type_name + "_fields[] = {\n";
 	for (auto& field : fields)
 	{
 		if (field.getTypeEnum() == "FT_Struct")
@@ -490,7 +490,7 @@ std::string generate(const char* definition, const char* name)
 	// generate enum metadata
 	if (enumerations.size())
 	{
-		output += "struct ps_msg_enum_t " + type_name + "_enums[] = {\n";
+		output += "static struct ps_msg_enum_t " + type_name + "_enums[] = {\n";
 		for (auto& e: enumerations)
 		{
 			output += "  {\"" + e.name + "\", " + e.value + ", " + std::to_string(e.field_num) + "},\n";
@@ -536,14 +536,14 @@ std::string generate(const char* definition, const char* name)
 	if (is_pure)
 	{
 		//generate simple de/serializaton
-		output += "void* " + type_name + "_decode(const void* data, struct ps_allocator_t* allocator)\n{\n";
+		output += "static void* " + type_name + "_decode(const void* data, struct ps_allocator_t* allocator)\n{\n";
 		output += "  struct " + type_name + "* out = (struct " + type_name + "*)allocator->alloc(sizeof(struct " + type_name + "), allocator->context);\n";
 		output += "  *out = *(struct " + type_name + "*)data;\n";
 		output += "  return out;\n";
 		output += "}\n\n";
 
 		// now for encode
-		output += "struct ps_msg_t " + type_name + "_encode(struct ps_allocator_t* allocator, const void* msg)\n{\n";
+		output += "static struct ps_msg_t " + type_name + "_encode(struct ps_allocator_t* allocator, const void* msg)\n{\n";
 		output += "  int len = sizeof(struct " + type_name + ");\n";
 		output += "  struct ps_msg_t omsg;\n";
 		output += "  ps_msg_alloc(len, allocator, &omsg);\n";
@@ -553,7 +553,7 @@ std::string generate(const char* definition, const char* name)
 	else
 	{
 		//need to split it in sections between the strings
-		output += "void* " + type_name + "_decode(const void* data, struct ps_allocator_t* allocator)\n{\n";
+		output += "static void* " + type_name + "_decode(const void* data, struct ps_allocator_t* allocator)\n{\n";
 		output += "  char* p = (char*)data;\n";
 		output += "  int len = sizeof(struct "+type_name+");\n";
 		output += "  struct "+type_name+"* out = (struct " + type_name + "*)allocator->alloc(len, allocator->context);\n";
@@ -627,7 +627,7 @@ std::string generate(const char* definition, const char* name)
 		output += "}\n\n";
 
 		//typedef ps_msg_t(*ps_fn_encode_t)(ps_allocator_t* allocator, const void* msg);
-		output += "struct ps_msg_t " + type_name + "_encode(struct ps_allocator_t* allocator, const void* data)\n{\n";
+		output += "static struct ps_msg_t " + type_name + "_encode(struct ps_allocator_t* allocator, const void* data)\n{\n";
 		output += "  const struct " + type_name + "* msg = (const struct " + type_name + "*)data;\n";
 		output += "  int len = sizeof(struct " + type_name + ");\n";
 		output += "  // calculate the encoded length of the message\n";
@@ -737,7 +737,7 @@ std::string generate(const char* definition, const char* name)
 	{
 		field_count += f.type->fields.size();
 	}
-	output += "struct ps_message_definition_t " + type_name + "_def = { ";
+	output += "static struct ps_message_definition_t " + type_name + "_def = { ";
 	if (enumerations.size() == 0)
 	{
 		output += std::to_string(hash) + ", \"" + name + "\", " + std::to_string(field_count) + ", " + type_name + "_fields, " + type_name + "_encode, " + type_name + "_decode, 0, 0 };\n";

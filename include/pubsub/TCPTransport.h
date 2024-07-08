@@ -340,6 +340,7 @@ int ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* no
     {
       const int header_size = 5;
       int len = recv(client->socket, buf, header_size, MSG_PEEK);
+	  //printf("recv %i desired size 0\n", len);
       if (len == 0)
       {
         client->needs_removal = true;
@@ -355,6 +356,7 @@ int ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* no
       // we actually got the header! start looking for the message
       len = recv(client->socket, buf, header_size, 0);
       //connection->packet_type = message_type;
+	  //printf("recv %i from client->socket desired size 0 2\n", len);
       //client->waiting_for_header = false;
       client->desired_packet_size = *(uint32_t*)&buf[1];
       //printf("Incoming message with %i bytes\n", client->desired_packet_size);
@@ -368,6 +370,7 @@ int ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* no
       int remaining_size = client->desired_packet_size - client->current_packet_size;
       // check for new messages and read until we hit packet size
       int len = recv(client->socket, &client->packet_data[client->current_packet_size], remaining_size, 0);
+      //printf("recv %i from client->socket\n", len);
       if (len > 0)
       {
         //printf("Read %i bytes of message\n", len);
@@ -448,6 +451,7 @@ int ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* no
       tv.tv_sec = 0;
       tv.tv_usec = 0;
       retval = select(connection->socket + 1, NULL, &wfds, NULL, &tv);
+	 //printf("select\n");
       if (retval == -1)
       {
         // error?
@@ -481,6 +485,7 @@ int ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* no
     {
       const int header_size = 5;
       int len = recv(connection->socket, buf, header_size, MSG_PEEK);
+	//printf("len %i\n", len);
       //printf("peek got: %i\n", len);
       if (len == 0)
       {
@@ -512,6 +517,7 @@ int ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* no
 
       // check for new messages and read until we hit packet size
       int len = recv(connection->socket, &connection->packet_data[connection->current_size], remaining_size, 0);
+	//printf("len %i\n", len);
       if (len == 0)
       {
         // we got disconnected
@@ -640,7 +646,7 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
       }
       tclient->queued_messages[0].data = data;
       tclient->queued_messages[0].length = length + 5;
-      //printf("dropped message on topic '%s'\n", publisher->topic);
+      printf("dropped message on topic '%s'\n", publisher->topic);
       return;// drop it, we are out of queue space
     }
     else

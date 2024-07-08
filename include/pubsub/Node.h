@@ -193,6 +193,8 @@ void ps_node_init_ex(struct ps_node_t* node, const char* name, const char* ip, b
 
 void ps_node_create_publisher(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type, struct ps_pub_t* pub, bool latched);
 
+void ps_node_create_publisher_ex(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type, struct ps_pub_t* pub, bool latched, unsigned int recommended_transport);
+
 void ps_node_create_subscriber(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,
 	struct ps_sub_t* sub,
 	unsigned int queue_size,//make >= 1
@@ -210,7 +212,7 @@ struct ps_subscriber_options
 	unsigned int skip;// skips to every nth message for throttling
 	ps_subscriber_fn_cb_t cb;
 	void* cb_data;
-    uint32_t preferred_transport;// falls back to udp otherwise
+    int32_t preferred_transport;// falls back to udp otherwise
 };
 
 void ps_subscriber_options_init(struct ps_subscriber_options* options);

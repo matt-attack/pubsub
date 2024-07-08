@@ -114,6 +114,7 @@ void ps_node_advertise(struct ps_pub_t* pub)
 	p->addr = pub->node->addr;
 	p->port = pub->node->port;
 	p->flags = pub->latched ? PS_ADVERTISE_LATCHED : 0;
+	p->flags |= (pub->recommended_transport << 1) & 0b11111;
 	p->type_hash = pub->message_definition->hash;
 	p->transports = pub->node->supported_transports;
 	p->group_id = pub->node->group_id;
@@ -134,8 +135,7 @@ void ps_node_advertise(struct ps_pub_t* pub)
 	int sent_bytes = sendto(pub->node->socket, (const char*)data, off, 0, (struct sockaddr*)&address, sizeof(struct sockaddr_in));
 }
 
-
-void ps_node_create_publisher(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type, struct ps_pub_t* pub, bool latched)
+void ps_node_create_publisher_ex(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type, struct ps_pub_t* pub, bool latched, unsigned int recommended_transport)
 {
 	node->num_pubs++;
 	struct ps_pub_t** old_pubs = node->pubs;
@@ -157,8 +157,14 @@ void ps_node_create_publisher(struct ps_node_t* node, const char* topic, const s
 	pub->last_message.data = 0;
 	pub->last_message.len = 0;
 	pub->sequence_number = 0;
+	pub->recommended_transport = recommended_transport;
 
 	ps_node_advertise(pub);
+}
+
+void ps_node_create_publisher(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type, struct ps_pub_t* pub, bool latched)
+{
+	ps_node_create_publisher_ex(node, topic, type, pub, latched, 0);
 }
 
 // Setup Control-C handlers
@@ -523,7 +529,7 @@ void ps_subscriber_options_init(struct ps_subscriber_options* options)
 	options->skip = 0;
 	options->cb = 0;
 	options->cb_data = 0;
-	options->preferred_transport = PS_TRANSPORT_UDP;
+	options->preferred_transport = -1;// no preference
 }
 
 void ps_node_create_subscriber_adv(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,
@@ -1150,14 +1156,31 @@ int ps_node_spin(struct ps_node_t* node)
 				ep.address = p->addr;
 				ep.port = p->port;
 
+				// 0-31
+				int recommended_transport = (p->flags >> 1) & 0b11111;
+
+				int preferred_transport = PS_TRANSPORT_UDP;
+				if (sub->preferred_transport >= 0)
+				{
+					preferred_transport = sub->preferred_transport;
+				}
+				else
+				{
+					preferred_transport = recommended_transport;
+				}
+				//printf("preferred transport: %i\n", preferred_transport);
+				//printf("recommended transport: %i\n", recommended_transport);
+
+				if (preferred_transport != 0)
+					preferred_transport = (1 << (preferred_transport-1));
 				// first match udp if its what we want or all that is offered
-				if (sub->preferred_transport == PS_TRANSPORT_UDP || p->transports == PS_TRANSPORT_UDP)
+				if (preferred_transport == PS_TRANSPORT_UDP || p->transports == PS_TRANSPORT_UDP)
 				{
 					ps_udp_subscribe(sub, &ep);
 				}
 				else if (node->num_transports == 0)
 				{
-					printf("ERROR: Transport mismatch. Do not have desired transport.\n");
+					printf("ERROR: Transport mismatch on topic '%s'. Do not have desired transport %i.\n", topic, preferred_transport);
 				}
 				else
 				{
@@ -1166,14 +1189,14 @@ int ps_node_spin(struct ps_node_t* node)
 					for (int i = 0; i < node->num_transports; i++)
 					{
 						struct ps_transport_t* transport = &node->transports[i];
-						if ((transport->uuid & sub->preferred_transport) != 0)
+						if ((transport->uuid & preferred_transport) != 0)
 						{
 							int data_index = 0;
 							for (int i = 0; i < 16; i++)
 							{
 								if ((p->transports & (1 << i)) != 0)
 								{
-									if (sub->preferred_transport == (1 << i))
+									if (preferred_transport == (1 << i))
 									{
 										// this is it
 										break;
@@ -1191,6 +1214,7 @@ int ps_node_spin(struct ps_node_t* node)
 					if (!found)
 					{				
 						// Otherwise fallback to udp
+						//printf("Match not found, falling back to udp\n");
 						ps_udp_subscribe(sub, &ep);
 					}
 				}
@@ -1374,7 +1398,6 @@ void ps_node_set_parameter(struct ps_node_t* node, const char* name, double valu
 	data[0] = PS_UDP_PROTOCOL_PARAM_CHANGE;
 	*(double*)&data[1] = value;
 
-	int off = sizeof(struct ps_advertise_req_t);
 	int len = serialize_string(&data[1+8], name) + 9;
 
 	//also add other info...

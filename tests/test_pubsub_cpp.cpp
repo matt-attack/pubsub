@@ -45,6 +45,34 @@ TEST(test_publisher_subscriber_close_cpp, []() {
 	sub.close();
 	sub.close();
 });
+
+/*TEST(test_publish_subscribe_latched_cpp, []() {
+	// test that latched topics make it through the local message passing between nodes
+	pubsub::Node node("simple_publisher");
+
+	pubsub::Publisher<pubsub::msg::String> string_pub(node, "/data", true);
+
+	pubsub::msg::String omsg;
+	omsg.value = "Hello";
+	string_pub.publish(omsg);
+
+	
+	pubsub::BlockingSpinnerWithTimers spinner;
+	spinner.setNode(node);
+
+	bool got_message = false;
+	pubsub::Subscriber<pubsub::msg::String> subscriber(node, "/data", [&](const pubsub::msg::StringSharedPtr& msg) {
+		printf("Got message %s in sub1\n", msg->value);
+		EXPECT(strcmp(omsg.value, msg->value) == 0);
+		got_message = true;
+		spinner.stop();
+	}, 10);
+
+	spinner.wait();
+	EXPECT(got_message);
+});*/
+
+
 TEST(test_publish_subscribe_cpp, []() {
 	// test that normal messages make it through message passing
 	pubsub::Node node("simple_publisher");

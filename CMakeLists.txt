@@ -25,6 +25,7 @@ add_library (pubsub
   "src/Serialization.c"
   "src/System.c"
   "src/UDPTransport.c"
+  "src/Parameter.c"
 )
 if (UNIX)
 target_link_libraries(pubsub pubsub_msgs)

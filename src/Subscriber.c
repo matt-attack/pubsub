@@ -28,7 +28,8 @@ void ps_sub_enqueue(struct ps_sub_t* sub, void* data, int data_size, const struc
   else if (sub->queue_size == sub->queue_len)
   {
     // we'll replace the item at the back by shifting the queue around
-    free(sub->queue[sub->queue_start]);
+//okay, we can try and keep the message as serialized then only deserialize on deque
+    free(sub->queue[sub->queue_start]);// hmm, this is a memory leak for complex types....
     // add at the front
     sub->queue[new_start] = data;
     sub->queue_start = new_start;
@@ -84,7 +85,7 @@ void ps_sub_destroy(struct ps_sub_t* sub)
 	{
 		int index = (sub->queue_start + i)%sub->queue_size;
 		if (sub->queue[index] != 0)
-			free(sub->queue[index]);
+			free(sub->queue[index]);// memory leak for complex types
 	}
 	free(sub->queue);
 }

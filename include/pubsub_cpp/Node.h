@@ -291,7 +291,7 @@ class Publisher: public PublisherBase
 public:
 	friend class Subscriber<T>;
 
-	Publisher(Node& node, const std::string& topic, bool latched = false)// : topic_(topic)
+	Publisher(Node& node, const std::string& topic, bool latched = false, int preferred_transport = 0)// : topic_(topic)
 	{
 		node_ = &node;
 		topic_ = topic;
@@ -304,7 +304,7 @@ public:
 		remapped_topic_ = handle_remap(real_topic, node.getNamespace());
 
 		node.lock_.lock();
-		ps_node_create_publisher(node.getNode(), remapped_topic_.c_str(), T::GetDefinition(), &publisher_, latched);
+		ps_node_create_publisher_ex(node.getNode(), remapped_topic_.c_str(), T::GetDefinition(), &publisher_, latched, preferred_transport);
 		node.lock_.unlock();
 
 		//add me to the publisher list
@@ -545,7 +545,7 @@ class Subscriber: public SubscriberBase
 
 public:
 
-	Subscriber(Node& node, const std::string& topic, std::function<void(const std::shared_ptr<T>&)> cb, unsigned int queue_size = 1, int preferred_transport = 0) : cb_(cb), queue_size_(queue_size)
+	Subscriber(Node& node, const std::string& topic, std::function<void(const std::shared_ptr<T>&)> cb, unsigned int queue_size = 1, int preferred_transport = -1) : cb_(cb), queue_size_(queue_size)
 	{
 		node_ = &node;
 

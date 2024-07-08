@@ -35,7 +35,7 @@ struct ps_sub_t
 	ps_subscriber_fn_cb_t cb;
 	void* cb_data;
 
-    unsigned int preferred_transport;// udp or tcp
+	int preferred_transport;// udp or tcp, or -1 for no preference
 
 	unsigned int skip;
 
