@@ -1,7 +1,5 @@
 #pragma once
 
-#include <pubsub/String.msg.h>
-
 #ifdef __cplusplus
 extern "C"
 {
@@ -14,7 +12,6 @@ extern "C"
 #include <pubsub/Publisher.h>
 #include <pubsub/Subscriber.h>
 #include <pubsub/System.h>
-
 
 #include <pubsub/Parameters.msg.h>
 
