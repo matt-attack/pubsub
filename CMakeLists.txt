@@ -30,7 +30,7 @@ add_library (pubsub
 if (UNIX)
 target_link_libraries(pubsub pubsub_msgs)
 else()
-target_link_libraries(pubsub winmm)
+target_link_libraries(pubsub winmm pubsub_msgs)
 endif()
 set_target_properties(pubsub PROPERTIES DEBUG_POSTFIX "d")
 target_include_directories(pubsub PUBLIC include/)
