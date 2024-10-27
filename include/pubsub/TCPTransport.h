@@ -281,7 +281,8 @@ int ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* no
     while (client->queued_message != 0)
     {
       int to_send = client->queued_message_length - client->queued_message_written;
-      int sent = send(client->socket, &client->queued_message[client->queued_message_written], to_send, 0);
+      uint8_t* data = (uint8_t*)client->queued_message->data;
+      int sent = send(client->socket, &data[client->queued_message_written], to_send, 0);
       if (sent > 0)
       {
         client->queued_message_written += sent;
@@ -292,8 +293,11 @@ int ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* no
       else if (sent < 0 && errno != EAGAIN)
 #endif
       {
+        //printf("needs removal %i\n", errno);
         client->needs_removal = true;
       }
+      
+      //printf("Sending more: %i to make %i of %i\n", sent, client->queued_message_written, client->queued_message_length);
 
       if (client->queued_message_written == client->queued_message_length)
       {
@@ -533,9 +537,9 @@ int ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* no
       }
       else if (len > 0)
       {
-        //printf("Read %i bytes of message\n", len);
         connection->current_size += len;
-
+        //printf("Read %i bytes of message, so far: %i\n", len, connection->current_size);
+        
         if (connection->current_size == connection->packet_size)
         {
           //printf("message finished type %x\n", connection->packet_type);
@@ -678,6 +682,7 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
   // the message header is already filled out with the packet id and length
   
   int32_t desired_len = sizeof(struct ps_msg_header) + length;
+  //printf("trying to send message of %i bytes\n", desired_len);
   int32_t c = send(socket, message, desired_len, 0);
   if (c < desired_len && c >= 0)
   {
@@ -711,6 +716,8 @@ FAILDISCONNECT:
 FAILCOPY:
   // add a reference count and put it in our queue
   ps_msg_ref_add(msg);
+  
+  //printf("Wrote %i bytes\n", tclient->queued_message_written);
   
   tclient->queued_message = msg;
   tclient->queued_message_length = length + sizeof(struct ps_msg_header);

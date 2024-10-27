@@ -6,6 +6,7 @@
 #include <pubsub/TCPTransport.h>
 
 #include <pubsub/String.msg.h>
+#include <pubsub/PointCloud.msg.h>
 
 #include "mini_mock.hpp"
 /*add test to make sure mismatched messages are detected and not received
@@ -203,6 +204,64 @@ TEST(test_publish_subscribe_latched_cb_multicast_tcp, []() {
 
 TEST(test_publish_subscribe_latched_cb_broadcast_tcp, []() {
   latch_test_cb(true, true);
+});
+
+// test sending a very large message
+TEST(test_publish_subscribe_large, []() {
+  struct ps_node_t node;
+  ps_node_init(&node, "test_node", "", true);
+
+  struct ps_transport_t tcp_transport;
+  ps_tcp_transport_init(&tcp_transport, &node);
+  ps_node_add_transport(&node, &tcp_transport);
+
+  struct ps_pub_t string_pub;
+  ps_node_create_publisher(&node, "/data", &pubsub__PointCloud_def, &string_pub, true);
+
+  // come up with the latched topic
+  static struct pubsub__PointCloud rmsg;
+  rmsg.num_points = 100000000;// 10 million points!
+  rmsg.point_type = pubsub::msg::PointCloud::POINT_XYZ;
+  rmsg.data_length = rmsg.num_points*4*3;//3 floats per point
+  rmsg.data = (uint8_t*)malloc(rmsg.data_length);
+  ps_pub_publish_ez(&string_pub, &rmsg);
+
+  struct ps_sub_t string_sub;
+
+  struct ps_subscriber_options options;
+  ps_subscriber_options_init(&options);
+  //options.skip = skip;
+  options.queue_size = 0;
+  options.allocator = 0;
+  options.ignore_local = false;
+
+  static bool got_message = false;
+  options.preferred_transport = 1;
+  options.cb = [](void* message, unsigned int size, void* data2, const ps_msg_info_t* info)
+  {
+    got_message = true;
+    printf("Got message\n");
+    // todo need to also assert we have the message type
+    // which is tricky for udp...
+    auto data = (struct pubsub__PointCloud*)pubsub__PointCloud_decode(message, &ps_default_allocator);
+    printf("Decoded message\n");
+    EXPECT(data->num_points == rmsg.num_points);
+    free(data->data);
+    free(data);
+  };
+  ps_node_create_subscriber_adv(&node, "/data", 0, &string_sub, &options);
+
+  // now spin and wait for us to get the published message
+  while (ps_okay() && !got_message)
+  {
+    ps_node_spin(&node);// todo blocking wait first
+
+    ps_sleep(1);
+  }
+
+done:
+  EXPECT(got_message);
+  ps_node_destroy(&node);
 });
 
 CREATE_MAIN_ENTRY_POINT();
