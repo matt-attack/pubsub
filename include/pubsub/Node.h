@@ -29,7 +29,8 @@ struct ps_endpoint_t;
 struct ps_client_t;
 struct ps_subscribe_req_t;
 struct ps_allocator_t;
-typedef void(*ps_transport_fn_pub_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher, struct ps_client_t* client, const void* message, uint32_t length);
+struct ps_msg_ref_t;
+typedef void(*ps_transport_fn_pub_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher, struct ps_client_t* client, struct ps_msg_ref_t* message);
 typedef int(*ps_transport_fn_spin_t)(struct ps_transport_t* transport, struct ps_node_t* node);
 typedef void(*ps_transport_fn_add_publisher_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher);
 typedef void(*ps_transport_fn_remove_publisher_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher);
@@ -129,10 +130,9 @@ struct ps_msg_info_t
 struct ps_msg_header
 {
 	uint8_t pid;//packet type id
+	uint32_t length;//message length
 	uint32_t id;//stream id
 	uint16_t seq;//sequence number
-	uint8_t index;
-	uint8_t count;
 };
 #pragma pack(pop)
 

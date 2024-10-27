@@ -612,14 +612,29 @@ void ps_print_definition(const struct ps_message_definition_t* definition, bool 
 void ps_msg_alloc(unsigned int size, struct ps_allocator_t* allocator, struct ps_msg_t* out_msg)
 {
 	out_msg->len = size;
-    if (allocator)
-    {
-	    out_msg->data = (void*)allocator->alloc(size + sizeof(struct ps_msg_header), allocator->context);
-    }
-    else
-    {
-        out_msg->data = (void*)((char*)malloc(size + sizeof(struct ps_msg_header)));
-    }
+  if (allocator)
+  {
+	  out_msg->data = (void*)allocator->alloc(size + sizeof(struct ps_msg_header), allocator->context);
+  }
+  else
+  {
+    out_msg->data = (void*)((char*)malloc(size + sizeof(struct ps_msg_header)));
+  }
+}
+
+void ps_msg_ref_add(struct ps_msg_ref_t* msg)
+{
+  msg->refcount++;
+}
+
+void ps_msg_ref_free(struct ps_msg_ref_t* msg)
+{
+  msg->refcount--;
+  if (msg->refcount == 0)
+  {
+    free(msg->data);
+    free(msg);
+  }
 }
 
 

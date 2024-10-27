@@ -43,7 +43,7 @@ struct ps_pub_t
 	bool latched;// todo make this an enum of options if we add more
 	uint8_t recommended_transport;
 
-	struct ps_msg_t last_message;//only used if latched
+	struct ps_msg_ref_t* last_message;//only used if latched
 	unsigned int sequence_number;
 };
 

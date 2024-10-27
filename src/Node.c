@@ -154,8 +154,7 @@ void ps_node_create_publisher_ex(struct ps_node_t* node, const char* topic, cons
 	pub->topic = topic;
 	pub->node = node;
 	pub->latched = latched;
-	pub->last_message.data = 0;
-	pub->last_message.len = 0;
+	pub->last_message = 0;
 	pub->sequence_number = 0;
 	pub->recommended_transport = recommended_transport;
 

@@ -60,13 +60,22 @@ extern "C"
 		int field;// the field this is associated with in the message
 	};
 
-
 	// encoded message
 	struct ps_msg_t
 	{
 		void* data;
 		unsigned int len;
 	};
+	
+	struct ps_msg_ref_t
+	{
+	  void* data;
+	  unsigned int len;
+	  unsigned int refcount;
+	};
+	
+	void ps_msg_ref_add(struct ps_msg_ref_t* msg);
+	void ps_msg_ref_free(struct ps_msg_ref_t* msg);
 
 	struct ps_allocator_t;
 	typedef struct ps_msg_t(*ps_fn_encode_t)(struct ps_allocator_t* allocator, const void* msg);

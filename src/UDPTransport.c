@@ -4,7 +4,7 @@
 
 #include <pubsub/Net.h>
 
-void ps_udp_publish(struct ps_pub_t* pub, struct ps_client_t* client, struct ps_msg_t* msg)
+void ps_udp_publish(struct ps_pub_t* pub, struct ps_client_t* client, struct ps_msg_ref_t* msg)
 {
 	// send da udp packet!
 	struct sockaddr_in address;
@@ -16,10 +16,9 @@ void ps_udp_publish(struct ps_pub_t* pub, struct ps_client_t* client, struct ps_
 	//need to add in the topic id
 	struct ps_msg_header* hdr = (struct ps_msg_header*)msg->data;
 	hdr->pid = PS_UDP_PROTOCOL_DATA;
+	hdr->length = msg->len;
 	hdr->id = client->stream_id;
 	hdr->seq = client->sequence_number++;
-	hdr->index = 0;
-	hdr->count = 1;// todo use me for larger packets
 
 	int sent_bytes = sendto(pub->node->socket, (const char*)msg->data, msg->len + sizeof(struct ps_msg_header),
 		0, (struct sockaddr*)&address, sizeof(struct sockaddr_in));
