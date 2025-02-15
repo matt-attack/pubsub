@@ -572,7 +572,6 @@ public:
 		struct ps_subscriber_options options;
 		ps_subscriber_options_init(&options);
 
-		options.queue_size = 0;
 		options.cb = cb2;
 		options.cb_data = this;
 		options.allocator = 0;
@@ -637,11 +636,6 @@ public:
 		node_->lock_.unlock();
 
 		node_ = 0;
-	}
-
-	T* deque()
-	{
-		return (T*)ps_sub_deque(&subscriber_);
 	}
 
 	const std::string& getQualifiedTopic()

@@ -67,6 +67,7 @@ typedef void(*ps_param_confirm_cb_t)(const char* name, double value, void* data)
 struct ps_node_t
 {
 	const char* name;
+	const char* description;
 	unsigned int num_pubs;
 	struct ps_pub_t** pubs;
 	unsigned int num_subs;
@@ -195,24 +196,18 @@ void ps_node_create_publisher(struct ps_node_t* node, const char* topic, const s
 
 void ps_node_create_publisher_ex(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type, struct ps_pub_t* pub, bool latched, unsigned int recommended_transport);
 
-void ps_node_create_subscriber(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,
-	struct ps_sub_t* sub,
-	unsigned int queue_size,//make >= 1
-	struct ps_allocator_t* allocator,//give null to use default
-	bool ignore_local);// if ignore local is set, this node ignores publications from itself
-							 // this facilitiates passing messages through shared memory
-
 
 typedef void(*ps_subscriber_fn_cb_t)(void* message, unsigned int size, void* data, const struct ps_msg_info_t* info);
 struct ps_subscriber_options
 {
-	unsigned int queue_size;
 	bool ignore_local;
 	struct ps_allocator_t* allocator;
 	unsigned int skip;// skips to every nth message for throttling
 	ps_subscriber_fn_cb_t cb;
+	ps_subscriber_fn_cb_t cb_raw;
 	void* cb_data;
-    int32_t preferred_transport;// falls back to udp otherwise
+  int32_t preferred_transport;// falls back to udp otherwise
+  const char* description;
 };
 
 void ps_subscriber_options_init(struct ps_subscriber_options* options);
@@ -221,7 +216,7 @@ void ps_node_create_subscriber_adv(struct ps_node_t* node, const char* topic, co
 	struct ps_sub_t* sub,
 	const struct ps_subscriber_options* options);
 
-void ps_node_create_subscriber_cb(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,
+void ps_node_create_subscriber(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,
 	struct ps_sub_t* sub,
 	ps_subscriber_fn_cb_t cb,
 	void* cb_data,

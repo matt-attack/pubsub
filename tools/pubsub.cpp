@@ -320,13 +320,12 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
       struct ps_subscriber_options options;
       ps_subscriber_options_init(&options);
       options.skip = skip;
-      options.queue_size = 0;
       options.allocator = 0;
       options.ignore_local = false;
       options.preferred_transport = -1;
       options.preferred_transport = parser.GetBool("tcp") ? 1 : options.preferred_transport;
       options.preferred_transport = parser.GetBool("udp") ? 0 : options.preferred_transport;
-      options.cb = [](void* message, unsigned int size, void* data, const ps_msg_info_t* info)
+      options.cb_raw = [](void* message, unsigned int size, void* data, const ps_msg_info_t* info)
       {
         // get and deserialize the messages
         if (sub.received_message_def.fields == 0)
@@ -357,7 +356,7 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
           }
           ps_deserialize_print(message, &sub.received_message_def, no_arr ? 10 : 0, field_name);
           printf("-------------\n");
-          free(message);
+          free(message);// todo use allocator
           if (++count >= n)
           {
             // need to commit sudoku here..
@@ -889,7 +888,7 @@ int main(int num_args_real, char** args)
 
           ps_subscriber_options opts;
           ps_subscriber_options_init(&opts);
-          opts.cb = cb;
+          opts.cb_raw = cb;
           opts.cb_data = &message_times;
           opts.preferred_transport = -1;
           opts.preferred_transport = parser.GetBool("tcp") ? 1 : opts.preferred_transport;

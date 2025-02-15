@@ -215,7 +215,6 @@ int ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* no
     }
     struct ps_tcp_client_t* new_client = &impl->clients[impl->num_clients - 1];
     new_client->socket = socket;
-    new_client->socket = socket;
     new_client->needs_removal = false;
     new_client->current_packet_size = 0;
     new_client->desired_packet_size = 0;
@@ -517,7 +516,7 @@ int ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* no
       connection->waiting_for_header = false;
       connection->packet_size = *(uint32_t*)&buf[1];
       //printf("Incoming message with %i bytes\n", impl->connections[i].packet_size);
-      connection->packet_data = (char*)malloc(connection->packet_size);
+      connection->packet_data = (char*)connection->subscriber->allocator->alloc(connection->packet_size, connection->subscriber->allocator->context);
 
       connection->current_size = 0;
     }
@@ -561,7 +560,7 @@ int ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* no
               }
             }
 
-            free(connection->packet_data);
+            connection->subscriber->allocator->free(connection->packet_data, connection->subscriber->allocator->context);
           }
           else if (connection->packet_type == PS_TCP_PROTOCOL_DATA)
           {
@@ -570,32 +569,17 @@ int ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* no
             struct ps_msg_info_t message_info;
             message_info.address = connection->endpoint.address;
             message_info.port = connection->endpoint.port;
-
-            void* out_data;
-            if (connection->subscriber->type)
-            {
-              out_data = connection->subscriber->type->decode(connection->packet_data, connection->subscriber->allocator);
-              free(connection->packet_data);
-            }
-            else
-            {
-              out_data = connection->packet_data;
-            }
-
-            // remove the reference to packet data so we dont try and double free it on destroy
-            // it is the queue's responsibility now
+            
+            ps_sub_receive(connection->subscriber, connection->packet_data, connection->packet_size, false, &message_info);
+            
+            // remove the reference to packet data so we don't try and double free it on destroy
             connection->packet_data = 0;
-            ps_sub_enqueue(connection->subscriber,
-              out_data,
-              connection->packet_size,
-              &message_info);
-
             message_count++;
           }
           else
           {
             // unhandled packet id
-            free(connection->packet_data);
+            connection->subscriber->allocator->free(connection->packet_data, connection->subscriber->allocator->context);
           }
           connection->waiting_for_header = true;
         }
@@ -860,7 +844,8 @@ void ps_tcp_transport_unsubscribe(struct ps_transport_t* transport, struct ps_su
 
       if (!impl->connections[i].waiting_for_header)
       {
-        free(impl->connections[i].packet_data);
+        struct ps_sub_t* sub = impl->connections[i].subscriber;
+        sub->allocator->free(impl->connections[i].packet_data, sub->allocator->context);
       }
       ps_event_set_remove_socket(&impl->node->events, impl->connections[i].socket);
 #ifdef _WIN32
@@ -885,7 +870,8 @@ void ps_tcp_transport_destroy(struct ps_transport_t* transport)
   {
     if (!impl->connections[i].waiting_for_header)
     {
-      free(impl->connections[i].packet_data);
+      struct ps_sub_t* sub = impl->connections[i].subscriber;
+      sub->allocator->free(impl->connections[i].packet_data, sub->allocator->context);
     }
     ps_event_set_remove_socket(&impl->node->events, impl->connections[i].socket);
 #ifdef _WIN32

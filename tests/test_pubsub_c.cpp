@@ -45,7 +45,6 @@ TEST(test_publish_subscribe_generic, []() {
   struct ps_subscriber_options options;
   ps_subscriber_options_init(&options);
   //options.skip = skip;
-  options.queue_size = 0;
   options.allocator = 0;
   options.ignore_local = false;
 
@@ -75,72 +74,6 @@ TEST(test_publish_subscribe_generic, []() {
 done:
   EXPECT(got_message);
   ps_node_destroy(&node);
-});
-
-void latch_test(bool broadcast, bool tcp)
-{
-  struct ps_node_t node;
-  ps_node_init(&node, "test_node", "", broadcast);
-
-  struct ps_transport_t tcp_transport;
-  ps_tcp_transport_init(&tcp_transport, &node);
-  ps_node_add_transport(&node, &tcp_transport);
-
-  struct ps_pub_t string_pub;
-  ps_node_create_publisher(&node, "/data", &pubsub__String_def, &string_pub, true);
-
-  struct ps_sub_t string_sub;
-
-  struct ps_subscriber_options options;
-  ps_subscriber_options_init(&options);
-  options.preferred_transport = tcp ? 1 : 0;// tcp yo
-  ps_node_create_subscriber_adv(&node, "/data", &pubsub__String_def, &string_sub, &options);
-
-  // come up with the latched topic
-  struct pubsub__String rmsg;
-  rmsg.value = "Hello";
-  ps_pub_publish_ez(&string_pub, &rmsg);
-
-  bool got_message = false;
-
-  // now spin and wait for us to get the published message
-  while (ps_okay())
-  {
-    ps_node_spin(&node);// todo blocking wait first
-
-    struct pubsub__String* data;
-    while (data = (struct pubsub__String*)ps_sub_deque(&string_sub))
-    {
-      // user is responsible for freeing the message and its arrays
-      printf("Got message: %s\n", data->value);
-      EXPECT(strcmp(data->value, rmsg.value) == 0);
-      got_message = true;
-      free(data->value);
-      free(data);//todo use allocator free
-      goto done;
-    }
-    ps_sleep(1);
-  }
-
-done:
-  EXPECT(got_message);
-  ps_node_destroy(&node);
-}
-
-TEST(test_publish_subscribe_latched_multicast, []() {
-  latch_test(false, false);
-});
-
-TEST(test_publish_subscribe_latched_broadcast, []() {
-  latch_test(true, false);
-});
-
-TEST(test_publish_subscribe_latched_multicast_tcp, []() {
-  latch_test(false, true);
-});
-
-TEST(test_publish_subscribe_latched_broadcast_tcp, []() {
-  latch_test(true, true);
 });
 
 void latch_test_cb(bool broadcast, bool tcp)
@@ -231,7 +164,6 @@ TEST(test_publish_subscribe_large, []() {
   struct ps_subscriber_options options;
   ps_subscriber_options_init(&options);
   //options.skip = skip;
-  options.queue_size = 0;
   options.allocator = 0;
   options.ignore_local = false;
 

@@ -522,11 +522,11 @@ struct ps_allocator_t ps_default_allocator = { ps_malloc_alloc, ps_malloc_free, 
 
 void ps_subscriber_options_init(struct ps_subscriber_options* options)
 {
-	options->queue_size = 1;
 	options->ignore_local = false;
 	options->allocator = 0;
 	options->skip = 0;
 	options->cb = 0;
+	options->cb_raw = 0;
 	options->cb_data = 0;
 	options->preferred_transport = -1;// no preference
 }
@@ -564,57 +564,15 @@ void ps_node_create_subscriber_adv(struct ps_node_t* node, const char* topic, co
 	sub->received_message_def.hash = 0;
 	sub->received_message_def.num_fields = 0;
 
-	// force queue size to be > 0
-	unsigned int queue_size = options->queue_size;
-	if (options->cb)
-	{
-		sub->cb = options->cb;
-		sub->cb_data = options->cb_data;
-		sub->queue_size = 0;
-		sub->queue_len = 0;
-		sub->queue_start = 0;
-		sub->queue = 0;
-	}
-	else
-	{
-		if (queue_size <= 0)
-		{
-			queue_size = 1;
-		}
-
-		// allocate queue data
-		sub->queue_len = 0;
-		sub->queue_start = 0;
-		sub->queue_size = queue_size;
-		sub->queue = (void**)malloc(sizeof(void*) * queue_size);
-
-		for (unsigned int i = 0; i < queue_size; i++)
-		{
-			sub->queue[i] = 0;
-		}
-	}
+  sub->cb = options->cb;
+	sub->cb_raw = options->cb_raw;
+	sub->cb_data = options->cb_data;
 
 	// send out the subscription query while we are at it
 	ps_node_subscribe_query(sub);
 }
 
 void ps_node_create_subscriber(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,
-	struct ps_sub_t* sub,
-	unsigned int queue_size,
-	struct ps_allocator_t* allocator,
-	bool ignore_local)
-{
-	struct ps_subscriber_options options;
-	ps_subscriber_options_init(&options);
-
-	options.queue_size = queue_size;
-	options.allocator = allocator;
-	options.ignore_local = ignore_local;
-
-	ps_node_create_subscriber_adv(node, topic, type, sub, &options);
-}
-
-void ps_node_create_subscriber_cb(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,
 	struct ps_sub_t* sub,
 	ps_subscriber_fn_cb_t cb,
 	void* cb_data,
@@ -625,7 +583,6 @@ void ps_node_create_subscriber_cb(struct ps_node_t* node, const char* topic, con
 	struct ps_subscriber_options options;
 	ps_subscriber_options_init(&options);
 
-	options.queue_size = 0;
 	options.cb = cb;
 	options.cb_data = cb_data;
 	options.allocator = allocator;
@@ -822,22 +779,7 @@ int ps_node_spin(struct ps_node_t* node)
 			// queue up the data, and copy :/ (can make zero copy for arduino version)
 			int data_size = received_bytes - sizeof(struct ps_msg_header);
 
-			// also todo fastpath for PoD message types
-
-			// okay, if we have the message definition, deserialize and output in a message
-			void* out_data;
-			if (sub->type)
-			{
-//theres a leak if you use this and the queue fills up with complex types
-				out_data = sub->type->decode(data + sizeof(struct ps_msg_header), sub->allocator);
-			}
-			else
-			{
-				out_data = sub->allocator->alloc(data_size, sub->allocator->context);
-				memcpy(out_data, data + sizeof(struct ps_msg_header), data_size);
-			}
-
-			ps_sub_enqueue(sub, out_data, data_size, &message_info);
+			ps_sub_receive(sub, data + sizeof(struct ps_msg_header), data_size, true, &message_info);
 
 #ifdef PUBSUB_VERBOSE
 			//printf("Got message, queue len %i\n", sub->queue_len);

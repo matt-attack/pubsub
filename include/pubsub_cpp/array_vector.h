@@ -93,6 +93,15 @@ public:
 		}
 		data_ = new_data;
 	}
+	
+	// reliquinquishes the held pointer without freeing
+	T* reset()
+	{
+	  auto out = data_;
+	  data_ = 0;
+	  length_ = 0;
+	  return out;
+	}
 
 	void clear()
 	{
