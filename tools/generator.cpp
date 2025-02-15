@@ -4,6 +4,7 @@
 
 #include <map>
 
+#include <cstdint>
 #include <vector>
 #include <string>
 #include <sstream>
@@ -587,7 +588,7 @@ std::string generate(const char* definition, const char* name)
 					}
 					
 					output += "  out->" + fields[i].name + "_length = num_" + fields[i].name + ";\n";
-					output += "  out->" + fields[i].name + " = (char**)malloc(sizeof(char*)*num_" + fields[i].name + ");\n";
+					output += "  out->" + fields[i].name + " = (char**)allocator->alloc(sizeof(char*)*num_" + fields[i].name + ", allocator->context);\n";
 					
 					// allocate the array
 					// need to do it!
@@ -596,7 +597,7 @@ std::string generate(const char* definition, const char* name)
 					output += "    int len = *(uint32_t*)p;\n";
 					output += "    p += 4;\n";// add size of length
 					// now read and allocate each string
-					output += "    out->" + fields[i].name + "[i] = (char*)malloc(len);\n";
+					output += "    out->" + fields[i].name + "[i] = (char*)allocator->alloc(len, allocator->context);\n";
 					output += "    memcpy(out->" + fields[i].name + "[i], p, len);\n";
 					output += "    p += len;\n";
 					output += "  }\n";
