@@ -68,7 +68,7 @@ public:
 
 		length_ = arr.size();
 		data_ = (T*)malloc(sizeof(T)*length_);
-		for (int i = 0; i < length_; i++)
+		for (uint32_t i = 0; i < length_; i++)
 		{
 			data_[i] = arr[i];
 		}
@@ -82,7 +82,7 @@ public:
 
 		auto new_data = (T*)malloc(sizeof(T)*size);
 		auto copy_len = std::min(size, length_);
-		for (int i = 0; i < copy_len; i++)
+		for (uint32_t i = 0; i < copy_len; i++)
 		{
 			new_data[i] = data_[i];
 		}

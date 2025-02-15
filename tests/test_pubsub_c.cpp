@@ -50,7 +50,7 @@ TEST(test_publish_subscribe_generic, []() {
 
   static bool got_message = false;
   //options.preferred_transport = tcp ? 1 : 0;
-  options.cb = [](void* message, unsigned int size, void* data2, const ps_msg_info_t* info)
+  options.cb_raw = [](void* message, unsigned int size, void* data2, const ps_msg_info_t* info)
   {
     got_message = true;
     // todo need to also assert we have the message type
@@ -60,6 +60,8 @@ TEST(test_publish_subscribe_generic, []() {
     EXPECT(strcmp(data->value, rmsg.value) == 0);
     free(data->value);
     free(data);
+    
+    free(message);
   };
   ps_node_create_subscriber_adv(&node, "/data", 0, &string_sub, &options);
 
@@ -169,7 +171,7 @@ TEST(test_publish_subscribe_large, []() {
 
   static bool got_message = false;
   options.preferred_transport = 1;
-  options.cb = [](void* message, unsigned int size, void* data2, const ps_msg_info_t* info)
+  options.cb_raw = [](void* message, unsigned int size, void* data2, const ps_msg_info_t* info)
   {
     got_message = true;
     printf("Got message\n");
@@ -180,6 +182,7 @@ TEST(test_publish_subscribe_large, []() {
     EXPECT(data->num_points == rmsg.num_points);
     free(data->data);
     free(data);
+    free(message);
   };
   ps_node_create_subscriber_adv(&node, "/data", 0, &string_sub, &options);
 
