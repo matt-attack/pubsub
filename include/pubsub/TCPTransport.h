@@ -280,7 +280,7 @@ int ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* no
     while (client->queued_message != 0)
     {
       int to_send = client->queued_message_length - client->queued_message_written;
-      uint8_t* data = (uint8_t*)client->queued_message->data;
+      char* data = (char*)client->queued_message->data;
       int sent = send(client->socket, &data[client->queued_message_written], to_send, 0);
       if (sent > 0)
       {
@@ -667,7 +667,7 @@ void ps_tcp_transport_pub(struct ps_transport_t* transport, struct ps_pub_t* pub
   
   int32_t desired_len = sizeof(struct ps_msg_header) + length;
   //printf("trying to send message of %i bytes\n", desired_len);
-  int32_t c = send(socket, message, desired_len, 0);
+  int32_t c = send(socket, (char*)message, desired_len, 0);
   if (c < desired_len && c >= 0)
   {
     tclient->queued_message_written = c;
