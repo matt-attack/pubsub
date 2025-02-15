@@ -20,5 +20,5 @@ jobs:
       run: cmake .
     - name: cmake build
       run: cmake --build .
-#    - name: Run Tests
-#      run: cd tests && ctest -VV --timeout 5
+    - name: Run Tests
+      run: cd tests && ctest -VV

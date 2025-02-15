@@ -6,9 +6,8 @@
 #include "mini_mock.hpp"
 
 TEST(test_joy_serialization, []() {
-
 	// try serializing then deserializing a message to make sure it all matches
-    pubsub::msg::Joy msg;
+  pubsub::msg::Joy msg;
 	msg.buttons = 0x12345678;
 	for (int i = 0; i < 8; i++)
 		msg.axes[i] = i;
@@ -29,7 +28,7 @@ TEST(test_joy_serialization, []() {
 void test2()
 {
 	// verify that the C type matches the C++ one memory wise
-    pubsub::msg::Costmap msg;
+  pubsub::msg::Costmap msg;
 	msg.width = 100;
 	msg.height = 200;
 	msg.resolution = 1.0;
@@ -57,7 +56,7 @@ TEST(test_costmap_c_cpp, []() {
 
 TEST(test_costmap_serialization, []() {
 	// try serializing then deserializing a message to make sure it all matches
-    pubsub::msg::Costmap msg;
+  pubsub::msg::Costmap msg;
 	msg.width = 100;
 	msg.height = 200;
 	msg.resolution = 1.0;
@@ -88,7 +87,7 @@ TEST(test_costmap_serialization, []() {
 
 TEST(test_path2d_serialization, []() {
 	// try serializing then deserializing a message to make sure it all matches
-    pubsub::msg::Path2D msg;
+  pubsub::msg::Path2D msg;
 	msg.frame = 100;
 	msg.points.resize(123);
 	for (int i = 0; i < msg.points.size(); i++)
@@ -114,9 +113,33 @@ TEST(test_path2d_serialization, []() {
 	delete out;
 });
 
+TEST(test_path2d_copy, []() {
+	// make sure copying a message works
+  pubsub::msg::Path2D msg;
+	msg.frame = 100;
+	msg.points.resize(123);
+	for (int i = 0; i < msg.points.size(); i++)
+	{
+		msg.points[i].x = i*2;
+		msg.points[i].y = i*2 + 1;
+	}
+
+	pubsub::msg::Path2D msg2 = msg;
+
+	EXPECT(msg2.frame == msg.frame);
+	EXPECT(msg2.points.size() == msg.points.size());
+	for (int i = 0; i < msg.points.size(); i++)
+	{
+		if (msg2.points[i].x != msg.points[i].x)
+			EXPECT(false);
+		if (msg2.points[i].y != msg.points[i].y)
+			EXPECT(false);
+	}
+});
+
 TEST(test_path2d_foreach, []() {
 	// try serializing then deserializing a message, making sure the foreach loop over it works as expected
-    pubsub::msg::Path2D msg;
+  pubsub::msg::Path2D msg;
 	msg.frame = 100;
 	msg.points.resize(3);
 	for (int i = 0; i < msg.points.size(); i++)

@@ -13,16 +13,10 @@
 
 also add a test to test subscriber/publisher numbers
 
-add a way to add a timeout to tests
-
 add a test for generic message handling
 
 make the pose viewer also be able to view odom in pubviz
 (maybe think of a way to view velocities)*/
-
-//lets test queue size too
-
-//so for that test, shove over N messages
 
 TEST(test_publish_subscribe_generic, []() {
   struct ps_node_t node;
