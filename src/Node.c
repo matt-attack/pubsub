@@ -328,10 +328,8 @@ void ps_node_init_ex(struct ps_node_t* node, const char* name, const char* ip, b
 		//okay, for this to work we need the subnet address we're assuming and its sometimes wrong
 		node->advertise_addr |= 0xFF000000;
 #ifndef _WIN32
-    ip = strdup(ip);
     struct ifaddrs *ifap, *ifa;
     struct sockaddr_in *sa;
-    char *addr;
 
     getifaddrs(&ifap);
     for (ifa = ifap; ifa; ifa = ifa->ifa_next)
@@ -353,8 +351,7 @@ void ps_node_init_ex(struct ps_node_t* node, const char* name, const char* ip, b
     // print the result
 		struct in_addr ip_addr;
     ip_addr.s_addr = node->advertise_addr;
-		addr = inet_ntoa(ip_addr);
-    printf("Broadcast Address: %s\n", addr);
+    printf("Broadcast Address: %s\n", inet_ntoa(ip_addr));
 	}
 	else
 	{
