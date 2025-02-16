@@ -305,10 +305,11 @@ void ps_node_init_ex(struct ps_node_t* node, const char* name, const char* ip, b
 	{
 		ip = GetPrimaryIp();
 	}
+	uint32_t our_address = inet_addr(ip);
 	printf("Pubsub IP: %s\n", ip);
 
 #ifdef _WIN32
-	node->group_id = GetCurrentProcessId() + (10000 * ((inet_addr(ip) >> 24) && 0xFF));
+	node->group_id = GetCurrentProcessId() + (10000 * ((our_address >> 24) && 0xFF));
 #else
 	node->group_id = 0;// ignore the group
 #endif
@@ -324,7 +325,7 @@ void ps_node_init_ex(struct ps_node_t* node, const char* name, const char* ip, b
 	else if (broadcast)
 	{
     //convert to a broadcast address (just the subnet wide one)
-		node->advertise_addr = inet_addr(ip);
+		node->advertise_addr = our_address;
 		//okay, for this to work we need the subnet address we're assuming and its sometimes wrong
 		node->advertise_addr |= 0xFF000000;
 #ifndef _WIN32
@@ -334,10 +335,10 @@ void ps_node_init_ex(struct ps_node_t* node, const char* name, const char* ip, b
     getifaddrs(&ifap);
     for (ifa = ifap; ifa; ifa = ifa->ifa_next)
     {
-      if (ifa->ifa_addr && ifa->ifa_addr->sa_family==AF_INET)
+      if (ifa->ifa_addr && ifa->ifa_addr->sa_family == AF_INET)
       {
         sa = (struct sockaddr_in*)ifa->ifa_addr;
-        if (sa->sin_addr.s_addr == inet_addr(ip))
+        if (sa->sin_addr.s_addr == our_address)
         {
           sa = (struct sockaddr_in*)ifa->ifa_ifu.ifu_broadaddr;
           node->advertise_addr = sa->sin_addr.s_addr;
@@ -363,7 +364,7 @@ void ps_node_init_ex(struct ps_node_t* node, const char* name, const char* ip, b
 	// Setup the core socket
 	node->socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
-	node->addr = ntohl(inet_addr(ip));
+	node->addr = ntohl(our_address);
 	if (node->socket == 0)
 	{
 		printf("Failed To Create Socket!\n");
