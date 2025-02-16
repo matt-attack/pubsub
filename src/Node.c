@@ -17,6 +17,13 @@
 #include <stdlib.h>
 #endif
 
+#ifndef _WIN32
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <ifaddrs.h>
+#include <stdio.h>
+#endif
+
 // sends out a system query message for all nodes to advertise
 void ps_node_system_query(struct ps_node_t* node)
 {
@@ -316,9 +323,38 @@ void ps_node_init_ex(struct ps_node_t* node, const char* name, const char* ip, b
 	}
 	else if (broadcast)
 	{
-		//convert to a broadcast address (just the subnet wide one)
+    //convert to a broadcast address (just the subnet wide one)
 		node->advertise_addr = inet_addr(ip);
+		//okay, for this to work we need the subnet address we're assuming and its sometimes wrong
 		node->advertise_addr |= 0xFF000000;
+#ifndef _WIN32
+    ip = strdup(ip);
+    struct ifaddrs *ifap, *ifa;
+    struct sockaddr_in *sa;
+    char *addr;
+
+    getifaddrs(&ifap);
+    for (ifa = ifap; ifa; ifa = ifa->ifa_next)
+    {
+      if (ifa->ifa_addr && ifa->ifa_addr->sa_family==AF_INET)
+      {
+        sa = (struct sockaddr_in*)ifa->ifa_addr;
+        if (sa->sin_addr.s_addr == inet_addr(ip))
+        {
+          sa = (struct sockaddr_in*)ifa->ifa_ifu.ifu_broadaddr;
+          node->advertise_addr = sa->sin_addr.s_addr;
+          printf("found\n");
+        }
+      }
+    }
+
+    freeifaddrs(ifap);
+#endif
+    // print the result
+		struct in_addr ip_addr;
+    ip_addr.s_addr = node->advertise_addr;
+		addr = inet_ntoa(ip_addr);
+    printf("Broadcast Address: %s\n", addr);
 	}
 	else
 	{
