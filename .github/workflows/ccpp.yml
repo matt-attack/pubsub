@@ -10,8 +10,15 @@ jobs:
     - name: cmake configure
       run: cmake .
     - name: cmake build
-      run: cmake --build .
-      
+      run: cmake --build . -j4
+  mac-build:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: cmake configure
+      run: cmake .
+    - name: cmake build
+      run: cmake --build . -j4
   linux-build:
     runs-on: ubuntu-latest
     steps:
@@ -19,7 +26,7 @@ jobs:
     - name: cmake configure
       run: cmake .
     - name: cmake build
-      run: cmake --build .
+      run: cmake --build . -j4
     - name: network
       run: sudo apt install net-tools && ifconfig
     - name: Run Tests
