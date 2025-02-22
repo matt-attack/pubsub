@@ -69,6 +69,7 @@ generate_messages(FILES
   Log.msg
   Path2D.msg
   Odom.msg
+  Int.msg
 )
 
 

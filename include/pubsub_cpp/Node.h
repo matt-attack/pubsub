@@ -439,7 +439,7 @@ public:
 
 	unsigned int getNumSubscribers()
 	{
-		return ps_pub_get_subscriber_count(&publisher_);
+		return ps_pub_get_subscriber_count(&publisher_) + subs_.size();
 	}
 
 	void addCustomEndpoint(const int ip_addr, const short port, const unsigned int stream_id)
@@ -475,7 +475,6 @@ protected:
 				// if its latched, get the message from it
 				if (it->second->latched_)
 				{
-					// hmm, this should just queue not call
 					cb(it->second);
 				}
 				// add me to its sub list
