@@ -544,7 +544,7 @@ std::string generate(const char* definition, const char* name)
 		output += "}\n\n";
 
 		// now for encode
-		output += "static struct ps_msg_t " + type_name + "_encode(struct ps_allocator_t* allocator, const void* msg)\n{\n";
+		output += "static struct ps_msg_t " + type_name + "_encode(const void* msg, struct ps_allocator_t* allocator)\n{\n";
 		output += "  int len = sizeof(struct " + type_name + ");\n";
 		output += "  struct ps_msg_t omsg;\n";
 		output += "  ps_msg_alloc(len, allocator, &omsg);\n";
@@ -552,7 +552,7 @@ std::string generate(const char* definition, const char* name)
 		output += "  return omsg;\n}\n\n";
 
 		// finally free todo use allocator
-		output += "static void " + type_name + "_free(struct ps_allocator_t* allocator, void* msg)\n{\n";
+		output += "static void " + type_name + "_free(void* msg, struct ps_allocator_t* allocator)\n{\n";
 		output += "  allocator->free(msg, allocator->context);\n";
 		output += "}\n\n";
 	}
@@ -633,7 +633,7 @@ std::string generate(const char* definition, const char* name)
 		output += "}\n\n";
 
 		//typedef ps_msg_t(*ps_fn_encode_t)(ps_allocator_t* allocator, const void* msg);
-		output += "static struct ps_msg_t " + type_name + "_encode(struct ps_allocator_t* allocator, const void* data)\n{\n";
+		output += "static struct ps_msg_t " + type_name + "_encode(const void* data, struct ps_allocator_t* allocator)\n{\n";
 		output += "  const struct " + type_name + "* msg = (const struct " + type_name + "*)data;\n";
 		output += "  int len = sizeof(struct " + type_name + ");\n";
 		output += "  // calculate the encoded length of the message\n";
@@ -737,7 +737,7 @@ std::string generate(const char* definition, const char* name)
 		output += "}\n";
 
 		// finally free
-		output += "static void " + type_name + "_free(struct ps_allocator_t* allocator, void* data)\n{\n";
+		output += "static void " + type_name + "_free(void* data, struct ps_allocator_t* allocator)\n{\n";
 		output += "  struct " + type_name + "* msg = (struct " + type_name + "*)data;\n";
 		for (size_t i = 0; i < fields.size(); i++)
 		{
@@ -862,7 +862,7 @@ std::string generate(const char* definition, const char* name)
 	output += "  static const ps_message_definition_t* GetDefinition()\n  {\n";
 	output += "    return &" + type_name + "_def;\n  }\n\n";
 	output += "  ps_msg_t Encode() const\n  {\n";
-	output += "    return " + ns + "__" + raw_name + "_encode(&ps_default_allocator, this);\n  }\n\n";
+	output += "    return " + ns + "__" + raw_name + "_encode(this, &ps_default_allocator);\n  }\n\n";
 	output += "  static " + raw_name + "* Decode(const void* data)\n  {\n";
 	output += "    return (" + raw_name + "*)" + ns + "__" + raw_name + "_decode(data, &ps_default_allocator);\n  }\n";// + ns + "__" + raw_name + "_encode(0, this);\n  }\n";
 	output += "};\n";

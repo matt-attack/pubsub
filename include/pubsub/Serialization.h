@@ -78,9 +78,9 @@ extern "C"
 	void ps_msg_ref_free(struct ps_msg_ref_t* msg);
 
 	struct ps_allocator_t;
-	typedef struct ps_msg_t(*ps_fn_encode_t)(struct ps_allocator_t* allocator, const void* msg);
+	typedef struct ps_msg_t(*ps_fn_encode_t)(const void* msg, struct ps_allocator_t* allocator);
 	typedef void*(*ps_fn_decode_t)(const void* data, struct ps_allocator_t* allocator);// allocates the message
-	typedef void (*ps_fn_free_t)(struct ps_allocator_t* allocator, void* msg);// frees the message
+	typedef void (*ps_fn_free_t)(void* msg, struct ps_allocator_t* allocator);// frees the message
 	struct ps_message_definition_t
 	{
 		unsigned int hash;

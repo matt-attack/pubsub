@@ -15,7 +15,6 @@ TEST(test_publish_subscribe_latched_cpp, []() {
 	pubsub::msg::String omsg;
 	omsg.value = "Hello";
 	string_pub.publish(omsg);
-
 	
 	pubsub::BlockingSpinnerWithTimers spinner;
 	spinner.setNode(node);
@@ -28,7 +27,66 @@ TEST(test_publish_subscribe_latched_cpp, []() {
 		spinner.stop();
 	}, 10);
 
-	spinner.wait();
+	spinner.run();
+	EXPECT(got_message);
+});
+
+TEST(test_publish_subscribe_zero_copy, []() {
+	// test that data gets passed through without copying within a single node
+	pubsub::Node node("simple_publisher");
+
+	pubsub::Publisher<pubsub::msg::String> string_pub(node, "/data", true);
+
+	pubsub::msg::StringSharedPtr omsg(new pubsub::msg::String());
+	omsg->value = "Hello";
+	string_pub.publish(omsg);
+	
+	pubsub::BlockingSpinnerWithTimers spinner;
+	spinner.setNode(node);
+
+	bool got_message = false;
+	pubsub::Subscriber<pubsub::msg::String> subscriber(node, "/data", [&](const pubsub::msg::StringSharedPtr& msg) {
+		printf("Got message %s in sub1\n", msg->value);
+		EXPECT(strcmp(omsg->value, msg->value) == 0);
+		got_message = true;
+		EXPECT(msg.get() == omsg.get());
+		spinner.stop();
+	}, 10);
+
+	spinner.run();
+	EXPECT(got_message);
+});
+
+TEST(test_publish_subscribe_nodelets, []() {
+	// test that data gets passed through without copying between multiple nodes
+	pubsub::Node nodep("simple_publisher");
+	pubsub::Node nodes("simple_subscriber");
+
+	pubsub::Publisher<pubsub::msg::String> string_pub(nodep, "/data", true);
+
+	pubsub::msg::StringSharedPtr omsg(new pubsub::msg::String());
+	omsg->value = "Hello";
+	string_pub.publish(omsg);
+	
+	pubsub::BlockingSpinnerWithTimers spinner;
+	spinner.setNode(nodep);
+	
+	pubsub::BlockingSpinnerWithTimers spinner2;
+	spinner2.setNode(nodes);
+
+	bool got_message = false;
+	pubsub::Subscriber<pubsub::msg::String> subscriber(nodes, "/data", [&](const pubsub::msg::StringSharedPtr& msg) {
+		printf("Got message %s in sub1\n", msg->value);
+		EXPECT(strcmp(omsg->value, msg->value) == 0);
+		got_message = true;
+		EXPECT(msg.get() == omsg.get());
+		spinner2.stop();
+		spinner.stop();
+	}, 10);
+
+  spinner2.start();
+	spinner.run();
+	spinner2.wait();
 	EXPECT(got_message);
 });
 
@@ -98,7 +156,7 @@ TEST(test_publish_subscribe_cpp, []() {
 		string_pub.publish(omsg);
 	});
 
-	spinner.wait();
+	spinner.run();
 	EXPECT(got_message);
 });
 

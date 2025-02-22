@@ -100,7 +100,7 @@ TEST(test_cli_pub_latched, []() {
 		spinner.stop();
 	}, 10);
 
-	spinner.wait();
+	spinner.run();
 	EXPECT(got_message);
 	run = false;
 
@@ -126,7 +126,7 @@ TEST(test_cli_pub, []() {
 		spinner.stop();
 	}, 10);
 
-	spinner.wait();
+	spinner.run();
 	EXPECT(got_message);
 	run = false;
 

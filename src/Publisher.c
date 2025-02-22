@@ -10,10 +10,10 @@
 #include <pubsub/Net.h>
 
 
-void ps_pub_publish_client(struct ps_pub_t* pub, struct ps_client_t* client, struct ps_msg_ref_t* msg)
+static void ps_pub_publish_client(struct ps_pub_t* pub, struct ps_client_t* client, struct ps_msg_ref_t* msg, bool force_publish)
 {
 	// Skip messages if desired by the client
-	if (client->modulo > 0)
+	if (client->modulo > 0 && force_publish == false)
 	{
 		if (pub->sequence_number % client->modulo != 0)
 		{
@@ -72,8 +72,8 @@ bool ps_pub_add_client(struct ps_pub_t* pub, const struct ps_client_t* client)
 	// If we are latched, send the new client our last message
 	if (pub->last_message && pub->latched)
 	{
-        //printf("publishing latched\n");
-		ps_pub_publish_client(pub, &pub->clients[pub->num_clients - 1], pub->last_message);
+    //printf("publishing latched\n");
+		ps_pub_publish_client(pub, &pub->clients[pub->num_clients - 1], pub->last_message, true);
 	}
   return true;
 }
@@ -140,7 +140,7 @@ void ps_pub_publish_ez(struct ps_pub_t* pub, void* msg)
 {
 	if (pub->num_clients > 0 || pub->latched)
 	{
-		struct ps_msg_t data = pub->message_definition->encode(0, msg);
+		struct ps_msg_t data = pub->message_definition->encode(msg, 0);
 
 		ps_pub_publish(pub, &data);
 	}
@@ -174,7 +174,7 @@ void ps_pub_publish(struct ps_pub_t* pub, struct ps_msg_t* msg)
 	{
 		struct ps_client_t* client = &pub->clients[i];
         
-		ps_pub_publish_client(pub, client, ref);
+		ps_pub_publish_client(pub, client, ref, false);
 	}
 
 	if (pub->latched)

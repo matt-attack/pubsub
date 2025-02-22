@@ -768,9 +768,10 @@ int ps_node_spin(struct ps_node_t* node)
 		socklen_t fromLength = sizeof(from);
 
 		int received_bytes = recvfrom(node->socket, (char*)data, size, 0, (struct sockaddr*)&from, &fromLength);
-
 		if (received_bytes <= 0)
+		{
 			break;
+		}
 
 #ifdef PUBSUB_VERBOSE
 		//printf("got transport packet\n");
@@ -974,9 +975,10 @@ int ps_node_spin(struct ps_node_t* node)
 		socklen_t fromLength = sizeof(from);
 
 		int received_bytes = recvfrom(node->mc_socket, (char*)data, size, 0, (struct sockaddr*)&from, &fromLength);
-
 		if (received_bytes <= 0)
+		{
 			break;
+	  }
 
 		//printf("Got discovery msg \n");
 
@@ -1147,7 +1149,9 @@ int ps_node_spin(struct ps_node_t* node)
 				//printf("recommended transport: %i\n", recommended_transport);
 
 				if (preferred_transport != 0)
+				{
 					preferred_transport = (1 << (preferred_transport-1));
+				}
 				// first match udp if its what we want or all that is offered
 				if (preferred_transport == PS_TRANSPORT_UDP || p->transports == PS_TRANSPORT_UDP)
 				{
@@ -1225,13 +1229,9 @@ int ps_node_spin(struct ps_node_t* node)
 		else if (data[0] == PS_DISCOVERY_PROTOCOL_UNSUBSCRIBE)
 		{
 			//printf("Got unsubscribe request\n");
+      struct ps_unsubscribe_req_t* msg = (struct ps_unsubscribe_req_t*)data;
 
-			int* addr = (int*)&data[1];
-			unsigned short* port = (unsigned short*)&data[5];
-
-			unsigned int* stream_id = (unsigned int*)&data[7];
-
-			char* topic = (char*)&data[11];
+			char* topic = (char*)&data[sizeof(struct ps_unsubscribe_req_t)];
 
 			//check if we have a sub matching that topic
 			struct ps_pub_t* pub = 0;
@@ -1253,9 +1253,9 @@ int ps_node_spin(struct ps_node_t* node)
 
 			// remove the client
 			struct ps_client_t client;
-			client.endpoint.address = *addr;
-			client.endpoint.port = *port;
-			client.stream_id = *stream_id;
+			client.endpoint.address = msg->addr;
+			client.endpoint.port = msg->port;
+			client.stream_id = msg->stream_id;
 			ps_pub_remove_client(pub, &client);
 		}
 		else if (data[0] == PS_DISCOVERY_PROTOCOL_QUERY_ALL)

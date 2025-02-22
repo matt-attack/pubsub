@@ -52,8 +52,7 @@ TEST(test_publish_subscribe_generic, []() {
     auto data = (struct pubsub__String*)pubsub__String_decode(message, &ps_default_allocator);
     printf("Got message: %s\n", data->value);
     EXPECT(strcmp(data->value, rmsg.value) == 0);
-    free(data->value);
-    free(data);
+    pubsub__String_free(data, &ps_default_allocator);
     
     free(message);
   };
@@ -100,8 +99,7 @@ void latch_test_cb(bool broadcast, bool tcp)
   {
     auto data = (struct pubsub__String*)message;
     EXPECT(strcmp(data->value, rmsg.value) == 0);
-    free(data->value);
-    free(data);//todo use allocator free
+    pubsub__String_free(data, &ps_default_allocator);
     got_message = true;
   };
   ps_node_create_subscriber_adv(&node, "/data", &pubsub__String_def, &string_sub, &options);
@@ -159,7 +157,6 @@ TEST(test_publish_subscribe_large, []() {
 
   struct ps_subscriber_options options;
   ps_subscriber_options_init(&options);
-  //options.skip = skip;
   options.allocator = 0;
   options.ignore_local = false;
 
@@ -174,8 +171,7 @@ TEST(test_publish_subscribe_large, []() {
     auto data = (struct pubsub__PointCloud*)pubsub__PointCloud_decode(message, &ps_default_allocator);
     printf("Decoded message\n");
     EXPECT(data->num_points == rmsg.num_points);
-    free(data->data);
-    free(data);
+    pubsub__PointCloud_free(data, &ps_default_allocator);
     free(message);
   };
   ps_node_create_subscriber_adv(&node, "/data", 0, &string_sub, &options);
@@ -190,6 +186,103 @@ TEST(test_publish_subscribe_large, []() {
 
 done:
   EXPECT(got_message);
+  ps_node_destroy(&node);
+});
+
+TEST(test_publish_subscribe_latched_skip, []() {
+  // test that we still get the latched message even if we want to skip messages
+  struct ps_node_t node;
+  ps_node_init(&node, "test_node", "", false);
+
+  struct ps_transport_t tcp_transport;
+  ps_tcp_transport_init(&tcp_transport, &node);
+  ps_node_add_transport(&node, &tcp_transport);
+
+  struct ps_pub_t string_pub;
+  ps_node_create_publisher(&node, "/data", &pubsub__String_def, &string_pub, true);
+
+  // come up with the latched topic
+  static struct pubsub__String rmsg;
+  rmsg.value = "Hello";
+  ps_pub_publish_ez(&string_pub, &rmsg);
+
+  static bool got_message = false;
+  got_message = false;
+
+  struct ps_sub_t string_sub;
+  struct ps_subscriber_options options;
+  ps_subscriber_options_init(&options);
+  options.skip = 100;
+  options.cb = [](void* message, unsigned int size, void* cb_data, const struct ps_msg_info_t* info) 
+  {
+    auto data = (struct pubsub__String*)message;
+    EXPECT(strcmp(data->value, rmsg.value) == 0);
+    pubsub__String_free(data, &ps_default_allocator);
+    got_message = true;
+  };
+  ps_node_create_subscriber_adv(&node, "/data", &pubsub__String_def, &string_sub, &options);
+
+  // now spin and wait for us to get the published message
+  while (ps_okay() && !got_message)
+  {
+    ps_node_spin(&node);
+    ps_sleep(1);
+  }
+
+  EXPECT(got_message);
+
+  ps_node_destroy(&node);
+});
+
+TEST(test_publish_subscribe_skip, []() {
+  // test that skip works correctly
+  struct ps_node_t node;
+  ps_node_init(&node, "test_node", "", false);
+
+  struct ps_transport_t tcp_transport;
+  ps_tcp_transport_init(&tcp_transport, &node);
+  ps_node_add_transport(&node, &tcp_transport);
+
+  struct ps_pub_t string_pub;
+  ps_node_create_publisher(&node, "/data", &pubsub__String_def, &string_pub, true);
+
+  // come up with the latched topic
+  static struct pubsub__String rmsg;
+  rmsg.value = "Hello";
+  ps_pub_publish_ez(&string_pub, &rmsg);
+
+  struct ps_sub_t string_sub;
+  struct ps_subscriber_options options;
+  ps_subscriber_options_init(&options);
+  options.skip = 10;
+  static int received = 0;
+  options.cb = [](void* message, unsigned int size, void* cb_data, const struct ps_msg_info_t* info) 
+  {
+    auto data = (struct pubsub__String*)message;
+    EXPECT(strcmp(data->value, rmsg.value) == 0);
+    pubsub__String_free(data, &ps_default_allocator);
+    received++;
+  };
+  ps_node_create_subscriber_adv(&node, "/data", &pubsub__String_def, &string_sub, &options);
+  
+  // first spin and wait for connection
+  while (ps_okay() && ps_pub_get_subscriber_count(&string_pub) == 0)
+  {
+    ps_node_spin(&node);
+    ps_sleep(1);
+  }
+  
+  // now spin and publish
+  for (int i = 0; i < 100; i++)
+  {
+    ps_node_spin(&node);
+    ps_pub_publish_ez(&string_pub, &rmsg);
+    ps_sleep(1);
+  }
+  
+  // finally count the number of messages
+  EXPECT(received == 10);
+
   ps_node_destroy(&node);
 });
 

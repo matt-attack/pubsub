@@ -41,7 +41,7 @@ static std::multimap<std::string, SubscriberBase*> _subscribers;
 // ns should not have a leading slash, topic should if it is absolute
 inline std::string handle_remap(const std::string& topic, const std::string& ns)
 {
-    //printf("Handling remap of %s in ns %s\n", topic.c_str(), ns.c_str());
+  //printf("Handling remap of %s in ns %s\n", topic.c_str(), ns.c_str());
 	// we need at least one character
 	if (topic.length() == 0)
 	{
@@ -87,10 +87,14 @@ inline std::string handle_remap(const std::string& topic, const std::string& ns)
 	}
 
 	// okay, we had no remappings, use our namespace
-    if (ns.length())
-	    return "/" + ns + "/" + topic;
-    else
-        return "/" + topic;
+  if (ns.length())
+  {
+	  return "/" + ns + "/" + topic;
+	}
+  else
+  {
+    return "/" + topic;
+  }
 }
 
 // not thread safe
@@ -119,7 +123,7 @@ inline void initialize(const char** args, const int argc)
 // valid names must be all lowercase and only
 inline std::string validate_name(const std::string& name, bool remove_leading_slashes = false)
 {
-    //printf("Validating %s\n", name.c_str());
+  //printf("Validating %s\n", name.c_str());
 	for (size_t i = 0; i < name.length(); i++)
 	{
 		if (name[i] >= 'A' && name[i] <= 'Z')
@@ -138,8 +142,8 @@ inline std::string validate_name(const std::string& name, bool remove_leading_sl
 	
       return name.substr(i);
 	}
-    else
-    {
+  else
+  {
       // remove any duplicate slashes we may have
       std::string out;
       if (name.length())
@@ -155,7 +159,7 @@ inline std::string validate_name(const std::string& name, bool remove_leading_sl
         out += name[i];
       }
       return out;
-    }
+  }
 	return name;
 }
 
@@ -211,12 +215,14 @@ public:
 
 	std::string getQualifiedName()
 	{
-        if (namespace_.length())
-		    return "/" + namespace_ + "/" + real_name_;
-        else
-        {
-            return "/" + real_name_;
-        }
+    if (namespace_.length())
+    {
+		  return "/" + namespace_ + "/" + real_name_;
+		}
+    else
+    {
+      return "/" + real_name_;
+    }
 	}
 
 	const std::string& getName()
@@ -239,10 +245,10 @@ public:
 		return ps_node_spin(&node_);
 	}
 
-    inline void setEventSet(ps_event_set_t* set)
-    {
-      event_set_ = set;
-    }
+  inline void setEventSet(ps_event_set_t* set)
+  {
+    event_set_ = set;
+  }
 
 	inline ps_event_set_t* getEventSet()
 	{
@@ -311,14 +317,14 @@ public:
 		_publisher_mutex.lock();
 		_publishers.insert(std::pair<std::string, PublisherBase*>(remapped_topic_, this));
 
-        // look for any matching subscribers and add them to our list
-        auto iterpair = _subscribers.equal_range(topic);
-        for (auto it = iterpair.first; it != iterpair.second; ++it)
-        {
-          node.lock_.lock();
-          subs_.push_back(it->second);
-          node.lock_.unlock();
-        }
+    // look for any matching subscribers and add them to our list
+    auto iterpair = _subscribers.equal_range(topic);
+    for (auto it = iterpair.first; it != iterpair.second; ++it)
+    {
+      node.lock_.lock();
+      subs_.push_back(it->second);
+      node.lock_.unlock();
+    }
 		_publisher_mutex.unlock();
 	}
 
@@ -367,10 +373,8 @@ public:
 		// loop through shared subscribers
 		node_->lock_.lock();
 		// now go through my local subscriber list
-		for (size_t i = 0; i < subs_.size(); i++)
+		for (auto& sub: subs_)
 		{
-			auto sub = subs_[i];
-
 			//printf("Publishing locally with no copy..\n");
 
 			auto specific_sub = (Subscriber<T>*)sub;
@@ -394,7 +398,8 @@ public:
 	void publish(const T& msg)
 	{
 		std::shared_ptr<T> copy;
-		if (latched_) {
+		if (latched_)
+		{
 			copy = std::shared_ptr<T>(new T);
 			*copy = msg;
 			// save for later
@@ -402,10 +407,8 @@ public:
 		}
 		node_->lock_.lock();
 		// now go through my local subscriber list
-		for (size_t i = 0; i < subs_.size(); i++)
+		for (auto& sub: subs_)
 		{
-			auto sub = subs_[i];
-
 			//printf("Publishing locally with a copy..\n");
 			if (!copy)
 			{
@@ -481,7 +484,7 @@ protected:
 			}
 		}
 
-        _subscribers.insert(std::pair<std::string, SubscriberBase*>(topic, sub));
+    _subscribers.insert(std::pair<std::string, SubscriberBase*>(topic, sub));
 
 		_publisher_mutex.unlock();
 	}
@@ -499,21 +502,23 @@ protected:
 				// remove me from its list if im there
 				auto pos = std::find(it->second->subs_.begin(), it->second->subs_.end(), sub);
 				if (pos != it->second->subs_.end())
+				{
 					it->second->subs_.erase(pos);
+			  }
 				it->second->GetNode()->lock_.unlock();
 			}
 		}
 
-        //remove me from the subscriber list
-        auto subiterpair = _subscribers.equal_range(topic);
-        for (auto it = subiterpair.first; it != subiterpair.second; ++it)
-        {
-          if (it->second == sub)
-          {
-            _subscribers.erase(it);
-            break;
-          }
-        }
+    //remove me from the subscriber list
+    auto subiterpair = _subscribers.equal_range(topic);
+    for (auto it = subiterpair.first; it != subiterpair.second; ++it)
+    {
+      if (it->second == sub)
+      {
+        _subscribers.erase(it);
+        break;
+      }
+    }
 
 		_publisher_mutex.unlock();
 	}
@@ -527,8 +532,6 @@ public:
 	// returns if there are still more messages in the queue
 	virtual bool CallOne() = 0;
 };
-
-
 
 template<class T> 
 class Subscriber: public SubscriberBase
@@ -545,7 +548,7 @@ class Subscriber: public SubscriberBase
 
 public:
 
-	Subscriber(Node& node, const std::string& topic, std::function<void(const std::shared_ptr<T>&)> cb, unsigned int queue_size = 1, int preferred_transport = -1) : cb_(cb), queue_size_(queue_size)
+	Subscriber(Node& node, const std::string& topic, std::function<void(const std::shared_ptr<T>&)> cb, unsigned int queue_size = 1, int preferred_transport = -1, int skip = 0) : cb_(cb), queue_size_(queue_size)
 	{
 		node_ = &node;
 
@@ -571,13 +574,12 @@ public:
 
 		struct ps_subscriber_options options;
 		ps_subscriber_options_init(&options);
-
+    options.skip = skip;
 		options.cb = cb2;
 		options.cb_data = this;
 		options.allocator = 0;
 		options.ignore_local = true;
 		options.preferred_transport = preferred_transport;
-
 
 		node.lock_.lock();
 		ps_node_create_subscriber_adv(node.getNode(), remapped_topic_.c_str(), T::GetDefinition(), &subscriber_, &options);
@@ -631,7 +633,9 @@ public:
 		node_->lock_.lock();
 		auto it = std::find(node_->subscribers_.begin(), node_->subscribers_.end(), this);
 		if (it != node_->subscribers_.end())
+		{
 			node_->subscribers_.erase(it);
+	  }
 		ps_sub_destroy(&subscriber_);
 		node_->lock_.unlock();
 

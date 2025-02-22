@@ -123,6 +123,7 @@ public:
 	BlockingSpinnerWithTimers(int num_threads = 1) : running_(false), node_(0)
 	{
       //ps_event_set_create(&events_);
+      stop(true);
 	}
 
 	~BlockingSpinnerWithTimers()
@@ -138,7 +139,7 @@ public:
 
 	void setNode(Node& node)
 	{
-        node_ = &node;
+    node_ = &node;
 		//list_mutex_.lock();
 
 		// build a wait list for all nodes
@@ -154,13 +155,12 @@ public:
 		{
 			while (running_ && ps_okay())
 			{
-                //printf("Entering thread\n");
 				list_mutex_.lock();
 				if (node_ == 0)//ps_event_set_count(&events_) == 0)
 				{
-                    printf("Waiting for events\n");
+          printf("Waiting for events\n");
 					ps_sleep(10);
-                    continue;
+          continue;
 				}
 				else
 				{
@@ -184,15 +184,15 @@ public:
 
 						// this line is necessary anyways, but happens to work around the above bug
 						timeout = std::min<int>(timeout, 1000000);// make sure we dont block too long
-                        //printf("setting timeout to %i\n", timeout);
+            //printf("setting timeout to %i\n", timeout);
 					}
 					list_mutex_.unlock();
-                    //ps_node_wait(node_->getNode(), 0);
+          //ps_node_wait(node_->getNode(), 0);
 					// todo allow finer grained waits
 					//if (timeout > 2)
 					{
 						// allows for fine grained waits
-                        ps_event_set_set_timer(&node_->getNode()->events, timeout);// in us
+            ps_event_set_set_timer(&node_->getNode()->events, timeout);// in us
 						ps_node_wait(node_->getNode(), 1000);
 						//ps_event_set_wait(&events_, timeout);
 					}
@@ -205,7 +205,7 @@ public:
 					Time now = Time::now();
 					if (now >= timer.next_trigger)
 					{
-                        //printf("Calling timer\n");
+            //printf("Calling timer\n");
 						timer.next_trigger = timer.next_trigger + timer.period;
 						timer.fn();
 					}
@@ -213,7 +213,7 @@ public:
 
 				// check all nodes
 				//for (auto node : nodes_)
-                if (node_)
+        if (node_)
 				{
 					node_->lock_.lock();
 					if (ps_node_spin(node_->getNode()) || node_->marked())
@@ -249,7 +249,12 @@ public:
 
 	void wait()
 	{
-		if (!running_)
+		thread_.join();
+	}
+	
+	void run()
+	{
+	  if (!running_)
 		{
 			start();
 		}
@@ -265,8 +270,10 @@ public:
 		}
 
 		running_ = false;
-        if (join && thread_.joinable())
-		    thread_.join();// wait for it to stop
+    if (join && thread_.joinable())
+    {
+	    thread_.join();// wait for it to stop
+		}
 	}
 };
 
@@ -301,7 +308,7 @@ public:
 					int res = 0;
 					if (res = ps_node_spin(node->getNode()) || node->marked())
 					{
-                    	printf("Received %i messages\n", res);
+            printf("Received %i messages\n", res);
 						// we got a message, now call a subscriber
 						// todo how to make this not scale with subscriber count...
 						for (size_t i = 0; i < node->subscribers_.size(); i++)
@@ -310,7 +317,6 @@ public:
 							while (node->subscribers_[i]->CallOne()) {};
 						}
 					}
-					
 					
 					node->lock_.unlock();
 				}

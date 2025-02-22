@@ -162,20 +162,22 @@ struct ps_advertise_req_t
 	uint32_t type_hash;// to see if the type is correct
 	uint32_t group_id;// unique (hopefully) id that indicates which process this node is a part of
 };
-#pragma pack(pop)
 
-#pragma pack(push)
-#pragma pack(1)
 struct ps_subscribe_req_t
 {
   uint8_t id;
   int32_t addr;
   uint16_t port;
 };
-#pragma pack(pop)
 
-#pragma pack(push)
-#pragma pack(1)
+struct ps_unsubscribe_req_t
+{
+  uint8_t id;
+  uint32_t addr;
+  uint16_t port;
+  uint32_t stream_id;
+};
+
 struct ps_subscribe_accept_t
 {
 	uint8_t pid;// packet type identifier
