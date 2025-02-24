@@ -31,8 +31,9 @@ extern "C"
 		FT_Float32 = 9,
 		FT_Float64 = 10,
 		FT_MaxFloat,// all floats and ints are less than this, not present in messages
-		FT_String,
+		FT_String,// null terminated dynamic length string
 		FT_Struct,//indicates the number of fields following contained in it
+		FT_ArrayString// null terminated fixed length string
 	};
 	typedef enum ps_field_types ps_field_types;
 

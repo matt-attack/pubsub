@@ -15,7 +15,7 @@ void callback(void* message, unsigned int size, void* cbdata, const struct ps_ms
   // user is responsible for freeing the message and its arrays
   struct pubsub__String* data = (struct pubsub__String*)message;
   printf("Got message: %s\n", data->value);
-  pubsub__String_free(string_sub.allocator, data);
+  pubsub__String_free(data, string_sub.allocator);
 }
 
 int main()

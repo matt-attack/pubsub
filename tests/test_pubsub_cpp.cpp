@@ -22,8 +22,8 @@ TEST(test_publish_subscribe_latched_cpp, []() {
 
 	bool got_message = false;
 	pubsub::Subscriber<pubsub::msg::String> subscriber(node, "/data", [&](const pubsub::msg::StringSharedPtr& msg) {
-		printf("Got message %s in sub1\n", msg->value);
-		EXPECT(strcmp(omsg.value, msg->value) == 0);
+		printf("Got message %s in sub1\n", msg->value.c_str());
+		EXPECT(omsg.value == msg->value);
 		got_message = true;
 		spinner.stop();
 		
@@ -50,8 +50,8 @@ TEST(test_publish_subscribe_zero_copy, []() {
 
 	bool got_message = false;
 	pubsub::Subscriber<pubsub::msg::String> subscriber(node, "/data", [&](const pubsub::msg::StringSharedPtr& msg) {
-		printf("Got message %s in sub1\n", msg->value);
-		EXPECT(strcmp(omsg->value, msg->value) == 0);
+		printf("Got message %s in sub1\n", msg->value.c_str());
+		EXPECT(omsg->value == msg->value);
 		got_message = true;
 		EXPECT(msg.get() == omsg.get());
 		spinner.stop();
@@ -75,7 +75,7 @@ TEST(test_publish_subscribe_queue_behavior, []() {
 
 	std::vector<int> received;
 	pubsub::Subscriber<pubsub::msg::Int> subscriber(node, "/data", [&](const pubsub::msg::IntSharedPtr& msg) {
-		printf("Got message %i in sub1\n", msg->value);
+		printf("Got message %li in sub1\n", msg->value);
 		received.push_back(msg->value);
 		spinner.stop();
 	}, 10);
@@ -115,8 +115,8 @@ TEST(test_publish_subscribe_nodelets, []() {
 
 	bool got_message = false;
 	pubsub::Subscriber<pubsub::msg::String> subscriber(nodes, "/data", [&](const pubsub::msg::StringSharedPtr& msg) {
-		printf("Got message %s in sub1\n", msg->value);
-		EXPECT(strcmp(omsg->value, msg->value) == 0);
+		printf("Got message %s in sub1\n", msg->value.c_str());
+		EXPECT(omsg->value == msg->value);
 		got_message = true;
 		EXPECT(msg.get() == omsg.get());
 		spinner2.stop();
@@ -128,7 +128,8 @@ TEST(test_publish_subscribe_nodelets, []() {
 	spinner2.wait();
 	EXPECT(got_message);
 });
-
+//okay, things to add, fixed length strings so we can have strings in structs
+//should also enhance bindings for strings, I think C++ strings have memory leaks
 // Make sure close works on publishers/subscribers and doesnt result in them getting closed multiple times
 TEST(test_publisher_subscriber_close_cpp, []() {
 	pubsub::Node node("simple_publisher");
@@ -157,8 +158,8 @@ TEST(test_publish_subscribe_cpp, []() {
 
 	bool got_message = false;
 	pubsub::Subscriber<pubsub::msg::String> subscriber(node, "/data", [&](const pubsub::msg::StringSharedPtr& msg) {
-		printf("Got message %s in sub1\n", msg->value);
-		EXPECT(strcmp(omsg.value, msg->value) == 0);
+		printf("Got message %s in sub1\n", msg->value.c_str());
+		EXPECT(omsg.value == msg->value);
 		spinner.stop();
 		got_message = true;
 	}, 10);

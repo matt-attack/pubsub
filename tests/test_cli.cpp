@@ -94,8 +94,8 @@ TEST(test_cli_pub_latched, []() {
 
 	bool got_message = false;
 	pubsub::Subscriber<pubsub::msg::String> subscriber(node, "/data", [&](const pubsub::msg::StringSharedPtr& msg) {
-		printf("Got message %s in sub1\n", msg->value);
-		EXPECT(strcmp("hello", msg->value) == 0);
+		printf("Got message %s in sub1\n", msg->value.c_str());
+		EXPECT(msg->value == "hello");
 		got_message = true;
 		spinner.stop();
 	}, 10);
@@ -120,8 +120,8 @@ TEST(test_cli_pub, []() {
 
 	bool got_message = false;
 	pubsub::Subscriber<pubsub::msg::String> subscriber(node, "/data", [&](const pubsub::msg::StringSharedPtr& msg) {
-		printf("Got message %s in sub1\n", msg->value);
-		EXPECT(strcmp("hello", msg->value) == 0);
+		printf("Got message %s in sub1\n", msg->value.c_str());
+		EXPECT(msg->value == "hello");
 		got_message = true;
 		spinner.stop();
 	}, 10);

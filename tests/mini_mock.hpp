@@ -46,6 +46,7 @@
 #include <iostream>
 #include <deque>
 #include <map>
+#include <stdexcept>
 #include <vector>
 
 // Useful console colors
@@ -81,6 +82,28 @@ static int mini_mock_failed_conditions_count = 0;
         std::cout << RED << "    failed condition (" #condition << ") : "; \
         std::cout << message << " at " <<__FILE__ << ":"<< __LINE__ << END_COLOR << '\n'; \
     } \
+}
+
+// If an exception matching thie provided message is thrown
+// - an automatic message will be printed (with file name and line number)
+// - the test continues
+// - the test will fail at the end
+void EXPECT_THROWS(std::function<void()> function, const std::string& message)
+{
+	bool threw = false;
+	try
+	{
+	  function();
+	}
+	catch (std::exception& err)
+	{
+	  threw = true;
+	  if (message.length())
+	  {
+	    EXPECT(std::string(err.what()) == message);
+	  }
+	}
+	EXPECT(threw);
 }
 
 // If condition is false :

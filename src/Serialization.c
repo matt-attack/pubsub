@@ -308,11 +308,11 @@ const char* ps_deserialize_iterate(struct ps_deserialize_iterator* iter, const s
 	return position;
 }
 
-static uint64_t print_field(int type, const char** ptr)
+static uint64_t print_field(const struct ps_msg_field_t* field, const char** ptr)
 {
 	uint64_t value = 0;
 				// non dynamic types 
-				switch (type)
+				switch (field->type)
 				{
 				case FT_Int8:
 					printf("%i", (int)*(int8_t*)*ptr);
@@ -362,6 +362,10 @@ static uint64_t print_field(int type, const char** ptr)
 					printf("%lf", *(double*)*ptr);
 					*ptr += 8;
 					break;
+				case FT_ArrayString:
+				  printf("\"%s\"", (char*)*ptr);
+				  *ptr += field->content_length;
+				  break;
 				default:
 					printf("ERROR: unhandled field type when parsing....\n");
 				}
@@ -372,9 +376,10 @@ void ps_deserialize_print(const void * data, const struct ps_message_definition_
 {
 	struct ps_deserialize_iterator iter = ps_deserialize_start(data, definition);
 	const struct ps_msg_field_t* field; uint32_t length; const char* ptr;
-	int it = 0;
+	int it = -1;
 	while (ptr = ps_deserialize_iterate(&iter, &field, &length))
 	{
+	  it++;
 		if (field_name && strcmp(field_name, field->name) != 0)
 		{
 			continue;
@@ -384,7 +389,7 @@ void ps_deserialize_print(const void * data, const struct ps_message_definition_
 			// strings are already null terminated
 			if (field->length == 1)
 			{
-				printf("%s: %s\n", field->name, ptr);
+				printf("%s: \"%s\"\n", field->name, ptr);
 			}
 			else
 			{
@@ -427,9 +432,29 @@ void ps_deserialize_print(const void * data, const struct ps_message_definition_
 				printf(" { ");
 				for (int f = 0; f < iter.struct_num_fields; f++)
 				{
-					printf("%s: ", (field+1+f)->name);
-					print_field((field+1+f)->type, &ptr);
-					printf(" ");
+				  const struct ps_msg_field_t* sf = (field+1+f);
+					printf("%s: ", sf->name);
+					if (sf->length > 1)
+					{
+					  printf("[");
+					  for (int i = 0; i < sf->length; i++)
+					  {
+					    print_field(sf, &ptr);
+					    if (i != sf->length - 1)
+					    {
+					      printf(", ");
+					    }
+					  }
+					  printf("]");
+					}
+					else
+					{
+					  print_field(sf, &ptr);
+					}
+					if (f != (iter.struct_num_fields - 1))
+					{
+					  printf(", ");
+					}
 				}
 				printf(" }");
 			}
@@ -468,7 +493,7 @@ void ps_deserialize_print(const void * data, const struct ps_message_definition_
 			for (unsigned int i = 0; i < length; i++)
 			{
 				uint64_t value = 0;
-				value = print_field(field->type, &ptr);
+				value = print_field(field, &ptr);
 				
 				if (field->flags > 0)
 				{
@@ -514,7 +539,6 @@ void ps_deserialize_print(const void * data, const struct ps_message_definition_
 				}
 			}
 		}
-		it++;
 	}
 }
 
@@ -527,8 +551,6 @@ const char* TypeToString(ps_field_types type)
 {
 	switch (type)
 	{
-		// declarations
-		// . . .
 	case FT_Int8:
 		return "int8";
 	case FT_Int16:
@@ -550,11 +572,11 @@ const char* TypeToString(ps_field_types type)
 	case FT_Float64:
 		return "double";
 	case FT_String:
-		// statements executed if the expression equals the
-		// value of this constant_expression
 		return "string";
 	case FT_Struct:
 		return "struct";
+  case FT_ArrayString:
+    return "astring";
 	default:
 		return "Unknown Type";
 	}

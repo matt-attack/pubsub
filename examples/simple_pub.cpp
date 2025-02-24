@@ -44,7 +44,7 @@ int main()
   });
 
   // Wait for the spinner to exit (on control-c)
-  spinner.wait();
+  spinner.run();
 
   return 0;
 }

@@ -2,6 +2,7 @@
 #include <pubsub/Joy.msg.h>
 #include <pubsub/Costmap.msg.h>
 #include <pubsub/Path2D.msg.h>
+#include <pubsub/String.msg.h>
 
 #include "mini_mock.hpp"
 
@@ -25,8 +26,46 @@ TEST(test_joy_serialization, []() {
 	free(out);
 });
 
-void test2()
-{
+TEST(test_string_cpp, []() {
+  std::string value = "hi";
+	// test C++ strings
+	{
+	  pubsub::msg::String msg;
+	  EXPECT(msg.value.data() == 0)
+	  EXPECT(msg.value == "");
+	  msg.value = "apples";
+	  EXPECT(msg.value == "apples");
+	  EXPECT(msg.value == std::string("apples"));
+	  EXPECT(strcmp(msg.value.c_str(), "apples") == 0);
+	  msg.value = value;
+	  EXPECT(msg.value == value);
+	  EXPECT(msg.value == value.c_str());
+	  EXPECT(strcmp(msg.value.c_str(), value.c_str()) == 0);
+	}
+});
+
+TEST(test_fixed_string_cpp, []() {
+	// test C++ fixed strings
+	{
+	  FixedString<5> string;
+	  string = "hi";
+	  
+	  EXPECT(string == "hi");
+	  EXPECT(string == std::string("hi"));
+	  EXPECT(strcmp(string.c_str(), "hi") == 0);
+	  EXPECT(sizeof(string) == 5);
+	}
+	
+	// test what happens when you assign too much
+	{
+	  FixedString<5> string;
+	  EXPECT_THROWS([&](){
+	    string = "hello paul";
+	  }, "Too big.");
+	}
+});
+
+TEST(test_costmap_c_cpp, []() {
 	// verify that the C type matches the C++ one memory wise
   pubsub::msg::Costmap msg;
 	msg.width = 100;
@@ -48,10 +87,6 @@ void test2()
 		if (msg.data[i] != cmsg->data[i])
 			EXPECT(false);
 	}
-}
-
-TEST(test_costmap_c_cpp, []() {
-	test2();
 });
 
 TEST(test_costmap_serialization, []() {
@@ -82,7 +117,7 @@ TEST(test_costmap_serialization, []() {
 		if (out->data[i] != msg.data[i])
 			EXPECT(false);
 	}
-    delete out;
+  delete out;
 });
 
 TEST(test_path2d_serialization, []() {
