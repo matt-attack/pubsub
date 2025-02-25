@@ -33,6 +33,7 @@ extern "C"
 		FT_MaxFloat,// all floats and ints are less than this, not present in messages
 		FT_String,// null terminated dynamic length string
 		FT_Struct,//indicates the number of fields following contained in it
+		FT_StructDefinition,
 		FT_ArrayString// null terminated fixed length string
 	};
 	typedef enum ps_field_types ps_field_types;
@@ -50,8 +51,13 @@ extern "C"
 		ps_field_types type;
 		ps_field_flags flags;// packed in upper bits of type, but broken out here
 		const char* name;
-		unsigned int length;//length of the array, 0 if dynamic
-		unsigned short content_length;//number of fields inside this struct
+		uint32_t length;//length of the array, 0 if dynamic, or if this is a struct definition, how many following fields are part of it
+		//context dependent field
+		union
+		{
+		  uint16_t string_length;// this field is a ArrayString, the length of said string
+		  uint16_t struct_index;// if this field is a struct, this is the index of the struct definition in the list of fields
+		};
 	};
 	
 	struct ps_msg_enum_t

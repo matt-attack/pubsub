@@ -27,7 +27,6 @@ struct enumeration
 {
 	std::string name;
 	std::string value;
-	int field_num;
 };
 
 struct field;
@@ -55,13 +54,15 @@ struct field
 	std::string flag;
 
 	uint32_t line_number;
+	
+	std::vector<int> associated_enums;
 
-	std::string getBaseType()
+	std::string getBaseType() const
 	{
 		return type->base_type;
 	}
 	
-	std::string getFlags()
+	std::string getFlags() const
 	{
 		if (flag == "enum")
 			return "FF_ENUM";
@@ -75,12 +76,12 @@ struct field
 		return "invalid";
 	}
 
-	std::string getTypeEnum()
+	std::string getTypeEnum() const
 	{
 		return type->type_enum;
 	}
 	
-	void GenerateFree(std::string& output)
+	void GenerateFree(std::string& output) const
 	{
 		if (type->name == "string" && array_size != 1)
 		{
@@ -104,7 +105,7 @@ struct field
 		}
 	}
 	
-	void GenerateCopy(std::string& output, const std::string& source)
+	void GenerateCopy(std::string& output, const std::string& source) const
 	{
 		if (type->name == "string")
 		{
@@ -230,6 +231,7 @@ std::string generate(const char* definition, const char* name)
 	types["astring"] = new Type{"astring", "char", "FT_ArrayString", {}};
 
 	// also generate the hash while we are at it
+	std::vector<int> unassociated_enums;
 	uint32_t hash = 0;
 	uint32_t line_number = 0;
 	for (auto& line : lines)
@@ -299,6 +301,7 @@ std::string generate(const char* definition, const char* name)
 				current_struct->name = name;
 				current_struct->base_type = name;
 				current_struct->type_enum = "FT_Struct";
+				unassociated_enums.clear();// if they come before a struct defintion we arent sure what they go with
 				continue;
 			}
 			
@@ -332,11 +335,13 @@ std::string generate(const char* definition, const char* name)
 			if (current_struct)
 			{
 				// this belongs in the struct
-				current_struct->fields.push_back(new field{ name, real_type, size, string_size, "", line_number });
+				current_struct->fields.push_back(new field{ name, real_type, size, string_size, "", line_number, unassociated_enums });
+				unassociated_enums.clear();
 				continue;
 			}
 			// also fill in array size
-			fields.push_back({ name, real_type, size, string_size, "", line_number });
+			fields.push_back({ name, real_type, size, string_size, "", line_number, unassociated_enums });
+			unassociated_enums.clear();
 		}
 		// a line with flags maybe?
 		else if (words.size() == 3 && !has_equal)
@@ -374,12 +379,14 @@ std::string generate(const char* definition, const char* name)
 			if (current_struct)
 			{
 				// this belongs in the struct
-				current_struct->fields.push_back(new field{ name, real_type, size, 0, "", line_number });
+				current_struct->fields.push_back(new field{ name, real_type, size, 0, flag, line_number, unassociated_enums });
+				unassociated_enums.clear();
 				continue;
 			}
 
 			// also fill in array size
-			fields.push_back({ name, real_type, size, 0, flag, line_number});
+			fields.push_back({ name, real_type, size, 0, flag, line_number, unassociated_enums});
+			unassociated_enums.clear();
 		}
 		else
 		{
@@ -393,7 +400,8 @@ std::string generate(const char* definition, const char* name)
 				std::string value = strip_whitespace(equals[1]);
 				//printf("it was an enum: %s=%s\n", equals[0].c_str(), equals[1].c_str());
 				
-				enumerations.push_back({ name, value, fields.size() });
+				enumerations.push_back({ name, value });
+				unassociated_enums.push_back(enumerations.size() - 1);
 			}
 			else
 			{
@@ -501,27 +509,50 @@ std::string generate(const char* definition, const char* name)
 
 	// generate the fields
 	output += "static struct ps_msg_field_t " + type_name + "_fields[] = {\n";
-	for (auto& field : fields)
+	std::map<std::string, int> generated_structs;
+	std::map<const field*, int> field_indexes;
+	int field_index = 0;
+	for (const auto& field : fields)
 	{
 		if (field.getTypeEnum() == "FT_Struct")
 		{
-			// struct
-			auto& members = field.type->fields;
-			output += "  { " + field.getTypeEnum() + ", " + field.getFlags() + ", \"" + field.name + "\", ";
-			output += std::to_string(field.array_size) + ", " + std::to_string(members.size()) + " }, \n";// todo use for array types
+		  // add the struct if we haven't already
+		  int struct_index;
+		  if (generated_structs.find(field.type->name) == generated_structs.end())
+		  {
+		    struct_index = field_index;
+		    generated_structs[field.type->name] = struct_index;
+		    
+			  auto& members = field.type->fields;
+		    // add the struct itself
+		    output += "  { FT_StructDefinition, FF_NONE, \"" + field.type->name + "\", ";
+				output += std::to_string(members.size()) + ", 0 }, \n";
+		    field_index++;
 
-			// now add struct fields
-			for (auto& m : members)
-			{
-				output += "  { " + m->type->type_enum + ", " + "FF_NONE" + ", \"" + m->name + "\", ";
-				output += std::to_string(m->array_size) + ", " + std::to_string(m->string_size) + " }, \n";
-			}
+		    // now add struct fields
+			  for (auto& m : members)
+			  {
+				  output += "  { " + m->type->type_enum + ", " + m->getFlags() + ", \"" + m->name + "\", ";
+				  output += std::to_string(m->array_size) + ", " + std::to_string(m->string_size) + " }, \n";
+				  field_indexes[m] = field_index++;
+			  }
+		  }
+		  else
+		  {
+		    struct_index = generated_structs[field.type->name];
+		  }
+
+      // add the field
+			output += "  { " + field.getTypeEnum() + ", " + field.getFlags() + ", \"" + field.name + "\", ";
+			output += std::to_string(field.array_size) + ", " + std::to_string(struct_index) + " }, \n";
 		}
 		else
 		{
+		  // add the field
 			output += "  { " + field.getTypeEnum() + ", " + field.getFlags() + ", \"" + field.name + "\", ";
 			output += std::to_string(field.array_size) + ", " + std::to_string(field.string_size) + " }, \n";
 		}
+		field_indexes[&field] = field_index++;
 	}
 	output += "};\n\n";
 	
@@ -529,9 +560,36 @@ std::string generate(const char* definition, const char* name)
 	if (enumerations.size())
 	{
 		output += "static struct ps_msg_enum_t " + type_name + "_enums[] = {\n";
-		for (auto& e: enumerations)
+		int enum_id = 0;
+		for (const auto& e: enumerations)
 		{
-			output += "  {\"" + e.name + "\", " + e.value + ", " + std::to_string(e.field_num) + "},\n";
+		  // okay, lets flip the script, each field lists associated enums?
+		  // now search for the associated field
+		  int field_num = 255;
+		  for (const auto& field: fields)
+		  {
+		    for (const auto& sf: field.type->fields)
+		    {
+		      for (auto id: sf->associated_enums)
+		      {
+		        if (id == enum_id)
+		        {
+		          field_num = field_indexes[sf];
+		          break;
+		        }
+		      }
+		    }
+		    for (auto id: field.associated_enums)
+		    {
+		      if (id == enum_id)
+		      {
+		        field_num = field_indexes[&field];
+		        break;
+		      }
+		    }
+		  }
+			output += "  {\"" + e.name + "\", " + e.value + ", " + std::to_string(field_num) + "},\n";
+			enum_id++;
 		}
 		output += "};\n\n";
 	}
@@ -811,19 +869,14 @@ std::string generate(const char* definition, const char* name)
 	}
 
 	// generate the actual message definition
-	int field_count = fields.size();
-	for (auto& f: fields)
-	{
-		field_count += f.type->fields.size();
-	}
 	output += "static struct ps_message_definition_t " + type_name + "_def = { ";
 	if (enumerations.size() == 0)
 	{
-		output += std::to_string(hash) + ", \"" + name + "\", " + std::to_string(field_count) + ", " + type_name + "_fields, " + type_name + "_encode, " + type_name + "_decode, " + type_name + "_free, 0, 0 };\n";
+		output += std::to_string(hash) + ", \"" + name + "\", " + std::to_string(field_index) + ", " + type_name + "_fields, " + type_name + "_encode, " + type_name + "_decode, " + type_name + "_free, 0, 0 };\n";
 	}
 	else
 	{
-		output += std::to_string(hash) + ", \"" + name + "\", " + std::to_string(field_count) + ", " + type_name + "_fields, " + type_name + "_encode, " + type_name + "_decode, " + type_name + "_free, " + std::to_string(enumerations.size()) + ", " + type_name + "_enums };\n";
+		output += std::to_string(hash) + ", \"" + name + "\", " + std::to_string(field_index) + ", " + type_name + "_fields, " + type_name + "_encode, " + type_name + "_decode, " + type_name + "_free, " + std::to_string(enumerations.size()) + ", " + type_name + "_enums };\n";
 	}
 
 	output += "\n#ifdef __cplusplus\n";

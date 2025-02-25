@@ -161,7 +161,7 @@ EXPORT int ps_create_publisher(int node, const char* topic, const char* definiti
                 struct ps_msg_field_t* field = &fields[num_fields-1];
                 field->name = name;
                 field->length = 1;
-                field->content_length = 0;
+                field->string_length = 0;
                 field->type = 0;// filled in below
                 field->flags = 0;
                 if (strcmp(type, "int8") == 0)

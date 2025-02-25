@@ -20,7 +20,7 @@ struct field
 {
 	uint8_t type;
 	uint32_t length;
-	uint16_t content_length;//if we are an array
+	uint16_t content_length;//context dependent
 	char name[50];
 	//string goes here
 };
@@ -53,7 +53,7 @@ int ps_serialize_message_definition(void* start, const struct ps_message_definit
 		struct field* f = (struct field*)cur;
 		f->type = definition->fields[i].type | (definition->fields[i].flags << 5);
 		f->length = definition->fields[i].length;
-		f->content_length = definition->fields[i].content_length;
+		f->content_length = definition->fields[i].struct_index;
 		strcpy(f->name, definition->fields[i].name);
 
 		cur += 1 + 4 + 2 + strlen(definition->fields[i].name)+ 1;
@@ -92,7 +92,7 @@ void ps_copy_message_definition(struct ps_message_definition_t* dst, const struc
 		dst->fields[i].type = src->fields[i].type;
 		dst->fields[i].flags = src->fields[i].flags;
 		dst->fields[i].length = src->fields[i].length;
-		dst->fields[i].content_length = src->fields[i].content_length;
+		dst->fields[i].struct_index = src->fields[i].struct_index;
 		char* name = (char*)malloc(strlen(src->fields[i].name) + 1);
 		strcpy(name, src->fields[i].name);
 		dst->fields[i].name = name;
@@ -137,7 +137,7 @@ void ps_deserialize_message_definition(const void * start, struct ps_message_def
 		definition->fields[i].type = (ps_field_types)f->type & 0x1F;
 		definition->fields[i].flags = f->type >> 5;
 		definition->fields[i].length = f->length;
-		definition->fields[i].content_length = f->content_length;
+		definition->fields[i].struct_index = f->content_length;
 		//need to allocate the name
 		int len = strlen(f->name);
 		char* field_name = (char*)malloc(len + 1);
@@ -179,8 +179,9 @@ void ps_free_message_definition(struct ps_message_definition_t * definition)
 	free(definition->enums);
 }
 
-static int GetFieldSize(int type)
+static int GetFieldSize(const struct ps_msg_field_t* field)
 {
+  int type = field->type;
 	int field_size = 0;
 	if (type == FT_Int8 || type == FT_UInt8)
 	{
@@ -197,6 +198,10 @@ static int GetFieldSize(int type)
 	else if (type == FT_Int64 || type == FT_UInt64 || type == FT_Float64)
 	{
 		field_size = 8;
+	}
+	else if (type == FT_ArrayString)
+	{
+	  field_size = field->string_length;
 	}
 	return field_size;
 }
@@ -252,6 +257,12 @@ const char* ps_deserialize_iterate(struct ps_deserialize_iterator* iter, const s
 			}
 		}
 	}
+	else if (field->type == FT_StructDefinition)
+	{
+	  // skip past it
+	  iter->next_field_index += field->length;
+	  return ps_deserialize_iterate(iter, f, l);
+	}
 	else if (field->type == FT_Struct)
 	{
 		// lets just treat this as a normal element, and leave it to the iterator to handle this
@@ -259,15 +270,16 @@ const char* ps_deserialize_iterate(struct ps_deserialize_iterator* iter, const s
 		// okay, lets just not allow struct arrays in arrays for now?
 		// TODO, i dont think this is even implemented in code gen
 		
+		const struct ps_msg_field_t* struct_field = &iter->fields[field->struct_index];
+		iter->struct_num_fields = struct_field->length;
+		
 		// calculate element *width*
 		uint32_t width = 0;
-		for (int i = 0; i < field->content_length; i++)
+		for (int i = 0; i < iter->struct_num_fields; i++)
 		{
-			const struct ps_msg_field_t* member = &iter->fields[iter->next_field_index++];
-			width += GetFieldSize(member->type);
+			const struct ps_msg_field_t* member = ++struct_field;
+			width += GetFieldSize(member)*member->length;
 		}
-
-		iter->struct_num_fields = field->content_length;
 
 		if (field->length > 0)
 		{
@@ -287,7 +299,7 @@ const char* ps_deserialize_iterate(struct ps_deserialize_iterator* iter, const s
 	}
 	else
 	{
-		int field_size = GetFieldSize(field->type);
+		int field_size = GetFieldSize(field);
 		
 		// now handle length
 		if (field->length > 0)
@@ -308,7 +320,7 @@ const char* ps_deserialize_iterate(struct ps_deserialize_iterator* iter, const s
 	return position;
 }
 
-static uint64_t print_field(const struct ps_msg_field_t* field, const char** ptr)
+static uint64_t print_field(const struct ps_msg_field_t* field, const char** ptr, const struct ps_message_definition_t* definition)
 {
 	uint64_t value = 0;
 				// non dynamic types 
@@ -364,11 +376,38 @@ static uint64_t print_field(const struct ps_msg_field_t* field, const char** ptr
 					break;
 				case FT_ArrayString:
 				  printf("\"%s\"", (char*)*ptr);
-				  *ptr += field->content_length;
+				  *ptr += field->string_length;
 				  break;
 				default:
 					printf("ERROR: unhandled field type when parsing....\n");
 				}
+	
+  if (field->flags == FF_ENUM)
+  {
+    const char* name = "Enum Not Found";
+    for (unsigned int i = 0; i < definition->num_enums; i++)
+						  {
+						    if (&definition->fields[definition->enums[i].field] == field && value == definition->enums[i].value)
+						    {
+						      name = definition->enums[i].name;
+						    }
+    }
+    printf(" (%s)", name);
+  }
+  else if (field->flags == FF_BITMASK)
+  {
+    const char* name = "Enum Not Found";
+						  printf(" (");
+						  for (unsigned int i = 0; i < definition->num_enums; i++)
+						  {
+						    if (&definition->fields[definition->enums[i].field] == field && (definition->enums[i].value & value) != 0)
+							  {
+							    name = definition->enums[i].name;
+							    printf("%s, ", name);
+							  }
+						  }
+    printf(")");
+  }
 	return value;
 }
 
@@ -432,14 +471,15 @@ void ps_deserialize_print(const void * data, const struct ps_message_definition_
 				printf(" { ");
 				for (int f = 0; f < iter.struct_num_fields; f++)
 				{
-				  const struct ps_msg_field_t* sf = (field+1+f);
+				  const struct ps_msg_field_t* sf = definition->fields + 1 + field->struct_index + f;
 					printf("%s: ", sf->name);
 					if (sf->length > 1)
 					{
 					  printf("[");
 					  for (int i = 0; i < sf->length; i++)
 					  {
-					    print_field(sf, &ptr);
+					    print_field(sf, &ptr, definition);
+
 					    if (i != sf->length - 1)
 					    {
 					      printf(", ");
@@ -449,7 +489,7 @@ void ps_deserialize_print(const void * data, const struct ps_message_definition_
 					}
 					else
 					{
-					  print_field(sf, &ptr);
+					  print_field(sf, &ptr, definition);
 					}
 					if (f != (iter.struct_num_fields - 1))
 					{
@@ -492,38 +532,7 @@ void ps_deserialize_print(const void * data, const struct ps_message_definition_
 
 			for (unsigned int i = 0; i < length; i++)
 			{
-				uint64_t value = 0;
-				value = print_field(field, &ptr);
-				
-				if (field->flags > 0)
-				{
-					if (field->flags == FF_ENUM)
-					{
-						const char* name = "Enum Not Found";
-						for (unsigned int i = 0; i < definition->num_enums; i++)
-						{
-							if (definition->enums[i].field == it && value == definition->enums[i].value)
-							{
-								name = definition->enums[i].name;
-							}
-						}
-						printf(" (%s)", name);
-					}
-					else if (field->flags == FF_BITMASK)
-					{
-						const char* name = "Enum Not Found";
-						printf(" (");
-						for (unsigned int i = 0; i < definition->num_enums; i++)
-						{
-							if (definition->enums[i].field == it && (definition->enums[i].value & value) != 0)
-							{
-								name = definition->enums[i].name;
-								printf("%s, ", name);
-							}
-						}
-						printf(")");
-					}
-				}
+				print_field(field, &ptr, definition);
 
 				if (field->length == 1)
 				{
@@ -577,6 +586,8 @@ const char* TypeToString(ps_field_types type)
 		return "struct";
   case FT_ArrayString:
     return "astring";
+  case FT_StructDefinition:
+    return "struct";
 	default:
 		return "Unknown Type";
 	}
@@ -591,42 +602,49 @@ void ps_print_definition(const struct ps_message_definition_t* definition, bool 
 	int end_tab = 0;
 	for (unsigned int i = 0; i < definition->num_fields; i++)
 	{
+	  const struct ps_msg_field_t* field = &definition->fields[i];
+	  
+		const char* tab = i < end_tab ? "  " : "";
+
 		//print out any relevant enums
 		for (unsigned int j = 0; j < definition->num_enums; j++)
 		{
 			if (definition->enums[j].field == i)
 			{
-				printf("%s %i\n", definition->enums[j].name, definition->enums[j].value);
+				printf("%s%s %i\n", tab, definition->enums[j].name, definition->enums[j].value);
 			}
 		}
 	
-		const char* type_name = "";
-		ps_field_types type = definition->fields[i].type;
-		if (definition->fields[i].flags == FF_ENUM)
+		ps_field_types type = field->type;
+		const char* flag = "";
+		if (field->flags == FF_ENUM)
 		{
-			printf("enum ");
+			flag = "enum ";
 		}
-		else if (definition->fields[i].flags == FF_BITMASK)
+		else if (field->flags == FF_BITMASK)
 		{
-			printf("bitmask ");
+			flag = "bitmask ";
 		}
-		const char* tab = i < end_tab ? "  " : "";
-		if (definition->fields[i].length > 1)
+		if (field->type == FT_StructDefinition)
 		{
-			printf("%s%s %s[%i]\n", tab, TypeToString(definition->fields[i].type), definition->fields[i].name, definition->fields[i].length);
+		  printf("%s%s%s %s\n", tab, flag, TypeToString(field->type), field->name);
 		}
-		else if (definition->fields[i].length == 0)
+		else if (field->length > 1)
 		{
-			printf("%s%s[] %s\n", tab, TypeToString(definition->fields[i].type), definition->fields[i].name);// dynamic array
+			printf("%s%s%s %s[%i]\n", tab, flag, TypeToString(field->type), field->name, field->length);
+		}
+		else if (field->length == 0)
+		{
+			printf("%s%s%s %s[]\n", tab, flag, TypeToString(field->type), field->name);// dynamic array
 		}
 		else
 		{
-			printf("%s%s %s\n", tab, TypeToString(definition->fields[i].type), definition->fields[i].name);
+			printf("%s%s%s %s\n", tab, flag, TypeToString(field->type), field->name);
 		}
 
-		if (definition->fields[i].type == FT_Struct)
+		if (field->type == FT_StructDefinition)
 		{
-			end_tab = i + 1 + definition->fields[i].content_length;
+			end_tab = i + 1 + field->length;
 		}
 	}
 }
