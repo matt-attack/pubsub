@@ -206,7 +206,7 @@ static int GetFieldSize(const struct ps_msg_field_t* field)
 	return field_size;
 }
 
-struct ps_deserialize_iterator ps_deserialize_start(const char* msg, const struct ps_message_definition_t* definition)
+struct ps_deserialize_iterator ps_deserialize_start(const void* msg, const struct ps_message_definition_t* definition)
 {
 	struct ps_deserialize_iterator iter;
 	iter.next_field_index = 0;
@@ -217,7 +217,7 @@ struct ps_deserialize_iterator ps_deserialize_start(const char* msg, const struc
 }
 
 // takes in a deserialize iterator and returns pointer to the data and the current field
-const char* ps_deserialize_iterate(struct ps_deserialize_iterator* iter, const struct ps_msg_field_t** f, uint32_t* l)
+const void* ps_deserialize_iterate(struct ps_deserialize_iterator* iter, const struct ps_msg_field_t** f, uint32_t* l)
 {
 	if (iter->next_field_index == iter->num_fields)
 	{
@@ -415,10 +415,8 @@ void ps_deserialize_print(const void * data, const struct ps_message_definition_
 {
 	struct ps_deserialize_iterator iter = ps_deserialize_start(data, definition);
 	const struct ps_msg_field_t* field; uint32_t length; const char* ptr;
-	int it = -1;
 	while (ptr = ps_deserialize_iterate(&iter, &field, &length))
 	{
-	  it++;
 		if (field_name && strcmp(field_name, field->name) != 0)
 		{
 			continue;

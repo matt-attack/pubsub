@@ -54,6 +54,7 @@ macro(generate_messages)
 endmacro()
 
 generate_messages(FILES 
+  Frames.msg
   Joy.msg
   String.msg 
   Float.msg
@@ -70,6 +71,14 @@ generate_messages(FILES
   Path2D.msg
   Odom.msg
   Int.msg
+)
+
+generate_messages(FILES 
+  Test.msg
+TARGET
+  pubsub_test_msgs
+DIRECTORY
+  tests
 )
 
 

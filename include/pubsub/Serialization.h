@@ -8,14 +8,14 @@ extern "C"
 {
 #endif
 
-    struct ps_allocator_t
-    {
-	    void*(*alloc)(unsigned int size, void* context);
-	    void(*free)(void*, void* context);
-	    void* context;
-    };
+  struct ps_allocator_t
+  {
+	  void*(*alloc)(unsigned int size, void* context);
+	  void(*free)(void*, void* context);
+	  void* context;
+  };
 
-    extern struct ps_allocator_t ps_default_allocator;
+  extern struct ps_allocator_t ps_default_allocator;
 
 	enum ps_field_types
 	{
@@ -103,15 +103,15 @@ extern "C"
 
 	// Serializes a given message definition to a buffer.
 	// Returns: Number of bytes written
-	int ps_serialize_message_definition(void* start, const struct ps_message_definition_t* definition);
+	int ps_serialize_message_definition(void* dst, const struct ps_message_definition_t* definition);
 
 	// Deserializes a message definition from the specified buffer.
-	void ps_deserialize_message_definition(const void* start, struct ps_message_definition_t* definition);
+	void ps_deserialize_message_definition(const void* src, struct ps_message_definition_t* definition);
 
 	// print out the deserialized contents of the message to console, for rostopic echo like implementations
 	// in yaml format
-	// if field is non-null only print out the content of that field
-	void ps_deserialize_print(const void* data, const struct ps_message_definition_t* definition, unsigned int max_array_size, const char* field);
+	// if field_name is non-null only print out the content of that field
+	void ps_deserialize_print(const void* data, const struct ps_message_definition_t* definition, unsigned int max_array_size, const char* field_name);
 	
 	struct ps_deserialize_iterator
 	{
@@ -126,11 +126,11 @@ extern "C"
 	
 	// Create an iteratator to iterate through the fields of a serialized message
 	// Returns: The iterator
-	struct ps_deserialize_iterator ps_deserialize_start(const char* msg, const struct ps_message_definition_t* definition);
+	struct ps_deserialize_iterator ps_deserialize_start(const void* msg, const struct ps_message_definition_t* definition);
 	
 	// Iterate through a serialized message one field at a time
 	// Returns: Start pointer in the message for the current field or zero when at the end
-	const char* ps_deserialize_iterate(struct ps_deserialize_iterator* iter, const struct ps_msg_field_t** f, uint32_t* l);
+	const void* ps_deserialize_iterate(struct ps_deserialize_iterator* iter, const struct ps_msg_field_t** f, uint32_t* l);
 
 	// Frees a dynamically allocated message definition
 	void ps_free_message_definition(struct ps_message_definition_t* definition);

@@ -42,12 +42,17 @@ public:
     strncpy(data_, string, string_length - 1);
   }
 
-  bool operator==(const char* other)
+  bool operator==(const char* other) const
   {
     return strcmp(other, data_) == 0;
   }
 
-  bool operator==(const std::string& other)
+  bool operator==(const std::string& other) const
+  {
+    return strcmp(other.c_str(), data_) == 0;
+  }
+  
+  bool operator==(const FixedString& other) const
   {
     return strcmp(other.c_str(), data_) == 0;
   }
@@ -135,7 +140,7 @@ public:
     }
   }
   
-  bool operator==(const char* other)
+  bool operator==(const char* other) const
   {
     if (data_ == 0)
     {
@@ -144,7 +149,7 @@ public:
     return strcmp(other, data_) == 0;
   }
 
-  bool operator==(const std::string& other)
+  bool operator==(const std::string& other) const
   {
     if (data_ == 0)
     {
@@ -153,7 +158,7 @@ public:
     return strcmp(other.c_str(), data_) == 0;
   }
 
-  bool operator==(const CString& other)
+  bool operator==(const CString& other) const
   {
     if (data_ == 0)
     {

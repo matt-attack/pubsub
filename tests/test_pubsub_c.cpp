@@ -174,7 +174,7 @@ TEST(test_publish_subscribe_large, []() {
     pubsub__PointCloud_free(data, &ps_default_allocator);
     free(message);
   };
-  ps_node_create_subscriber_adv(&node, "/data", 0, &string_sub, &options);
+  ps_node_create_subscriber_adv(&node, "/data", &pubsub__PointCloud_def, &string_sub, &options);
 
   // now spin and wait for us to get the published message
   while (ps_okay() && !got_message)

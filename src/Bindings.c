@@ -226,7 +226,7 @@ EXPORT int ps_create_publisher(int node, const char* topic, const char* definiti
 
 EXPORT void ps_publish(int pub, const void* msg, int len)
 {
-    // publish the message simply since it is already encoded
+  // publish the message simply since it is already encoded
 	struct ps_msg_t omsg;
 	ps_msg_alloc(len, 0, &omsg);
 	memcpy(ps_get_msg_start(omsg.data), msg, len);
