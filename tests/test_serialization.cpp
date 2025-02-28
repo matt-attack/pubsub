@@ -51,7 +51,7 @@ TEST(test_string_cpp, []() {
 TEST(test_fixed_string_cpp, []() {
 	// test C++ fixed strings
 	{
-	  FixedString<5> string;
+	  pubsub::FixedString<5> string;
 	  string = "hi";
 	  
 	  EXPECT(string == "hi");
@@ -62,7 +62,7 @@ TEST(test_fixed_string_cpp, []() {
 	
 	// test what happens when you assign too much
 	{
-	  FixedString<5> string;
+	  pubsub::FixedString<5> string;
 	  EXPECT_THROWS([&](){
 	    string = "hello paul";
 	  }, "Too big.");
@@ -72,7 +72,7 @@ TEST(test_fixed_string_cpp, []() {
 TEST(test_array_vector_cpp, []() {
 	// test C++ array vectors
 	{
-	  ArrayVector<uint32_t> vector;
+	  pubsub::ArrayVector<uint32_t> vector;
 	  EXPECT(sizeof(vector) == 4 + sizeof(char*));
 	  EXPECT(vector.size() == 0);
 	  vector.resize(4);
@@ -302,6 +302,66 @@ TEST(test_complex_message, []() {
     compare_struct(msg.test_struct_array[i], out->test_struct_array[i]);
   for (int i = 0; i < 3; i++)
     EXPECT(msg.test_bitmask[i] == out->test_bitmask[i]);
+});
+
+
+// tracking allocator usage
+static int allocated;
+static int freed;
+static std::map<void*, uint32_t> sizes;
+static ps_allocator_t alloc;
+struct TestAllocator
+{
+  static ps_allocator_t* allocator() {
+    return &alloc;
+  }
+  
+  static void* Allocate(uint32_t size, void* context)
+  {
+    auto ptr = malloc(size);
+    sizes[ptr] = size;
+    allocated += size;
+    printf("allocate %i\n", allocated);
+    return ptr;
+  }
+  
+  static void Free(void* ptr, void* context)
+  {
+    freed += sizes[ptr];
+    printf("free %i\n", freed);
+    free(ptr);
+  }
+  
+  static void Setup()
+  {
+    allocated = 0;
+    freed = 0;
+    alloc.context = 0;
+    alloc.free = Free;
+    alloc.alloc = Allocate;
+  }
+};
+
+TEST(test_message_allocators, []() {
+  // make sure the allocator gets used
+  TestAllocator::Setup();
+  
+  auto msg = new pubsub::msg::Costmap_<TestAllocator>();
+  msg->data.resize(1000);
+  
+  delete msg;
+  
+  EXPECT(allocated == 1041);
+  EXPECT(freed > 0);
+  EXPECT(freed == allocated);
+
+  auto msg2 = new pubsub::msg::String_<TestAllocator>();
+  msg2->value = "hi";
+  
+  delete msg2;
+  
+  EXPECT(allocated == 1041+4+3+4);
+  EXPECT(freed == allocated);
 });
 
 CREATE_MAIN_ENTRY_POINT();

@@ -1,9 +1,13 @@
 
 #pragma once
 
+#include <pubsub_cpp/allocator.h>
 #include <stdexcept>
 #include <string>
 #include <string.h>
+
+namespace pubsub
+{
 
 #pragma pack(push, 1)
 // Wrapper for a fixed size array for using it like a string
@@ -78,12 +82,33 @@ public:
   }
 };
 
-//would have to require the allocator in this class as part of the template
 // Wrapper for a C string which makes it easier to use and handles freeing
-// todo how to handle allocators?
+template <class Allocator = DefaultAllocator>
 class CString
 {
   char* data_;
+
+	// copy a buffer of a given length to a new allocated array
+	static char* copy(const char* obj, uint32_t length)
+	{
+	  auto data = (char*)Allocator::allocator()->alloc(length, Allocator::allocator()->context);
+		for (int i = 0; i < length; i++)
+		{
+			data[i] = obj[i];
+		}
+		return data;
+	}
+	
+  static char* copy(const char* obj)
+	{
+	  auto length = strlen(obj) + 1;
+	  auto data = (char*)Allocator::allocator()->alloc(length, Allocator::allocator()->context);
+		for (int i = 0; i < length; i++)
+		{
+			data[i] = obj[i];
+		}
+		return data;
+	}
 public:
 
   CString()
@@ -96,7 +121,7 @@ public:
     data_ = 0;
     if (other.data_)
     {
-      data_ = strdup(other.data_);
+      data_ = copy(other.data_);
     }
   }
 
@@ -104,7 +129,7 @@ public:
   {
     if (data_)
     {
-      free(data_);
+      Allocator::allocator()->free(data_, Allocator::allocator()->context);
     }
   }
   
@@ -112,31 +137,30 @@ public:
   {
     if (data_)
     {
-      free(data_);
+      Allocator::allocator()->free(data_, Allocator::allocator()->context);
     }
-    data_ = (char*)malloc(string.length()+1);
-    strcpy(data_, string.c_str());
+    data_ = copy(string.c_str(), string.length()+1);
   }
   
   void operator=(const char* string)
   {
     if (data_)
     {
-      free(data_);
+      Allocator::allocator()->free(data_, Allocator::allocator()->context);
     }
-    data_ = (char*)malloc(strlen(string)+1);
-    strcpy(data_, string);
+    data_ = copy(string);
   }
 
   void operator=(const CString& other)
   {
     if (data_)
     {
-      free(data_);
+      Allocator::allocator()->free(data_, Allocator::allocator()->context);
+      data_ = 0;
     }
     if (other.data_)
     {
-      data_ = strdup(other.data_);
+      data_ = copy(other.data_);
     }
   }
   
@@ -182,3 +206,4 @@ public:
   }
 };
 #pragma pack(pop)
+}

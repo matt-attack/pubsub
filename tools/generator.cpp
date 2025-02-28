@@ -885,13 +885,15 @@ std::string generate(const char* definition, const char* name)
 	output += "#include <vector>\n";
 	//output += "#include <iostream>\n";
 	// todo only include if needed
+	output += "#include <pubsub_cpp/allocator.h>\n";
 	output += "#include <pubsub_cpp/array_vector.h>\n";
 	output += "#include <pubsub_cpp/array_string.h>\n";
 	output += "namespace " + ns + "\n{\n";
     output += "namespace msg\n{\n";
 	output += "#pragma pack(push, 1)\n";
-	output += "struct " + raw_name + "\n{\n";
-	
+	output += "template <class Allocator = pubsub::DefaultAllocator>\n";
+	output += "struct " + raw_name + "_\n{\n";
+	output += "  typedef std::shared_ptr<" + raw_name + "_<Allocator>> SharedPtr;\n";
 	// generate internal structs
 	for (auto& type: types)
 	{
@@ -925,7 +927,7 @@ std::string generate(const char* definition, const char* name)
 		std::string type = f.type == string_type ? "char*" : f.getBaseType();
 		if (f.type == string_type && f.array_size == 1)
 		{
-		  output += "  CString " + f.name + ";\n";
+		  output += "  CString<Allocator> " + f.name + ";\n";
 		}
 		else if (f.array_size == 1)
 		{
@@ -933,7 +935,7 @@ std::string generate(const char* definition, const char* name)
 		}
 		else if (f.array_size == 0)
 		{
-			output += "  ArrayVector<" + type + "> " + f.name + ";\n";
+			output += "  ArrayVector<" + type + ", Allocator> " + f.name + ";\n";
 		}
 		else
 		{
@@ -974,24 +976,27 @@ std::string generate(const char* definition, const char* name)
 	output += "  void* operator new(size_t size)\n";
     output += "  {\n";
     //output += "    std::cout<< \"Overloading new operator with size: \" << size << std::endl;\n";
-    output += "    return malloc(size);\n";
+    output += "    return Allocator::allocator()->alloc(size, Allocator::allocator()->context);\n";
+    //output += "    return malloc(size);\n";
     output += "  }\n\n";
  
     output += "  void operator delete(void * p)\n";
     output += "  {\n";
     //output += "    std::cout<< \"Overloading delete operator \" << std::endl;\n";
-    output += "    free(p);\n";
+    output += "    Allocator::allocator()->free(p, Allocator::allocator()->context);\n";
+    //output += "    free(p);\n";
     output += "  }\n\n";
 
 	output += "  static const ps_message_definition_t* GetDefinition()\n  {\n";
 	output += "    return &" + type_name + "_def;\n  }\n\n";
 	output += "  ps_msg_t Encode() const\n  {\n";
-	output += "    return " + ns + "__" + raw_name + "_encode(this, &ps_default_allocator);\n  }\n\n";
-	output += "  static " + raw_name + "* Decode(const void* data)\n  {\n";
-	output += "    return (" + raw_name + "*)" + ns + "__" + raw_name + "_decode(data, &ps_default_allocator);\n  }\n";// + ns + "__" + raw_name + "_encode(0, this);\n  }\n";
+	output += "    return " + ns + "__" + raw_name + "_encode(this, Allocator::allocator());\n  }\n\n";
+	output += "  static " + raw_name + "_* Decode(const void* data)\n  {\n";
+	output += "    return (" + raw_name + "_*)" + ns + "__" + raw_name + "_decode(data, Allocator::allocator());\n  }\n";// + ns + "__" + raw_name + "_encode(0, this);\n  }\n";
 	output += "};\n";
+	output += "typedef " + raw_name + "_<> " + raw_name + ";\n";
+	output += "typedef std::shared_ptr<" + raw_name + "_<>> " + raw_name + "SharedPtr;\n";
 	output += "#pragma pack(pop)\n";
-	output += "typedef std::shared_ptr<" + raw_name + "> " + raw_name + "SharedPtr;\n";
 	
 	output += "}\n";
 	output += "}\n";
