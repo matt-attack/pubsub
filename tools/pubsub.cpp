@@ -492,7 +492,7 @@ int topic_pub(int num_args, char** args, ps_node_t* node)
       }
 
       // do initial publish
-      ps_msg_t cpy = ps_msg_cpy(&msg);
+      ps_msg_t cpy = ps_msg_cpy(&msg, 0);
       ps_pub_publish(&pub, &cpy);
       break;
     }
@@ -516,7 +516,7 @@ int topic_pub(int num_args, char** args, ps_node_t* node)
     ps_node_spin(node);
     if (rate != 0 && remaining < pubsub::Duration(0.0))
     {
-      ps_msg_t cpy = ps_msg_cpy(&msg);
+      ps_msg_t cpy = ps_msg_cpy(&msg, 0);
       ps_pub_publish(&pub, &cpy);
       next = next + pubsub::Duration(1.0/rate);
     }

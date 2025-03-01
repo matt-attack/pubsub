@@ -173,4 +173,75 @@ TEST(test_publish_subscribe_cpp, []() {
 	EXPECT(got_message);
 });
 
+// tracking allocator usage
+static int allocated;
+static int freed;
+static std::map<void*, uint32_t> sizes;
+static ps_allocator_t alloc;
+struct TestAllocator
+{
+  static ps_allocator_t* allocator() {
+    return &alloc;
+  }
+  
+  static void* Allocate(uint32_t size, void* context)
+  {
+    auto ptr = malloc(size);
+    sizes[ptr] = size;
+    allocated += size;
+    printf("allocate %i\n", allocated);
+    return ptr;
+  }
+  
+  static void Free(void* ptr, void* context)
+  {
+    freed += sizes[ptr];
+    printf("free %i\n", freed);
+    free(ptr);
+  }
+  
+  static void Setup()
+  {
+    allocated = 0;
+    freed = 0;
+    alloc.context = 0;
+    alloc.free = Free;
+    alloc.alloc = Allocate;
+  }
+};
+
+TEST(test_publish_subscribe_allocator_cpp, []() {
+  TestAllocator::Setup();
+	// test that allocators are used with C++
+	pubsub::Node node("simple_publisher");
+  bool got_message = false;
+  {
+	  pubsub::Publisher<pubsub::msg::String_<TestAllocator>> string_pub(node, "/data");
+
+	  pubsub::msg::String_<TestAllocator> omsg;
+	  omsg.value = "Hello";
+	  
+	  pubsub::BlockingSpinnerWithTimers spinner;
+	  spinner.setNode(node);
+
+	  pubsub::Subscriber<pubsub::msg::String_<TestAllocator>> subscriber(node, "/data", [&](const pubsub::msg::String_<TestAllocator>::SharedPtr& msg) {
+		  printf("Got message %s in sub1\n", msg->value.c_str());
+		  EXPECT(omsg.value == msg->value);
+		  spinner.stop();
+		  got_message = true;
+	  }, 10);
+
+	  spinner.addTimer(0.1, [&]()
+	  {
+		  string_pub.publish(omsg);
+	  });
+
+	  spinner.run();
+	}
+	EXPECT(got_message);
+	
+	EXPECT(allocated == 20);
+	EXPECT(allocated == freed);
+});
+
 CREATE_MAIN_ENTRY_POINT();

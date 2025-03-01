@@ -891,9 +891,10 @@ std::string generate(const char* definition, const char* name)
 	output += "namespace " + ns + "\n{\n";
     output += "namespace msg\n{\n";
 	output += "#pragma pack(push, 1)\n";
-	output += "template <class Allocator = pubsub::DefaultAllocator>\n";
+	output += "template <class AllocatorT = pubsub::DefaultAllocator>\n";
 	output += "struct " + raw_name + "_\n{\n";
-	output += "  typedef std::shared_ptr<" + raw_name + "_<Allocator>> SharedPtr;\n";
+	output += "  typedef std::shared_ptr<" + raw_name + "_<AllocatorT>> SharedPtr;\n";
+	output += "  typedef AllocatorT Allocator;\n";
 	// generate internal structs
 	for (auto& type: types)
 	{

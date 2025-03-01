@@ -130,7 +130,7 @@ void remove_client_socket(struct ps_tcp_transport_impl* transport, int socket, s
 
   if (transport->clients[i].queued_message)
   {
-    ps_msg_ref_free(transport->clients[i].queued_message);
+    ps_msg_ref_free(transport->clients[i].queued_message, transport->clients[i].publisher->allocator);
   }
 
   // free queued messages
@@ -138,7 +138,7 @@ void remove_client_socket(struct ps_tcp_transport_impl* transport, int socket, s
   {
     for (int j = 0; j < transport->clients[i].num_queued_messages; j++)
     {
-      ps_msg_ref_free(transport->clients[i].queued_messages[j].msg);
+      ps_msg_ref_free(transport->clients[i].queued_messages[j].msg, transport->clients[i].publisher->allocator);
     }
     free(transport->clients[i].queued_messages);
   }
@@ -301,7 +301,7 @@ int ps_tcp_transport_spin(struct ps_transport_t* transport, struct ps_node_t* no
       if (client->queued_message_written == client->queued_message_length)
       {
         //printf("Message sent.\n");
-        ps_msg_ref_free(client->queued_message);
+        ps_msg_ref_free(client->queued_message, client->publisher->allocator);
         client->queued_message = 0;
 
         // we finished! check if there are more to send

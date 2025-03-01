@@ -33,8 +33,6 @@ struct enumeration
 };
 #pragma pack(pop)
 
-
-
 int ps_serialize_message_definition(void* start, const struct ps_message_definition_t* definition)
 {
 	//ok, write out number of fields
@@ -665,21 +663,21 @@ void ps_msg_ref_add(struct ps_msg_ref_t* msg)
   msg->refcount++;
 }
 
-void ps_msg_ref_free(struct ps_msg_ref_t* msg)
+void ps_msg_ref_free(struct ps_msg_ref_t* msg, struct ps_allocator_t* allocator)
 {
   msg->refcount--;
   if (msg->refcount == 0)
   {
-    free(msg->data);
-    free(msg);
+    allocator->free(msg->data, allocator->context);
+    allocator->free(msg, allocator->context);
   }
 }
 
 
-struct ps_msg_t ps_msg_cpy(const struct ps_msg_t* msg)
+struct ps_msg_t ps_msg_cpy(const struct ps_msg_t* msg, struct ps_allocator_t* allocator)
 {
 	struct ps_msg_t out;
-	ps_msg_alloc(msg->len, 0, &out);
+	ps_msg_alloc(msg->len, allocator, &out);
 	memcpy(ps_get_msg_start(out.data), ps_get_msg_start(msg->data), msg->len);
 	return out;
 }

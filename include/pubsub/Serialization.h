@@ -82,7 +82,7 @@ extern "C"
 	};
 	
 	void ps_msg_ref_add(struct ps_msg_ref_t* msg);
-	void ps_msg_ref_free(struct ps_msg_ref_t* msg);
+	void ps_msg_ref_free(struct ps_msg_ref_t* msg, struct ps_allocator_t* allocator);
 
 	struct ps_allocator_t;
 	typedef struct ps_msg_t(*ps_fn_encode_t)(const void* msg, struct ps_allocator_t* allocator);
@@ -150,7 +150,7 @@ extern "C"
 
 	// Makes a copy of a given serialized message
 	// Returns: The new copy
-	struct ps_msg_t ps_msg_cpy(const struct ps_msg_t* msg);
+	struct ps_msg_t ps_msg_cpy(const struct ps_msg_t* msg, struct ps_allocator_t* allocator);
 
 #ifdef __cplusplus
 }

@@ -4,7 +4,7 @@
 #include <pubsub/Publisher.h>
 #include <pubsub/Subscriber.h>
 #include <pubsub/System.h>
-
+#include <pubsub_cpp/allocator.h>
 
 #include <vector>
 #include <thread>
@@ -310,7 +310,7 @@ public:
 		remapped_topic_ = handle_remap(real_topic, node.getNamespace());
 
 		node.lock_.lock();
-		ps_node_create_publisher_ex(node.getNode(), remapped_topic_.c_str(), T::GetDefinition(), &publisher_, latched, preferred_transport);
+		ps_node_create_publisher_ex(node.getNode(), remapped_topic_.c_str(), T::GetDefinition(), &publisher_, latched, preferred_transport, T::Allocator::allocator());
 		node.lock_.unlock();
 
 		//add me to the publisher list
@@ -576,7 +576,7 @@ public:
     options.skip = skip;
 		options.cb = cb2;
 		options.cb_data = this;
-		options.allocator = 0;
+		options.allocator = T::Allocator::allocator();
 		options.ignore_local = true;
 		options.preferred_transport = preferred_transport;
 

@@ -182,13 +182,13 @@ void ps_pub_publish(struct ps_pub_t* pub, struct ps_msg_t* msg)
 		if (pub->last_message)
 		{
 			//free the old and add the new
-			ps_msg_ref_free(pub->last_message);// todo use allocator
+			ps_msg_ref_free(pub->last_message, pub->allocator);
 		}
 		pub->last_message = ref;
 	}
 	else
 	{
-		ps_msg_ref_free(ref);// todo use allocator
+		ps_msg_ref_free(ref, pub->allocator);
 	}
 }
 
@@ -229,7 +229,7 @@ void ps_pub_destroy(struct ps_pub_t* pub)
   // free my latched message
   if (pub->last_message)
 	{
-		ps_msg_ref_free(pub->last_message);// todo use allocator
+		ps_msg_ref_free(pub->last_message, pub->allocator);
 	}
 
 	pub->clients = 0;

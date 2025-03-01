@@ -142,7 +142,7 @@ void ps_node_advertise(struct ps_pub_t* pub)
 	int sent_bytes = sendto(pub->node->socket, (const char*)data, off, 0, (struct sockaddr*)&address, sizeof(struct sockaddr_in));
 }
 
-void ps_node_create_publisher_ex(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type, struct ps_pub_t* pub, bool latched, unsigned int recommended_transport)
+void ps_node_create_publisher_ex(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type, struct ps_pub_t* pub, bool latched, unsigned int recommended_transport, struct ps_allocator_t* allocator)
 {
 	node->num_pubs++;
 	struct ps_pub_t** old_pubs = node->pubs;
@@ -164,13 +164,14 @@ void ps_node_create_publisher_ex(struct ps_node_t* node, const char* topic, cons
 	pub->last_message = 0;
 	pub->sequence_number = 0;
 	pub->recommended_transport = recommended_transport;
+	pub->allocator = allocator ? allocator : &ps_default_allocator;
 
 	ps_node_advertise(pub);
 }
 
 void ps_node_create_publisher(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type, struct ps_pub_t* pub, bool latched)
 {
-	ps_node_create_publisher_ex(node, topic, type, pub, latched, 0);
+	ps_node_create_publisher_ex(node, topic, type, pub, latched, 0, 0);
 }
 
 // Setup Control-C handlers
