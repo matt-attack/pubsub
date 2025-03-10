@@ -53,8 +53,7 @@ macro(generate_messages)
   target_include_directories(${ARG_TARGET} INTERFACE ${CMAKE_CURRENT_BINARY_DIR}/include/)
 endmacro()
 
-generate_messages(FILES 
-  Frames.msg
+generate_messages(FILES
   Joy.msg
   String.msg 
   Float.msg
