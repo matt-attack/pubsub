@@ -29,7 +29,7 @@ int main()
   ps_node_create_publisher_ex(&node, "/data"/*topic name*/,
                            &pubsub__String_def/*message definition*/,
                            &string_pub,
-                           true/*true to "latch" the topic*/, 1);
+                           true/*true to "latch" the topic*/, 1, NULL);
 
   // User is responsible for lifetime of the message they publish
   // Publish does a copy internally if necessary
