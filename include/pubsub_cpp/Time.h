@@ -38,17 +38,17 @@ public:
 
 	}
 
-	bool operator<(const Duration& rhs) const// otherwise, both parameters may be const references
+	bool operator<(const Duration& rhs) const
 	{
 		return this->usec < rhs.usec;
 	}
 
-	bool operator>(const Duration& rhs) const// otherwise, both parameters may be const references
+	bool operator>(const Duration& rhs) const
 	{
 		return this->usec > rhs.usec;
 	}
 
-	double toSec()
+	double toSec() const
 	{
 		return usec / 1000000.0;
 	}
@@ -77,38 +77,38 @@ public:
 
 	}
 
-	Duration operator-(const Time& rhs) // otherwise, both parameters may be const references
+	Duration operator-(const Time& rhs) const
 	{
 		Duration out;
 		out.usec = this->usec - rhs.usec;
-		return out; // return the result by value (uses move constructor)
+		return out;
 	}
 
-	bool operator<(const Time& rhs) const// otherwise, both parameters may be const references
+	bool operator<(const Time& rhs) const
 	{
 		return this->usec < rhs.usec;
 	}
 
-	bool operator<=(const Time& rhs) const// otherwise, both parameters may be const references
+	bool operator<=(const Time& rhs) const
 	{
 		return this->usec <= rhs.usec;
 	}
 
-	bool operator>(const Time& rhs) const// otherwise, both parameters may be const references
+	bool operator>(const Time& rhs) const
 	{
 		return this->usec > rhs.usec;
 	}
 
-	bool operator>=(const Time& rhs) const// otherwise, both parameters may be const references
+	bool operator>=(const Time& rhs) const
 	{
 		return this->usec >= rhs.usec;
 	}
 
-	Time operator+(const Duration& rhs) // otherwise, both parameters may be const references
+	Time operator+(const Duration& rhs) const 
 	{
 		Time out;
 		out.usec = this->usec + rhs.usec;
-		return out; // return the result by value (uses move constructor)
+		return out;
 	}
 
 	static Time now()
@@ -147,12 +147,12 @@ public:
 #endif
 	}
 
-	double toSec()
+	double toSec() const
 	{
 	  return usec / 1000000.0;
 	}
 
-	std::string toString()
+	std::string toString() const
 	{
       time_t t = usec / 1000000;// toSec();
 
