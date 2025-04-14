@@ -894,6 +894,7 @@ std::string generate(const char* definition, const char* name)
 	output += "template <class AllocatorT = pubsub::DefaultAllocator>\n";
 	output += "struct " + raw_name + "_\n{\n";
 	output += "  typedef std::shared_ptr<" + raw_name + "_<AllocatorT>> SharedPtr;\n";
+	output += "  typedef std::shared_ptr<const " + raw_name + "_<AllocatorT>> SharedConstPtr;\n";
 	output += "  typedef AllocatorT Allocator;\n";
 	// generate internal structs
 	for (auto& type: types)
@@ -908,7 +909,7 @@ std::string generate(const char* definition, const char* name)
 		{			
 			if (field->type == types["astring"])
 			{
-			  output += "    FixedString<" +  std::to_string(field->string_size) + "> " + field->name + ";\n";
+			  output += "    pubsub::FixedString<" +  std::to_string(field->string_size) + "> " + field->name + ";\n";
 			}
 			else if (field->array_size > 1)
       {
@@ -928,7 +929,7 @@ std::string generate(const char* definition, const char* name)
 		std::string type = f.type == string_type ? "char*" : f.getBaseType();
 		if (f.type == string_type && f.array_size == 1)
 		{
-		  output += "  CString<Allocator> " + f.name + ";\n";
+		  output += "  pubsub::CString<Allocator> " + f.name + ";\n";
 		}
 		else if (f.array_size == 1)
 		{
@@ -936,7 +937,7 @@ std::string generate(const char* definition, const char* name)
 		}
 		else if (f.array_size == 0)
 		{
-			output += "  ArrayVector<" + type + ", Allocator> " + f.name + ";\n";
+			output += "  pubsub::ArrayVector<" + type + ", Allocator> " + f.name + ";\n";
 		}
 		else
 		{
@@ -997,6 +998,7 @@ std::string generate(const char* definition, const char* name)
 	output += "};\n";
 	output += "typedef " + raw_name + "_<> " + raw_name + ";\n";
 	output += "typedef std::shared_ptr<" + raw_name + "_<>> " + raw_name + "SharedPtr;\n";
+	output += "typedef std::shared_ptr<const " + raw_name + "_<>> " + raw_name + "SharedConstPtr;\n";
 	output += "#pragma pack(pop)\n";
 	
 	output += "}\n";
