@@ -3,6 +3,7 @@
 #include <pubsub/Node.h>
 #include <pubsub/Publisher.h>
 #include <pubsub/Subscriber.h>
+#include <pubsub/Parameter.h>
 #include <pubsub/System.h>
 #include <pubsub_cpp/allocator.h>
 
@@ -26,16 +27,16 @@
 
 namespace pubsub
 {
-static std::map<std::string, std::string> _remappings;
+extern std::map<std::string, std::string> _remappings;
 
 // how intraprocess passing works
 class SubscriberBase;
 class PublisherBase;
 
 // this mutex protects both of the below
-static std::mutex _publisher_mutex;
-static std::multimap<std::string, PublisherBase*> _publishers;
-static std::multimap<std::string, SubscriberBase*> _subscribers;
+extern std::mutex _publisher_mutex;
+extern std::multimap<std::string, PublisherBase*> _publishers;
+extern std::multimap<std::string, SubscriberBase*> _subscribers;
 
 // this assumes topic and ns are properly checked
 // ns should not have a leading slash, topic should if it is absolute
@@ -163,12 +164,74 @@ inline std::string validate_name(const std::string& name, bool remove_leading_sl
 	return name;
 }
 
+struct ParameterContainer
+{
+  std::mutex lock;
+  double d;
+  float f;
+  int i;
+  std::string s;
+  
+  operator double() const
+  {
+    return d;
+  }
+  
+  operator float() const
+  {
+    return f;
+  }
+  
+  operator int() const
+  {
+    return i;
+  }
+  
+  operator std::string() const
+  {
+    return s;
+  }
+};
+
+class Node;
+template <class T>
+class Parameter
+{
+  friend class Node;
+  std::shared_ptr<ParameterContainer> value;
+public:
+  
+  operator T() const
+  {
+    std::lock_guard<std::mutex> lock(value->lock);
+    return (T)*value;
+  }
+  
+  T get() const
+  {
+    std::lock_guard<std::mutex> lock(value->lock);
+    return (T)*value;
+  }
+  
+  /*void operator=(const T& new_value)
+  {
+    // todo update parameter value
+    value->d = new_value;
+  }*/
+};
+
 // todo need to make sure multiple subscribers in a process share data
 
 // safe to use each node in a different thread after initialize is called
 // making calls to functions on the same node is not thread safe
+typedef std::unique_ptr<SubscriberBase> SubscriberPtr;
+typedef std::unique_ptr<PublisherBase> PublisherPtr;
 class SubscriberBase;
 class Spinner;
+template<class T>
+class Subscriber;
+template<class T>
+class Publisher;
 class Node
 {
 	friend class Spinner;
@@ -210,6 +273,10 @@ public:
 
 	~Node()
 	{
+	  if (params_data_)
+	  {
+	    ps_destroy_parameters(params_data_.get());
+	  }
 		ps_node_destroy(&node_);
 	}
 
@@ -254,6 +321,54 @@ public:
 	{
 		return event_set_;
 	}
+	
+	template <class T>
+	SubscriberBase* subscribe(const std::string& topic, std::function<void(const std::shared_ptr<T>&)> cb, unsigned int queue_size = 1, int preferred_transport = -1, int skip = 0)
+	{
+	  return new Subscriber<T>(*this, topic, cb, queue_size, preferred_transport, skip);
+	}
+	
+  template <class T>
+	Publisher<T>* advertise(const std::string& topic, bool latched = false, int preferred_transport = -1)
+	{
+	  return new Publisher<T>(*this, topic, latched, preferred_transport);
+	}
+	
+	std::unique_ptr<ps_parameters> params_data_;
+	std::map<std::string, std::weak_ptr<ParameterContainer>> params_;
+	
+	Parameter<double> parameter(const std::string& name, double default_value, const std::string& desc = "",
+	  double min = -10000, double max = 10000)
+	{
+	  if (!params_data_)
+	  {
+	    params_data_.reset(new ps_parameters);
+	    ps_create_parameters(getNode(), params_data_.get(), [](const char* name, double value, void* data)
+	    {
+	      auto tthis = (Node*)data;
+	      auto res = tthis->params_.find(name);
+	      if (res == tthis->params_.end())
+	      {
+	        return;
+	      }
+	      
+	      auto shrd = res->second.lock();
+	      if (shrd)
+	      {
+	        std::lock_guard<std::mutex> lock(shrd->lock);
+	        shrd->d = value;
+	      }
+	    }, this);
+	  }
+	  
+	  ps_add_parameter_double(params_data_.get(), name.c_str(), desc.c_str(), default_value, min, max);
+	  
+	  Parameter<double> p;
+	  p.value = std::make_shared<ParameterContainer>();
+	  p.value->d = default_value;
+	  params_[name] = p.value;
+	  return p;
+	}
 
 	// mark that we have a message to process
 	void mark() { marked_ = true; }
@@ -277,6 +392,9 @@ protected:
 	std::vector<SubscriberBase*> subs_;
 
 public:
+
+  virtual ~PublisherBase() {}
+  
 	const std::string& GetTopic()
 	{
 		return remapped_topic_;
@@ -288,14 +406,14 @@ public:
 	}
 };
 
-template<class T>
-class Subscriber;
 template<class T> 
 class Publisher: public PublisherBase
 {
 	std::shared_ptr<T> latched_msg_;
 public:
 	friend class Subscriber<T>;
+	
+	typedef std::unique_ptr<Publisher<T>> Ptr;
 
 	Publisher(Node& node, const std::string& topic, bool latched = false, int preferred_transport = 0)// : topic_(topic)
 	{
@@ -375,7 +493,7 @@ public:
 		// now go through my local subscriber list
 		for (auto& sub: subs_)
 		{
-			//printf("Publishing locally with no copy..\n");
+			printf("Publishing locally with no copy..\n");
 
 			auto specific_sub = (Subscriber<T>*)sub;
 			ps_event_set_trigger(specific_sub->node_->getEventSet());
@@ -409,7 +527,7 @@ public:
 		// now go through my local subscriber list
 		for (auto& sub: subs_)
 		{
-			//printf("Publishing locally with a copy..\n");
+			printf("Publishing locally with a copy..\n");
 			if (!copy)
 			{
 				//copy to shared ptr
@@ -523,6 +641,8 @@ protected:
 	}
 public:
 
+  virtual ~SubscriberBase() {}
+
 	ps_sub_t* GetSub()
 	{
 		return &subscriber_;
@@ -546,6 +666,8 @@ class Subscriber: public SubscriberBase
 	std::function<void(const std::shared_ptr<T>&)> cb_;
 
 public:
+
+  typedef std::unique_ptr<Subscriber<T>> Ptr;
 
 	Subscriber(Node& node, const std::string& topic, std::function<void(const std::shared_ptr<T>&)> cb, unsigned int queue_size = 1, int preferred_transport = -1, int skip = 0) : cb_(cb), queue_size_(queue_size)
 	{
@@ -614,6 +736,34 @@ public:
 		queue_mutex_.unlock();
 		return false;
 	}
+
+  std::shared_ptr<const T> PopOne()
+  {
+    queue_mutex_.lock();
+    if (!queue_.size())
+    {
+      queue_mutex_.unlock();
+      return {};
+    }
+    auto back = queue_.back();
+    queue_.pop_back();
+    queue_mutex_.unlock();
+    return back;
+  }	
+  
+  void PushOne(const std::shared_ptr<T>& msg)
+  {
+    auto specific_sub = this;
+		//ps_event_set_trigger(specific_sub->node_->getEventSet());
+		specific_sub->queue_mutex_.lock();
+		specific_sub->queue_.push_front(msg);
+		if (specific_sub->queue_.size() > specific_sub->queue_size_)
+		{
+			specific_sub->queue_.pop_back();
+		}
+		specific_sub->queue_mutex_.unlock();
+		//specific_sub->node_->mark();
+  }
 
 	~Subscriber()
 	{

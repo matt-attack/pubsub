@@ -33,3 +33,8 @@ set_property(TARGET simple_sub_cpp PROPERTY CXX_STANDARD 11)
 add_executable(read_param "read_param.c")
 target_link_libraries(read_param pubsub pubsub_msgs)
 add_dependencies(read_param pubsub pubsub_msgs)
+
+add_executable(params_cpp "params.cpp")
+target_link_libraries(params_cpp pubsub_cpp pubsub_msgs)
+add_dependencies(params_cpp pubsub_cpp pubsub_msgs)
+set_property(TARGET simple_sub_cpp PROPERTY CXX_STANDARD 11)

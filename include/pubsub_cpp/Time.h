@@ -38,6 +38,16 @@ public:
 
 	}
 
+	bool operator==(const Duration& rhs) const
+	{
+		return this->usec == rhs.usec;
+	}
+
+	bool operator!=(const Duration& rhs) const
+	{
+		return this->usec != rhs.usec;
+	}
+
 	bool operator<(const Duration& rhs) const
 	{
 		return this->usec < rhs.usec;
@@ -46,6 +56,19 @@ public:
 	bool operator>(const Duration& rhs) const
 	{
 		return this->usec > rhs.usec;
+	}
+	
+	Duration operator+(const Duration& rhs) const 
+	{
+		Duration out;
+		out.usec = this->usec + rhs.usec;
+		return out;
+	}
+	
+	Duration& operator+=(const Duration& rhs) 
+	{
+		this->usec += rhs.usec;
+		return *this;
 	}
 
 	double toSec() const
@@ -83,6 +106,16 @@ public:
 		out.usec = this->usec - rhs.usec;
 		return out;
 	}
+	
+	bool operator==(const Time& rhs) const
+	{
+		return this->usec == rhs.usec;
+	}
+
+	bool operator!=(const Time& rhs) const
+	{
+		return this->usec != rhs.usec;
+	}
 
 	bool operator<(const Time& rhs) const
 	{
@@ -109,6 +142,12 @@ public:
 		Time out;
 		out.usec = this->usec + rhs.usec;
 		return out;
+	}
+
+	Time& operator+=(const Duration& rhs) 
+	{
+		this->usec += rhs.usec;
+		return *this;
 	}
 
 	static Time now()

@@ -26,6 +26,7 @@ add_library (pubsub
   "src/System.c"
   "src/UDPTransport.c"
   "src/Parameter.c"
+  "src/TCPTransport.c"
 )
 if (UNIX)
 target_link_libraries(pubsub pubsub_msgs)
@@ -47,6 +48,7 @@ add_library (pubsub_shared SHARED
   "src/Serialization.c"
   "src/System.c"
   "src/UDPTransport.c"
+  "src/TCPTransport.c"
   "src/Bindings.c")
 if (UNIX)
 target_link_libraries(pubsub_shared PUBLIC pubsub_msgs)
