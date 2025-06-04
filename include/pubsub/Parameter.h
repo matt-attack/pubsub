@@ -1,11 +1,5 @@
 #pragma once
 
-#ifdef __cplusplus
-extern "C"
-{
-#endif
-
-//#include <cstdlib>
 #include <stdio.h>
 
 #include <pubsub/Node.h>
@@ -16,6 +10,11 @@ extern "C"
 #include <pubsub/Parameters.msg.h>
 
 #include <math.h>
+
+#ifdef __cplusplus
+extern "C"
+{
+#endif
 
 typedef void(*ps_param_fancy_cb_t)(const char* name, double value, void* data);
 

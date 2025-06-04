@@ -6,8 +6,8 @@ foreach(test_file ${tests})
   message(STATUS "create ${test_file} executable from source: ${test_source}")
   add_executable("${test_file}" "${test_source}")
   target_include_directories("${test_file}" PUBLIC ../include)
-  add_dependencies("${test_file}" pubsub pubsub_msgs)
-  target_link_libraries("${test_file}" pubsub ${CMAKE_THREAD_LIBS_INIT} pubsub_msgs pubsub_test_msgs)
+  add_dependencies("${test_file}" pubsub pubsub_msgs pubsub_cpp)
+  target_link_libraries("${test_file}" pubsub ${CMAKE_THREAD_LIBS_INIT} pubsub_msgs pubsub_test_msgs pubsub_cpp)
 
   # Auto populate the tests from test source file
   # Note : CMake must be reconfigured if tests are added/renamed/removed from test source file
