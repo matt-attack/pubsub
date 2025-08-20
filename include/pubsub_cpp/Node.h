@@ -400,6 +400,11 @@ public:
 		return remapped_topic_;
 	}
 
+	ps_pub_t* GetPub()
+	{
+	  return &publisher_;
+	}
+
 	Node* GetNode()
 	{
 		return node_;

@@ -140,7 +140,7 @@ void ps_pub_publish_ez(struct ps_pub_t* pub, void* msg)
 {
 	if (pub->num_clients > 0 || pub->latched)
 	{
-		struct ps_msg_t data = pub->message_definition->encode(msg, 0);
+		struct ps_msg_t data = pub->message_definition->encode(msg, pub->allocator);
 
 		ps_pub_publish(pub, &data);
 	}
