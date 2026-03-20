@@ -12,7 +12,7 @@
 struct ps_sub_t string_sub;
 void callback(void* message, unsigned int size, void* cbdata, const struct ps_msg_info_t* info)
 {
-  // user is responsible for freeing the message and its arrays
+  // user is responsible for freeing the message
   struct pubsub__String* data = (struct pubsub__String*)message;
   printf("Got message: %s\n", data->value);
   pubsub__String_free(data, string_sub.allocator);

@@ -254,6 +254,7 @@ TEST(test_complex_message, []() {
   pubsub::msg::Test msg;
   msg.test_int = rand();
   msg.test_string = "THIS IS A STRING";
+  msg.test_array_string2 = "test";
   fill_struct(msg.test_struct);
   fill_struct(msg.test_structs[0]);
   fill_struct(msg.test_structs[1]);
@@ -265,7 +266,7 @@ TEST(test_complex_message, []() {
   msg.test_bitmask[2] = pubsub::msg::Test::TYPE2_FLAG1 | pubsub::msg::Test::TYPE2_FLAG2;
 
 	ps_msg_t in = msg.Encode();
-  EXPECT(in.len == 420);// 56*7 + 4 + 4 + 3 + 17 = 392 + 11 + 17
+  EXPECT(in.len == 440);// 56*7 + 4 + 4 + 3 + 17 + 20 = 392 + 11 + 17 + 20
   
   // Make sure deserialize iterators work correctly
   struct ps_deserialize_iterator iter = ps_deserialize_start(ps_get_msg_start((const char*)in.data), pubsub::msg::Test::GetDefinition());
@@ -285,15 +286,16 @@ TEST(test_complex_message, []() {
 	    EXPECT(*(uint32_t*)ptr == msg.test_int);
 	  }
 	}
-	EXPECT(fields.size() == 6);
+	EXPECT(fields.size() == 7);
 	EXPECT(fields[0] == "test_int");
-	EXPECT(fields[5] == "test_bitmask");
+	EXPECT(fields[6] == "test_bitmask");
 	
 	auto* out = pubsub::msg::Test::Decode(ps_get_msg_start(in.data));
 	free(in.data);
 	
 	EXPECT(msg.test_int == out->test_int);
 	EXPECT(msg.test_string == out->test_string);
+	EXPECT(msg.test_array_string2 == out->test_array_string2);
   compare_struct(msg.test_struct, out->test_struct);
   compare_struct(msg.test_structs[0], out->test_structs[0]);
   compare_struct(msg.test_structs[1], out->test_structs[1]);

@@ -87,7 +87,7 @@ TEST(test_cli_pub_latched, []() {
 		auto output = execute_command({"topic", "pub", "/data", "'hello'", "-l", "-r", "0"});
 	});
 
-	pubsub::Node node("simple_sub");
+	pubsub::Node node("simple_sub", false, false);
 	
 	pubsub::BlockingSpinnerWithTimers spinner;
 	spinner.setNode(node);
@@ -113,7 +113,7 @@ TEST(test_cli_pub, []() {
 		auto output = execute_command({"topic", "pub", "/data", "'hello'", "-r", "20.0"});
 	});
 
-	pubsub::Node node("simple_sub");
+	pubsub::Node node("simple_sub", false, false);
 	
 	pubsub::BlockingSpinnerWithTimers spinner;
 	spinner.setNode(node);

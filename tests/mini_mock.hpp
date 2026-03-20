@@ -84,7 +84,7 @@ static int mini_mock_failed_conditions_count = 0;
     } \
 }
 
-// If an exception matching thie provided message is thrown
+// If an exception matching the provided message is not thrown
 // - an automatic message will be printed (with file name and line number)
 // - the test continues
 // - the test will fail at the end

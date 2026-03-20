@@ -244,6 +244,7 @@ class Node
 
 	ps_node_t node_;
 	bool marked_ = false;
+	bool use_intraprocess_;
 
 	ps_event_set_t* event_set_;
 public:
@@ -255,7 +256,7 @@ public:
 	// probably need to add advertise and subscribe functions to me
 	std::vector<SubscriberBase*> subscribers_;
 
-	Node(const std::string& name, bool use_broadcast = false) : original_name_(name), event_set_(0)
+	Node(const std::string& name, bool use_broadcast = false, bool enable_intraprocess = true) : original_name_(name), use_intraprocess_(enable_intraprocess), event_set_(0)
 	{
 		// look up the namespace for this node (todo)
 		std::string ns = "/";
@@ -320,6 +321,11 @@ public:
 	inline ps_event_set_t* getEventSet()
 	{
 		return event_set_;
+	}
+	
+	bool intraprocessEnabled()
+	{
+	  return use_intraprocess_;
 	}
 	
 	template <class T>
@@ -492,24 +498,34 @@ public:
 		{
 			latched_msg_ = msg;
 		}
-
-		// loop through shared subscribers
+		
 		node_->lock_.lock();
-		// now go through my local subscriber list
-		for (auto& sub: subs_)
+		
+		if (node_->intraprocessEnabled())
 		{
-			printf("Publishing locally with no copy..\n");
+		  // loop through shared subscribers
+		  // now go through my local subscriber list
+		  for (auto& sub: subs_)
+		  {
+			  // make sure message matches
+			  if (strcmp(sub->GetSub()->type->name, T::GetDefinition()->name) != 0)
+        {
+          continue;
+        }
+        
+			  printf("Publishing locally with no copy..\n");
 
-			auto specific_sub = (Subscriber<T>*)sub;
-			ps_event_set_trigger(specific_sub->node_->getEventSet());
-			specific_sub->queue_mutex_.lock();
-			specific_sub->queue_.push_front(msg);
-			if (specific_sub->queue_.size() > specific_sub->queue_size_)
-			{
-				specific_sub->queue_.pop_back();
-			}
-			specific_sub->queue_mutex_.unlock();
-			specific_sub->node_->mark();
+			  auto specific_sub = (Subscriber<T>*)sub;
+			  ps_event_set_trigger(specific_sub->node_->getEventSet());
+			  specific_sub->queue_mutex_.lock();
+			  specific_sub->queue_.push_front(msg);
+			  if (specific_sub->queue_.size() > specific_sub->queue_size_)
+			  {
+				  specific_sub->queue_.pop_back();
+			  }
+			  specific_sub->queue_mutex_.unlock();
+			  specific_sub->node_->mark();
+		  }
 		}
 
 		ps_pub_publish_ez(&publisher_, (void*)msg.get());
@@ -528,30 +544,35 @@ public:
 			// save for later
 			latched_msg_ = copy;
 		}
+		
 		node_->lock_.lock();
-		// now go through my local subscriber list
-		for (auto& sub: subs_)
-		{
-			printf("Publishing locally with a copy..\n");
-			if (!copy)
-			{
-				//copy to shared ptr
-				copy = std::shared_ptr<T>(new T);
-				*copy = msg;
-			}
 
-			// help this isnt thread safe (or is it?)
-			auto specific_sub = (Subscriber<T>*)sub;
-			ps_event_set_trigger(specific_sub->node_->getEventSet());
-			specific_sub->queue_mutex_.lock();
-			specific_sub->queue_.push_front(copy);
-			if (specific_sub->queue_.size() > specific_sub->queue_size_)
-			{
-				specific_sub->queue_.pop_back();
-			}
-			specific_sub->queue_mutex_.unlock();
-			specific_sub->node_->mark();
-		}
+		if (node_->intraprocessEnabled())
+		{
+		  // now go through my local subscriber list
+		  for (auto& sub: subs_)
+		  {
+			  printf("Publishing locally with a copy..\n");
+			  if (!copy)
+			  {
+				  //copy to shared ptr
+				  copy = std::shared_ptr<T>(new T);
+				  *copy = msg;
+			  }
+
+			  // help this isnt thread safe (or is it?)
+			  auto specific_sub = (Subscriber<T>*)sub;
+			  ps_event_set_trigger(specific_sub->node_->getEventSet());
+			  specific_sub->queue_mutex_.lock();
+			  specific_sub->queue_.push_front(copy);
+			  if (specific_sub->queue_.size() > specific_sub->queue_size_)
+			  {
+				  specific_sub->queue_.pop_back();
+			  }
+			  specific_sub->queue_mutex_.unlock();
+			  specific_sub->node_->mark();
+		  }
+    }
 
 		// note this still copies unnecessarily if the topic is latched
 		// todo make this only copy/encode if necessary
@@ -685,6 +706,7 @@ public:
 
 		auto cb2 = [](void* msg, unsigned int size, void* th, const ps_msg_info_t* info)
 		{
+		  printf("got actual message\n");
 			// convert to shared ptr
 			std::shared_ptr<T> msg_ptr((T*)msg);
 
@@ -704,7 +726,7 @@ public:
 		options.cb = cb2;
 		options.cb_data = this;
 		options.allocator = T::Allocator::allocator();
-		options.ignore_local = true;
+		options.ignore_local = node.intraprocessEnabled();
 		options.preferred_transport = preferred_transport;
 
 		node.lock_.lock();
@@ -712,18 +734,21 @@ public:
 		node.subscribers_.push_back(this);
 		node.lock_.unlock();
 
-		AddSubscriber(remapped_topic_, this, [&](void* p){
-			auto pub = (Publisher<T>*)p;
-			ps_event_set_trigger(node_->getEventSet());
-			queue_mutex_.lock();
-			queue_.push_front(pub->latched_msg_);
-			if (queue_.size() > queue_size_)
-			{
-				queue_.pop_back();
-			}
-			queue_mutex_.unlock();
-			node_->mark();
-		});
+    if (node.intraprocessEnabled())
+    {
+		  AddSubscriber(remapped_topic_, this, [&](void* p){
+			  auto pub = (Publisher<T>*)p;
+			  ps_event_set_trigger(node_->getEventSet());
+			  queue_mutex_.lock();
+			  queue_.push_front(pub->latched_msg_);
+			  if (queue_.size() > queue_size_)
+			  {
+				  queue_.pop_back();
+			  }
+			  queue_mutex_.unlock();
+			  node_->mark();
+		  });
+		}
 	}
 
 	virtual bool CallOne()

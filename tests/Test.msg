@@ -4,7 +4,7 @@ int32 test_int
 string test_string
 
 struct Struct
-astring:10 test_array_string
+string:10 test_array_string
 uint8 i1
 int64 i2
 float f3
@@ -19,6 +19,8 @@ end_struct
 Struct test_struct
 Struct test_structs[2]
 Struct test_struct_array[]
+
+string:20 test_array_string2
 
 TYPE2_FLAG1=1
 TYPE2_FLAG2=2

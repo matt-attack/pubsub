@@ -189,6 +189,121 @@ done:
   ps_node_destroy(&node);
 });
 
+// test sending a very large message over udp, we should get nothing
+TEST(test_publish_subscribe_large_udp, []() {
+  struct ps_node_t node;
+  ps_node_init(&node, "test_node", "", true);
+
+  //struct ps_transport_t tcp_transport;
+  //ps_tcp_transport_init(&tcp_transport, &node);
+  //ps_node_add_transport(&node, &tcp_transport);
+
+  struct ps_pub_t string_pub;
+  ps_node_create_publisher(&node, "/data", &pubsub__PointCloud_def, &string_pub, true);
+
+  // come up with the latched topic
+  static struct pubsub__PointCloud rmsg;
+  rmsg.num_points = 100000;
+  rmsg.point_type = pubsub::msg::PointCloud::POINT_XYZ;
+  rmsg.data_length = rmsg.num_points*4*3;//3 floats per point
+  rmsg.data = (uint8_t*)malloc(rmsg.data_length);
+  ps_pub_publish_ez(&string_pub, &rmsg);
+
+  struct ps_sub_t string_sub;
+
+  struct ps_subscriber_options options;
+  ps_subscriber_options_init(&options);
+  options.ignore_local = false;
+
+  static bool got_message = false;
+  options.preferred_transport = 0;
+  options.cb_raw = [](void* message, unsigned int size, void* data2, const ps_msg_info_t* info)
+  {
+    got_message = true;
+    printf("Got message\n");
+    // todo free with correct allocator
+    free(message);
+  };
+  ps_node_create_subscriber_adv(&node, "/data", &pubsub__PointCloud_def, &string_sub, &options);
+
+  // now spin and wait to make sure we dont get the message
+  uint64_t start = ps_get_tick_count();
+  while (ps_okay() && ps_get_tick_count() - start < 1000)
+  {
+    ps_node_spin(&node);// todo blocking wait first
+
+    ps_sleep(1);
+  }
+
+done:
+  // make sure we didnt get the message
+  EXPECT(!got_message);
+  ps_node_destroy(&node);
+});
+
+// test that with ignore local, we should get nothing, but without we do
+TEST(test_publish_subscribe_ignore_local, []() {
+  struct ps_node_t node;
+  ps_node_init(&node, "test_node", "", true);
+
+  //struct ps_transport_t tcp_transport;
+  //ps_tcp_transport_init(&tcp_transport, &node);
+  //ps_node_add_transport(&node, &tcp_transport);
+
+  struct ps_pub_t string_pub;
+  ps_node_create_publisher(&node, "/data", &pubsub__PointCloud_def, &string_pub, true);
+
+  // come up with the latched topic
+  static struct pubsub__PointCloud rmsg;
+  rmsg.num_points = 10;
+  rmsg.point_type = pubsub::msg::PointCloud::POINT_XYZ;
+  rmsg.data_length = rmsg.num_points*4*3;//3 floats per point
+  rmsg.data = (uint8_t*)malloc(rmsg.data_length);
+  ps_pub_publish_ez(&string_pub, &rmsg);
+
+  struct ps_sub_t string_sub, string_sub2;
+
+  struct ps_subscriber_options options;
+  ps_subscriber_options_init(&options);
+  options.ignore_local = true;
+
+  static bool got_message = false;
+  options.cb_raw = [](void* message, unsigned int size, void* data2, const ps_msg_info_t* info)
+  {
+    got_message = true;
+    printf("Got message\n");
+    // todo free with correct allocator
+    free(message);
+  };
+  ps_node_create_subscriber_adv(&node, "/data", &pubsub__PointCloud_def, &string_sub, &options);
+  
+  static bool got_message_no_local = false;
+  options.cb_raw = [](void* message, unsigned int size, void* data2, const ps_msg_info_t* info)
+  {
+    got_message_no_local = true;
+    printf("Got message\n");
+    // todo free with correct allocator
+    free(message);
+  };
+  options.ignore_local = false;
+  ps_node_create_subscriber_adv(&node, "/data", &pubsub__PointCloud_def, &string_sub2, &options);
+
+  // now spin and wait to make sure we dont get the message
+  uint64_t start = ps_get_tick_count();
+  while (ps_okay() && ps_get_tick_count() - start < 1000)
+  {
+    ps_node_spin(&node);// todo blocking wait first
+
+    ps_sleep(1);
+  }
+
+done:
+  // make sure we didnt get the message
+  EXPECT(!got_message);
+  EXPECT(got_message_no_local);
+  ps_node_destroy(&node);
+});
+
 TEST(test_publish_subscribe_latched_skip, []() {
   // test that we still get the latched message even if we want to skip messages
   struct ps_node_t node;

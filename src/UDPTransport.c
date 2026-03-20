@@ -4,6 +4,8 @@
 
 #include <pubsub/Net.h>
 
+#include <stdio.h>
+
 void ps_udp_publish(struct ps_pub_t* pub, struct ps_client_t* client, struct ps_msg_ref_t* msg)
 {
 	// send da udp packet!
@@ -12,16 +14,24 @@ void ps_udp_publish(struct ps_pub_t* pub, struct ps_client_t* client, struct ps_
 	address.sin_addr.s_addr = htonl(client->endpoint.address);
 	address.sin_port = htons(client->endpoint.port);
 
-	// todo split larger messages
-	//need to add in the topic id
+  // fill out header
 	struct ps_msg_header* hdr = (struct ps_msg_header*)msg->data;
 	hdr->pid = PS_UDP_PROTOCOL_DATA;
 	hdr->length = msg->len;
 	hdr->id = client->stream_id;
 	hdr->seq = client->sequence_number++;
+	
+  // we rely on our computer to do UDP packet splitting so sending up to max size is fine
+	if (msg->len + sizeof(struct ps_msg_header) > 65507) {
+	  printf("ERROR: Tried to send too many bytes for UDP. Dropping message.\n");
+	  return;
+	}
 
 	int sent_bytes = sendto(pub->node->socket, (const char*)msg->data, msg->len + sizeof(struct ps_msg_header),
 		0, (struct sockaddr*)&address, sizeof(struct sockaddr_in));
+  if (sent_bytes < msg->len + sizeof(struct ps_msg_header)) {
+    printf("ERROR: Failed to send all UDP bytes.\n");
+  }
 }
 
 void ps_udp_subscribe(struct ps_sub_t* sub, const struct ps_endpoint_t* ep)
@@ -50,7 +60,6 @@ void ps_udp_subscribe(struct ps_sub_t* sub, const struct ps_endpoint_t* ep)
 
 	//add topic name, node, and 
 	int sent_bytes = sendto(sub->node->socket, (const char*)data, off, 0, (struct sockaddr*)&address, sizeof(struct sockaddr_in));
-	//printf("Subscribing...\n");
 }
 
 void ps_udp_unsubscribe(struct ps_sub_t* sub)

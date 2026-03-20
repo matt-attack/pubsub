@@ -312,9 +312,17 @@ std::string generate(const char* definition, const char* name)
 				string_size = std::stoi(type.substr(index + 1));
 				type = type.substr(0, index);
 				
-				if (type.find("astring") == -1)
+				if (type.find("string") == -1)
 				{
-				  printf("%s:%i ERROR: The element count syntax can only be used with astrings'.\n", _current_file.c_str(), line_number);
+				  printf("%s:%i ERROR: The element count syntax can only be used with strings'.\n", _current_file.c_str(), line_number);
+				  throw 7;
+				}
+				
+				type = "astring";
+				
+				if (string_size < 1)
+				{
+				  printf("%s:%i ERROR: Element count must be greater than 0'.\n", _current_file.c_str(), line_number);
 				  throw 7;
 				}
 		  }
@@ -486,7 +494,11 @@ std::string generate(const char* definition, const char* name)
 	output += "struct " + type_name + "\n{\n";
 	for (auto& field : fields)
 	{
-		if (field.array_size > 1)
+	  if (field.type == types["astring"])
+		{
+	    output += "  " + field.type->base_type + " " + field.name + "[" + std::to_string(field.string_size) + "];\n";
+	  }
+		else if (field.array_size > 1)
 		{
 			output += "  " + field.getBaseType() + " " + field.name + "[" + std::to_string(field.array_size) + "];\n";
 		}
@@ -661,7 +673,12 @@ std::string generate(const char* definition, const char* name)
 		// for now lets just decode non strings
 		for (size_t i = 0; i < fields.size(); i++)
 		{
-			if (fields[i].type == string_type)
+		  if (fields[i].type == types["astring"])
+		  {
+		    output += "  memcpy(out->" + fields[i].name + ", p, sizeof(" + fields[i].getBaseType() + ")*" + std::to_string(fields[i].string_size) + ");\n";
+		    output += "  p += sizeof(" + fields[i].getBaseType() + ")*" + std::to_string(fields[i].string_size) + ";\n";
+		  }
+			else if (fields[i].type == string_type)
 			{
 				if (fields[i].array_size == 1)
 				{
@@ -735,7 +752,11 @@ std::string generate(const char* definition, const char* name)
 		int n_arr = 0;
 		for (size_t i = 0; i < fields.size(); i++)
 		{
-			if (fields[i].type == string_type)
+		  if (fields[i].type == types["astring"])
+			{
+			  // these are already counted in struct size
+		  }
+			else if (fields[i].type == string_type)
 			{
 				if (fields[i].array_size == 1)
 				{
@@ -774,7 +795,7 @@ std::string generate(const char* definition, const char* name)
 		output += "  char* start = (char*)ps_get_msg_start(omsg.data);\n";
 		for (size_t i = 0; i < fields.size(); i++)
 		{
-			if (fields[i].type == string_type)
+		  if (fields[i].type == string_type)
 			{
 				if (fields[i].array_size == 1)
 				{
@@ -786,7 +807,7 @@ std::string generate(const char* definition, const char* name)
 					// now encode it
 					if (fields[i].array_size == 0)
 					{
-						// encode the array legnth
+						// encode the array length
 						output += "  *(uint32_t*)start = msg->" + fields[i].name + "_length;\n";
 						output += "  start += 4;\n";
 						output += "  for (int i = 0; i < msg->" + fields[i].name + "_length; i++)\n  {\n";
@@ -823,8 +844,16 @@ std::string generate(const char* definition, const char* name)
 				}
 				else
 				{
-					output += "  memcpy(start, &msg->" + fields[i].name + ", sizeof(" + fields[i].getBaseType() + "));\n";
-					output += "  start += sizeof(" + fields[i].getBaseType() + ");\n";
+				  if (fields[i].type == types["astring"])
+				  {
+				    output += "  memcpy(start, msg->" + fields[i].name + ", sizeof(" + fields[i].getBaseType() + ")*" + std::to_string(fields[i].string_size) + ");\n";
+					  output += "  start += sizeof(" + fields[i].getBaseType() + ")*" + std::to_string(fields[i].string_size) + ";\n";
+				  }
+				  else
+				  {
+					  output += "  memcpy(start, &msg->" + fields[i].name + ", sizeof(" + fields[i].getBaseType() + "));\n";
+					  output += "  start += sizeof(" + fields[i].getBaseType() + ");\n";
+					}
 				}
 			}
 		}
@@ -927,7 +956,11 @@ std::string generate(const char* definition, const char* name)
 	for (auto f: fields)
 	{
 		std::string type = f.type == string_type ? "char*" : f.getBaseType();
-		if (f.type == string_type && f.array_size == 1)
+		if (f.type == types["astring"])
+		{
+			  output += "  pubsub::FixedString<" +  std::to_string(f.string_size) + "> " + f.name + ";\n";
+	  }
+		else if (f.type == string_type && f.array_size == 1)
 		{
 		  output += "  pubsub::CString<Allocator> " + f.name + ";\n";
 		}

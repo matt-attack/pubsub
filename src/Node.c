@@ -310,9 +310,11 @@ void ps_node_init_ex(struct ps_node_t* node, const char* name, const char* ip, b
 	printf("Pubsub IP: %s\n", ip);
 
 #ifdef _WIN32
-	node->group_id = GetCurrentProcessId() + (10000 * ((our_address >> 24) && 0xFF));
+  node->group_id = GetCurrentProcessId() + (100000 * ((our_address >> 24) && 0xFF));
+#elif __linux__
+  node->group_id = getpid() + (100000 * ((our_address >> 24) && 0xFF));
 #else
-	node->group_id = 0;// ignore the group
+  node->group_id = 0;// not implemented on this platform
 #endif
 
 	unsigned int mc_bind_addr = INADDR_ANY;
