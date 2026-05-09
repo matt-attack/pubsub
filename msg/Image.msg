@@ -1,4 +1,5 @@
 # Represents a 2D image
+Header header
 
 # Image format
 R8G8B8=0

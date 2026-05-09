@@ -37,6 +37,12 @@ void ps_sleep(unsigned int time_ms)
 	Sleep(time_ms);
 }
 
+void ps_sleep_us(unsigned int time_us)
+{
+  // todo make more accurate
+  Sleep(time_us/1000);
+}
+
 uint64_t GetTimeMs()
 {
 	return GetTickCount64();
@@ -48,6 +54,11 @@ uint64_t GetTimeMs()
 void ps_sleep(unsigned int time_ms)
 {
 	usleep(time_ms*1000);
+}
+
+void ps_sleep_us(unsigned int time_us)
+{
+  usleep(time_us);
 }
 
 uint64_t GetTimeMs()

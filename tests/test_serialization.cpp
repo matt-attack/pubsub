@@ -146,7 +146,7 @@ TEST(test_costmap_serialization, []() {
 TEST(test_path2d_serialization, []() {
 	// try serializing then deserializing a message to make sure it all matches
   pubsub::msg::Path2D msg;
-	msg.frame = 100;
+	msg.header.timestamp = 100;
 	msg.points.resize(123);
 	for (int i = 0; i < msg.points.size(); i++)
 	{
@@ -159,7 +159,7 @@ TEST(test_path2d_serialization, []() {
 	auto* out = pubsub::msg::Path2D::Decode(ps_get_msg_start(in.data));
 	free(in.data);
 
-	EXPECT(out->frame == msg.frame);
+	EXPECT(out->header.timestamp == msg.header.timestamp);
 	EXPECT(out->points.size() == msg.points.size());
 	for (int i = 0; i < msg.points.size(); i++)
 	{
@@ -174,7 +174,7 @@ TEST(test_path2d_serialization, []() {
 TEST(test_path2d_copy, []() {
 	// make sure copying a message works
   pubsub::msg::Path2D msg;
-	msg.frame = 100;
+	msg.header.timestamp = 100;
 	msg.points.resize(123);
 	for (int i = 0; i < msg.points.size(); i++)
 	{
@@ -184,7 +184,7 @@ TEST(test_path2d_copy, []() {
 
 	pubsub::msg::Path2D msg2 = msg;
 
-	EXPECT(msg2.frame == msg.frame);
+	EXPECT(msg2.header.timestamp == msg.header.timestamp);
 	EXPECT(msg2.points.size() == msg.points.size());
 	for (int i = 0; i < msg.points.size(); i++)
 	{
@@ -198,7 +198,7 @@ TEST(test_path2d_copy, []() {
 TEST(test_path2d_foreach, []() {
 	// try serializing then deserializing a message, making sure the foreach loop over it works as expected
   pubsub::msg::Path2D msg;
-	msg.frame = 100;
+	msg.header.timestamp = 100;
 	msg.points.resize(3);
 	for (int i = 0; i < msg.points.size(); i++)
 	{
@@ -211,7 +211,7 @@ TEST(test_path2d_foreach, []() {
 	auto* out = pubsub::msg::Path2D::Decode(ps_get_msg_start(in.data));
 	free(in.data);
 
-	EXPECT(out->frame == msg.frame);
+	EXPECT(out->header.timestamp == msg.header.timestamp);
 	EXPECT(out->points.size() == msg.points.size());
 	int iters = 0;
 	for (const auto& pt: msg.points)
@@ -353,7 +353,7 @@ TEST(test_message_allocators, []() {
   
   delete msg;
   
-  EXPECT(allocated == 1041);
+  EXPECT(allocated == 1064);
   EXPECT(freed > 0);
   EXPECT(freed == allocated);
 
@@ -362,7 +362,7 @@ TEST(test_message_allocators, []() {
   
   delete msg2;
   
-  EXPECT(allocated == 1041+4+3+4);
+  EXPECT(allocated == 1064+4+3+4);
   EXPECT(freed == allocated);
 });
 

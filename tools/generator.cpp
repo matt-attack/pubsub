@@ -291,7 +291,7 @@ std::string generate(const char* definition, const char* name)
 				}
 
 				// make sure no type with this name exists
-				if (types.find(name) != types.end())
+				if (name == "Header" || types.find(name) != types.end())
 				{
 					printf("%s:%i ERROR: A type with the name '%s' already exists.\n", _current_file.c_str(), line_number, name.c_str());
 					throw 7;
@@ -334,6 +334,20 @@ std::string generate(const char* definition, const char* name)
 			{
 				real_type = res->second;
 			}
+			else if (type == "Header")
+			{
+			  // define the header
+			  auto header_type = new Type();
+				header_type->name = "Header";
+				header_type->base_type = "struct Header";
+				header_type->type_enum = "FT_Struct";
+				header_type->fields.push_back(new field{ "timestamp", types["uint64"], 1, string_size, "", line_number, {} });
+				header_type->fields.push_back(new field{ "sequence", types["uint32"], 1, string_size, "", line_number, {} });
+				header_type->fields.push_back(new field{ "frame", types["astring"], 1, 12, "", line_number, {} });
+				//header_type->fields.push_back(new field{ name, real_type, size, string_size, "", line_number, unassociated_enums });
+				real_type = header_type;
+				types["Header"] = header_type;
+			}
 			else
 			{
 				printf("%s:%i ERROR: Invalid type '%s'\n", _current_file.c_str(), line_number, type.c_str());
@@ -347,6 +361,7 @@ std::string generate(const char* definition, const char* name)
 				unassociated_enums.clear();
 				continue;
 			}
+			// todo error for duplicate field names
 			// also fill in array size
 			fields.push_back({ name, real_type, size, string_size, "", line_number, unassociated_enums });
 			unassociated_enums.clear();
@@ -457,20 +472,26 @@ std::string generate(const char* definition, const char* name)
 		}
 
 		std::string struct_name = type_name + "_" + type.second->name;
-		type.second->base_type = struct_name;
+		type.second->base_type = "struct " + struct_name;
 		output += "struct " + struct_name + "\n{\n";
 		for (auto& field: type.second->fields)
 		{
 			// dont allow strings yet
 			if (field->type->base_type == "char*")
 			{
-				printf("%s:%i ERROR: Dynamicly sized strings not allowed in structs.\n", _current_file.c_str(), line_number);
+				printf("%s:%i ERROR: Dynamically sized strings not allowed in structs.\n", _current_file.c_str(), line_number);
 				throw 7;
 			}
 
 			if (field->type->type_enum == "FT_Struct")
 			{
 				printf("%s:%i ERROR: Structs not yet allowed in structs.\n", _current_file.c_str(), line_number);
+				throw 7;
+			}
+			
+			if (field->array_size == 0)
+			{
+				printf("%s:%i ERROR: Dynamically sized arrays not allowed in structs.\n", _current_file.c_str(), line_number);
 				throw 7;
 			}
 			

@@ -60,6 +60,7 @@ generate_messages(FILES
   Image.msg
   Costmap.msg
   PointCloud.msg
+  PointCloud2.msg
   Marker.msg
   Path.msg
   Parameters.msg
@@ -70,6 +71,7 @@ generate_messages(FILES
   Path2D.msg
   Odom.msg
   Int.msg
+  Frames.msg
 )
 
 generate_messages(FILES 

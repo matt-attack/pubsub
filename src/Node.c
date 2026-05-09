@@ -176,13 +176,13 @@ void ps_node_create_publisher(struct ps_node_t* node, const char* topic, const s
 
 // Setup Control-C handlers
 #ifdef _WIN32
-static int ps_shutdown = 0;
+static int ps_shutdown_ = 0;
 BOOL WINAPI CtrlHandler(DWORD fdwCtrlType)
 {
 	switch (fdwCtrlType)
 	{
 	case CTRL_C_EVENT:
-		ps_shutdown = 1;
+		ps_shutdown_ = 1;
 
 		// Return true to cancel the event propagating further
 		return TRUE;
@@ -193,16 +193,21 @@ BOOL WINAPI CtrlHandler(DWORD fdwCtrlType)
 }
 #else
 #include <signal.h>
-volatile static int ps_shutdown = 0;
+volatile static int ps_shutdown_ = 0;
 void CtrlHandler(int sig)
 {
-	ps_shutdown = 1;
+	ps_shutdown_ = 1;
 }
 #endif
 
 int ps_okay()
 {
-	return ps_shutdown ? 0 : 1;
+	return ps_shutdown_ ? 0 : 1;
+}
+
+void ps_shutdown()
+{
+  ps_shutdown_ = 1;
 }
 
 // Tries to find a good IP to bind to for discovery by looking for one which has a route out

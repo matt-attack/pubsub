@@ -105,10 +105,10 @@ struct ps_node_t
 
 
 #ifndef PUBSUB_REAL_TIME
-    struct ps_event_set_t events;
+  struct ps_event_set_t events;
 #endif
 
-	uint32_t supported_transports;
+  uint32_t supported_transports;
 
 #ifndef ARDUINO
 	unsigned int num_transports;
@@ -254,6 +254,8 @@ void ps_node_set_parameter(struct ps_node_t* node, const char* name, double valu
 
 
 int ps_okay();
+
+void ps_shutdown();
 
 void ps_node_destroy(struct ps_node_t* node);
 

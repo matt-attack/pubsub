@@ -22,7 +22,7 @@ public:
     data_[0] = 0;
   }
 
-  operator const char*()
+  operator const char*() const
   {
     return data_;
   }
@@ -60,6 +60,21 @@ public:
   {
     return strcmp(other.c_str(), data_) == 0;
   }
+
+  bool operator!=(const char* other) const
+  {
+    return strcmp(other, data_) != 0;
+  }
+
+  bool operator!=(const std::string& other) const
+  {
+    return strcmp(other.c_str(), data_) != 0;
+  }
+
+  bool operator!=(const FixedString& other) const
+  {
+    return strcmp(other.c_str(), data_) != 0;
+  }
     
   char* data() const
   {
@@ -70,7 +85,7 @@ public:
   {
     return data_;
   }
-  
+
   int max_size() const
   {
     return string_length;

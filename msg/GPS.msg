@@ -1,5 +1,6 @@
 # Represents a GPS measurement with a optional velocity track
 # Dont publish if measurement is invalid/no fix present 
+Header header
 
 # Lat and Lon are invalid if both zero
 double latitude
