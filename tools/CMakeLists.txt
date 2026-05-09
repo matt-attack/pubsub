@@ -53,13 +53,14 @@ macro(generate_messages)
   target_include_directories(${ARG_TARGET} INTERFACE ${CMAKE_CURRENT_BINARY_DIR}/include/)
 endmacro()
 
-generate_messages(FILES 
+generate_messages(FILES
   Joy.msg
   String.msg 
   Float.msg
   Image.msg
   Costmap.msg
   PointCloud.msg
+  PointCloud2.msg
   Marker.msg
   Path.msg
   Parameters.msg
@@ -69,6 +70,16 @@ generate_messages(FILES
   Log.msg
   Path2D.msg
   Odom.msg
+  Int.msg
+  Frames.msg
+)
+
+generate_messages(FILES 
+  Test.msg
+TARGET
+  pubsub_test_msgs
+DIRECTORY
+  tests
 )
 
 

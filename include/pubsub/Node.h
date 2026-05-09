@@ -29,7 +29,8 @@ struct ps_endpoint_t;
 struct ps_client_t;
 struct ps_subscribe_req_t;
 struct ps_allocator_t;
-typedef void(*ps_transport_fn_pub_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher, struct ps_client_t* client, const void* message, uint32_t length);
+struct ps_msg_ref_t;
+typedef void(*ps_transport_fn_pub_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher, struct ps_client_t* client, struct ps_msg_ref_t* message);
 typedef int(*ps_transport_fn_spin_t)(struct ps_transport_t* transport, struct ps_node_t* node);
 typedef void(*ps_transport_fn_add_publisher_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher);
 typedef void(*ps_transport_fn_remove_publisher_t)(struct ps_transport_t* transport, struct ps_pub_t* publisher);
@@ -66,6 +67,7 @@ typedef void(*ps_param_confirm_cb_t)(const char* name, double value, void* data)
 struct ps_node_t
 {
 	const char* name;
+	const char* description;
 	unsigned int num_pubs;
 	struct ps_pub_t** pubs;
 	unsigned int num_subs;
@@ -103,10 +105,10 @@ struct ps_node_t
 
 
 #ifndef PUBSUB_REAL_TIME
-    struct ps_event_set_t events;
+  struct ps_event_set_t events;
 #endif
 
-	uint32_t supported_transports;
+  uint32_t supported_transports;
 
 #ifndef ARDUINO
 	unsigned int num_transports;
@@ -129,10 +131,9 @@ struct ps_msg_info_t
 struct ps_msg_header
 {
 	uint8_t pid;//packet type id
+	uint32_t length;//message length
 	uint32_t id;//stream id
 	uint16_t seq;//sequence number
-	uint8_t index;
-	uint8_t count;
 };
 #pragma pack(pop)
 
@@ -161,20 +162,22 @@ struct ps_advertise_req_t
 	uint32_t type_hash;// to see if the type is correct
 	uint32_t group_id;// unique (hopefully) id that indicates which process this node is a part of
 };
-#pragma pack(pop)
 
-#pragma pack(push)
-#pragma pack(1)
 struct ps_subscribe_req_t
 {
   uint8_t id;
   int32_t addr;
   uint16_t port;
 };
-#pragma pack(pop)
 
-#pragma pack(push)
-#pragma pack(1)
+struct ps_unsubscribe_req_t
+{
+  uint8_t id;
+  uint32_t addr;
+  uint16_t port;
+  uint32_t stream_id;
+};
+
 struct ps_subscribe_accept_t
 {
 	uint8_t pid;// packet type identifier
@@ -193,24 +196,20 @@ void ps_node_init_ex(struct ps_node_t* node, const char* name, const char* ip, b
 
 void ps_node_create_publisher(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type, struct ps_pub_t* pub, bool latched);
 
-void ps_node_create_subscriber(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,
-	struct ps_sub_t* sub,
-	unsigned int queue_size,//make >= 1
-	struct ps_allocator_t* allocator,//give null to use default
-	bool ignore_local);// if ignore local is set, this node ignores publications from itself
-							 // this facilitiates passing messages through shared memory
+void ps_node_create_publisher_ex(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type, struct ps_pub_t* pub, bool latched, unsigned int recommended_transport, struct ps_allocator_t* allocator);
 
 
 typedef void(*ps_subscriber_fn_cb_t)(void* message, unsigned int size, void* data, const struct ps_msg_info_t* info);
 struct ps_subscriber_options
 {
-	unsigned int queue_size;
 	bool ignore_local;
 	struct ps_allocator_t* allocator;
 	unsigned int skip;// skips to every nth message for throttling
 	ps_subscriber_fn_cb_t cb;
+	ps_subscriber_fn_cb_t cb_raw;
 	void* cb_data;
-    uint32_t preferred_transport;// falls back to udp otherwise
+  int32_t preferred_transport;// falls back to udp otherwise
+  const char* description;
 };
 
 void ps_subscriber_options_init(struct ps_subscriber_options* options);
@@ -219,7 +218,7 @@ void ps_node_create_subscriber_adv(struct ps_node_t* node, const char* topic, co
 	struct ps_sub_t* sub,
 	const struct ps_subscriber_options* options);
 
-void ps_node_create_subscriber_cb(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,
+void ps_node_create_subscriber(struct ps_node_t* node, const char* topic, const struct ps_message_definition_t* type,
 	struct ps_sub_t* sub,
 	ps_subscriber_fn_cb_t cb,
 	void* cb_data,
@@ -255,6 +254,8 @@ void ps_node_set_parameter(struct ps_node_t* node, const char* name, double valu
 
 
 int ps_okay();
+
+void ps_shutdown();
 
 void ps_node_destroy(struct ps_node_t* node);
 

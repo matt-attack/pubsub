@@ -1,5 +1,6 @@
 # Represents the pose of a robot in both world and local frames
 # All fields must be valid besides lat, lon and altitude. Mark invalid with NaN
+Header header
 
 # Global pose
 double latitude

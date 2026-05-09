@@ -23,7 +23,13 @@ int main()
 	ps_node_create_publisher(&node, "/joy", &pubsub__Joy_def, &adv_pub, false);
 
 	ps_sub_t string_sub;
-	ps_node_create_subscriber(&node, "/data", &pubsub__String_def, &string_sub, 10, 0, false);
+	auto cb = [](void* message, unsigned int size, void* cbdata, const ps_msg_info_t* info) 
+	{
+	  pubsub__String* data = (pubsub__String*)message;
+		free(data->value);
+	  free(data);//todo use allocator free
+	};
+	ps_node_create_subscriber(&node, "/data", &pubsub__String_def, &string_sub, cb, 0, 0, false);
 
 	// wait until we get the subscription request
 	while (ps_pub_get_subscriber_count(&string_pub) == 0) 
@@ -61,13 +67,6 @@ int main()
 		ps_node_spin(&node);
 		//while (ps_node_spin(&node) == 0) { Sleep(1); }
 
-		// our sub has a message definition, so the queue contains real messages
-		while (pubsub__String* data = (pubsub__String*)ps_sub_deque(&string_sub))
-		{
-			printf("Got message: %s\n", data->value);
-			free(data->value);
-			free(data);//todo use allocator free
-		}
 
 		printf("Num subs: %i %i\n", ps_pub_get_subscriber_count(&string_pub), ps_pub_get_subscriber_count(&adv_pub));
 		ps_sleep(1000);

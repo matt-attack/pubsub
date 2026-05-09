@@ -2,15 +2,30 @@
 #pragma once
 
 #include <vector>
+#include <pubsub_cpp/allocator.h>
 
+namespace pubsub
+{
 
 #pragma pack(push, 1)
 // Vector like array that's able to take ownership of C malloced arrays
-template <class T>
+template <class T, class Allocator = DefaultAllocator>
 class ArrayVector
 {
 	T* data_;
 	uint32_t length_;
+	
+	// copy a buffer of a given length to a new allocated array
+	static T* copy(const T* obj, uint32_t length)
+	{
+	  auto data = (T*)Allocator::allocator()->alloc(sizeof(T)*length, Allocator::allocator()->context);
+		for (int i = 0; i < length; i++)
+		{
+			data[i] = obj[i];
+		}
+		return data;
+	}
+	
 public:
 
 	ArrayVector()
@@ -28,34 +43,26 @@ public:
 	ArrayVector(const ArrayVector<T>& obj)
 	{
 		length_ = obj.length_;
-		data_ = (T*)malloc(sizeof(T)*length_);
-		for (int i = 0; i < length_; i++)
-		{
-			data_[i] = obj[i];
-		}
+		data_ = copy(obj.data(), length_);
 	}
 
 	~ArrayVector()
 	{
 		if (data_)
 		{
-			free(data_);
+			Allocator::allocator()->free(data_, Allocator::allocator()->context);
 		}
 	}
 
-	ArrayVector<T>& operator=(const ArrayVector<T>& obj)
+	ArrayVector<T>& operator=(const ArrayVector<T>& arr)
 	{
 		if (data_)
 		{
-			free(data_);
+			Allocator::allocator()->free(data_, Allocator::allocator()->context);
 		}
 
-		length_ = obj.length_;
-		data_ = (T*)malloc(sizeof(T)*length_);
-		for (int i = 0; i < length_; i++)
-		{
-			data_[i] = obj[i];
-		}
+		length_ = arr.length_;
+		data_ = copy(arr.data(), length_);
 		return *this;
 	}
 
@@ -63,15 +70,11 @@ public:
 	{
 		if (data_)
 		{
-			free(data_);
+			Allocator::allocator()->free(data_, Allocator::allocator()->context);
 		}
 
 		length_ = arr.size();
-		data_ = (T*)malloc(sizeof(T)*length_);
-		for (int i = 0; i < length_; i++)
-		{
-			data_[i] = arr[i];
-		}
+    data_ = copy(arr.data(), length_);
 		return *this;
 	}
 
@@ -80,24 +83,33 @@ public:
 	{
 		if (size == length_) { return; }
 
-		auto new_data = (T*)malloc(sizeof(T)*size);
+		auto new_data = (T*)Allocator::allocator()->alloc(sizeof(T)*size, Allocator::allocator()->context);
 		auto copy_len = std::min(size, length_);
-		for (int i = 0; i < copy_len; i++)
+		for (uint32_t i = 0; i < copy_len; i++)
 		{
 			new_data[i] = data_[i];
 		}
 		length_ = size;
 		if (data_)
 		{
-			free(data_);
+			Allocator::allocator()->free(data_, Allocator::allocator()->context);
 		}
 		data_ = new_data;
+	}
+	
+	// reliquinquishes the held pointer without freeing
+	T* reset()
+	{
+	  auto out = data_;
+	  data_ = 0;
+	  length_ = 0;
+	  return out;
 	}
 
 	void clear()
 	{
 		length_ = 0;
-		free(data_);
+		Allocator::allocator()->free(data_, Allocator::allocator()->context);
 		data_ = 0;
 	}
 
@@ -118,3 +130,4 @@ public:
 	inline const_iterator end() const { return &data_[length_]; }
 };
 #pragma pack(pop)
+}

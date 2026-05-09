@@ -1,8 +1,4 @@
-
-# Frame the path is in, either wgs84 or odometry
-FRAME_WGS84=0
-FRAME_ODOM=1
-enum uint8 frame
+Header header
 
 struct Point
 double x

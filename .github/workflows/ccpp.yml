@@ -10,8 +10,7 @@ jobs:
     - name: cmake configure
       run: cmake .
     - name: cmake build
-      run: cmake --build .
-      
+      run: cmake --build . -j4
   linux-build:
     runs-on: ubuntu-latest
     steps:
@@ -19,6 +18,8 @@ jobs:
     - name: cmake configure
       run: cmake .
     - name: cmake build
-      run: cmake --build .
-#    - name: Run Tests
-#      run: cd tests && ctest --output-on-failure
+      run: cmake --build . -j4
+    - name: network
+      run: sudo apt install net-tools && ifconfig
+    - name: Run Tests
+      run: cd tests && ctest -VV

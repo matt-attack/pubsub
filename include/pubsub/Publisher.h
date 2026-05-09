@@ -14,20 +14,20 @@ struct ps_message_definition_t;
 
 struct ps_endpoint_t
 {
-	unsigned short port;
-	int address;
+  unsigned short port;
+  int address;
 	//bool multicast;// this is probably unnecessary
 };
 
 // publisher client to network to
 struct ps_client_t
 {
-	struct ps_endpoint_t endpoint;
-	unsigned short sequence_number;// sequence of the networked packets, incremented with each one
-	unsigned long long last_keepalive;// timestamp of the last keepalive message, used to know when to deactiveate this connection
-	unsigned int stream_id;// user-unique identifier of what topic this came from
-	unsigned int modulo;
-    struct ps_transport_t* transport;
+  struct ps_endpoint_t endpoint;
+  unsigned short sequence_number;// sequence of the networked packets, incremented with each one
+  unsigned long long last_keepalive;// timestamp of the last keepalive message, used to know when to deactiveate this connection
+  unsigned int stream_id;// user-unique identifier of what topic this came from
+  unsigned int modulo;
+  struct ps_transport_t* transport;
 };
 
 struct ps_pub_t
@@ -39,10 +39,13 @@ struct ps_pub_t
 	struct ps_node_t* node;
 	unsigned int num_clients;
 	struct ps_client_t* clients;
+	
+	struct ps_allocator_t* allocator;
 
 	bool latched;// todo make this an enum of options if we add more
+	uint8_t recommended_transport;
 
-	struct ps_msg_t last_message;//only used if latched
+	struct ps_msg_ref_t* last_message;//only used if latched
 	unsigned int sequence_number;
 };
 

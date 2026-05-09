@@ -25,12 +25,15 @@ add_library (pubsub
   "src/Serialization.c"
   "src/System.c"
   "src/UDPTransport.c"
+  "src/Parameter.c"
+  "src/TCPTransport.c"
 )
 if (UNIX)
 target_link_libraries(pubsub pubsub_msgs)
 else()
-target_link_libraries(pubsub winmm)
+target_link_libraries(pubsub winmm pubsub_msgs)
 endif()
+set_target_properties(pubsub PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
 set_target_properties(pubsub PROPERTIES DEBUG_POSTFIX "d")
 target_include_directories(pubsub PUBLIC include/)
 if (PUBSUB_VERBOSE)
@@ -46,6 +49,7 @@ add_library (pubsub_shared SHARED
   "src/Serialization.c"
   "src/System.c"
   "src/UDPTransport.c"
+  "src/TCPTransport.c"
   "src/Bindings.c")
 if (UNIX)
 target_link_libraries(pubsub_shared PUBLIC pubsub_msgs)
@@ -63,6 +67,7 @@ add_library (pubsub_cpp
 )
 target_link_libraries(pubsub_cpp pubsub ${CMAKE_THREAD_LIBS_INIT})
 target_include_directories(pubsub_cpp PUBLIC include)
+set_target_properties(pubsub_cpp PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
 add_dependencies(pubsub_cpp pubsub)
 set_property(TARGET pubsub_cpp PROPERTY CXX_STANDARD 11)
 set_target_properties(pubsub_cpp PROPERTIES DEBUG_POSTFIX "d")

@@ -10,10 +10,10 @@
 #include <pubsub/Net.h>
 
 
-void ps_pub_publish_client(struct ps_pub_t* pub, struct ps_client_t* client, struct ps_msg_t* msg)
+static void ps_pub_publish_client(struct ps_pub_t* pub, struct ps_client_t* client, struct ps_msg_ref_t* msg, bool force_publish)
 {
 	// Skip messages if desired by the client
-	if (client->modulo > 0)
+	if (client->modulo > 0 && force_publish == false)
 	{
 		if (pub->sequence_number % client->modulo != 0)
 		{
@@ -21,12 +21,12 @@ void ps_pub_publish_client(struct ps_pub_t* pub, struct ps_client_t* client, str
 		}
 	}
 
-    if (client->transport)
-    {
-      //printf("publishing to custom transport\n");
-      client->transport->pub(client->transport, pub, client, msg->data, msg->len);
-      return;
-    }
+  if (client->transport)
+  {
+    //printf("publishing to custom transport\n");
+    client->transport->pub(client->transport, pub, client, msg);
+    return;
+  }
 
 	// Send it via UDP transport
 	ps_udp_publish(pub, client, msg);
@@ -63,15 +63,19 @@ bool ps_pub_add_client(struct ps_pub_t* pub, const struct ps_client_t* client)
 		pub->clients[i] = old_clients[i];
 	}
 	pub->clients[pub->num_clients - 1] = *client;
-
+	if (old_clients)
+	{
+    free(old_clients);
+  }
+  
 	// todo this is probably the wrong spot for this
 	// If we are latched, send the new client our last message
-	if (pub->last_message.data && pub->latched)
+	if (pub->last_message && pub->latched)
 	{
-        //printf("publishing latched\n");
-		ps_pub_publish_client(pub, &pub->clients[pub->num_clients - 1], &pub->last_message);
+    //printf("publishing latched\n");
+		ps_pub_publish_client(pub, &pub->clients[pub->num_clients - 1], pub->last_message, true);
 	}
-    return true;
+  return true;
 }
 
 void ps_pub_add_endpoint_client(struct ps_pub_t* pub, const struct ps_endpoint_t* endpoint, const unsigned int stream_id)
@@ -126,13 +130,17 @@ void ps_pub_remove_client(struct ps_pub_t* pub, const struct ps_client_t* client
 			pub->clients[pos++] = old_clients[i];
 		}
 	}
+  if (old_clients)
+  {
+    free(old_clients);
+  }
 }
 
 void ps_pub_publish_ez(struct ps_pub_t* pub, void* msg)
 {
 	if (pub->num_clients > 0 || pub->latched)
 	{
-		struct ps_msg_t data = pub->message_definition->encode(0, msg);
+		struct ps_msg_t data = pub->message_definition->encode(msg, pub->allocator);
 
 		ps_pub_publish(pub, &data);
 	}
@@ -141,26 +149,46 @@ void ps_pub_publish_ez(struct ps_pub_t* pub, void* msg)
 void ps_pub_publish(struct ps_pub_t* pub, struct ps_msg_t* msg)
 {
 	pub->sequence_number++;
+	
+	// exit early if not latched and no clients
+	if (pub->num_clients == 0 && !pub->latched)
+	{
+	  free(msg->data);// todo allocator
+	  return;
+	}
 
+	// transfer it to a reference
+	struct ps_msg_ref_t* ref = (struct ps_msg_ref_t*)malloc(sizeof(struct ps_msg_ref_t));
+	ref->len = msg->len;
+	ref->data = msg->data;
+	ref->refcount = 1;
+	
+	// fill out the header
+	struct ps_msg_header* hdr = (struct ps_msg_header*)msg->data;
+	hdr->pid = PS_UDP_PROTOCOL_DATA;
+	hdr->length = msg->len;
+	hdr->seq = pub->sequence_number;
+	hdr->id = 0;
+	
 	for (unsigned int i = 0; i < pub->num_clients; i++)
 	{
 		struct ps_client_t* client = &pub->clients[i];
         
-		ps_pub_publish_client(pub, client, msg);
+		ps_pub_publish_client(pub, client, ref, false);
 	}
 
 	if (pub->latched)
 	{
-		if (pub->last_message.data)
+		if (pub->last_message)
 		{
 			//free the old and add the new
-			free(pub->last_message.data);// todo use allocator
+			ps_msg_ref_free(pub->last_message, pub->allocator);
 		}
-		pub->last_message = *msg;
+		pub->last_message = ref;
 	}
 	else
 	{
-		free(msg->data);// todo use allocator
+		ps_msg_ref_free(ref, pub->allocator);
 	}
 }
 
@@ -176,9 +204,9 @@ void ps_pub_destroy(struct ps_pub_t* pub)
 	//remove it from the node's list of pubs
 	pub->node->num_pubs--;
 	struct ps_pub_t** old_pubs = pub->node->pubs;
-    if (pub->node->num_pubs)
-    {
-	  pub->node->pubs = (struct ps_pub_t**)malloc(sizeof(struct ps_pub_t*)*pub->node->num_pubs);
+  if (pub->node->num_pubs)
+  {
+    pub->node->pubs = (struct ps_pub_t**)malloc(sizeof(struct ps_pub_t*)*pub->node->num_pubs);
 	  int ind = 0;
 	  for (unsigned int i = 0; i < pub->node->num_pubs+1; i++)
 	  {
@@ -191,17 +219,17 @@ void ps_pub_destroy(struct ps_pub_t* pub)
 			  pub->node->pubs[ind++] = old_pubs[i];
 		  }
 	  }
-    }
-    else
-    {
-      pub->node->pubs = 0;
-    }
+  }
+  else
+  {
+    pub->node->pubs = 0;
+  }
 	free(old_pubs);
 
-    // free my latched message
-    if (pub->last_message.data)
+  // free my latched message
+  if (pub->last_message)
 	{
-		free(pub->last_message.data);// todo use allocator
+		ps_msg_ref_free(pub->last_message, pub->allocator);
 	}
 
 	pub->clients = 0;

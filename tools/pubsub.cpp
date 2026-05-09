@@ -124,6 +124,13 @@ int topic_info(int num_args, char** args, ps_node_t* node)
 
   std::cout << "Type: " << info->second.type << "\n";
   std::cout << "Latched: " << (((info->second.flags & PS_ADVERTISE_LATCHED) != 0) ? "True\n" : "False\n");
+  int recommended_transport = ((info->second.flags & 0b111110) >> 1);
+  std::string transport = "UNKNOWN (" + std::to_string(recommended_transport) + ")";
+  if (recommended_transport == 0)
+    transport = "UDP";
+  else if (recommended_transport == 1)
+    transport = "TCP";
+  std::cout << "Recommended Transport: " << transport << "\n";
   std::cout << "Published by:\n";
   for (auto pub : info->second.publishers)
   {
@@ -211,6 +218,7 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
   parser.AddOption({ "n" }, "Number of messages to echo.", "0");
   parser.AddOption({ "skip", "s" }, "Skip factor for the subscriber.", "0");
   parser.AddFlag({ "tcp" }, "Prefer the TCP transport.");
+  parser.AddFlag({ "udp" }, "Prefer the UDP transport.");
   parser.AddFlag({ "no-arr" }, "Don't print out the contents of arrays in messages.");
   parser.AddOption({ "f", "field" }, "Print out just the value of a specific field.");
 
@@ -223,6 +231,12 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
     return 0;
   }
 
+  if (parser.GetBool("tcp") && parser.GetBool("udp"))
+  {
+    printf("ERROR: Cannot provide both --tcp and --udp options.\n");
+    exit(2);
+  }
+
   static bool print_info = parser.GetBool("i");
   double vn = parser.GetDouble("n");
   if (vn <= 0)
@@ -231,7 +245,6 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
   }
   static unsigned long long int n = vn;
   int skip = parser.GetDouble("s");
-  bool tcp = parser.GetBool("tcp");
 
   static bool no_arr = parser.GetBool("no-arr");
   
@@ -307,11 +320,12 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
       struct ps_subscriber_options options;
       ps_subscriber_options_init(&options);
       options.skip = skip;
-      options.queue_size = 0;
       options.allocator = 0;
       options.ignore_local = false;
-      options.preferred_transport = tcp ? 1 : 0;
-      options.cb = [](void* message, unsigned int size, void* data, const ps_msg_info_t* info)
+      options.preferred_transport = -1;
+      options.preferred_transport = parser.GetBool("tcp") ? 1 : options.preferred_transport;
+      options.preferred_transport = parser.GetBool("udp") ? 0 : options.preferred_transport;
+      options.cb_raw = [](void* message, unsigned int size, void* data, const ps_msg_info_t* info)
       {
         // get and deserialize the messages
         if (sub.received_message_def.fields == 0)
@@ -342,7 +356,7 @@ int topic_echo(int num_args, char** args, ps_node_t* _node)
           }
           ps_deserialize_print(message, &sub.received_message_def, no_arr ? 10 : 0, field_name);
           printf("-------------\n");
-          free(message);
+          free(message);// todo use allocator
           if (++count >= n)
           {
             // need to commit sudoku here..
@@ -478,7 +492,7 @@ int topic_pub(int num_args, char** args, ps_node_t* node)
       }
 
       // do initial publish
-      ps_msg_t cpy = ps_msg_cpy(&msg);
+      ps_msg_t cpy = ps_msg_cpy(&msg, 0);
       ps_pub_publish(&pub, &cpy);
       break;
     }
@@ -502,7 +516,7 @@ int topic_pub(int num_args, char** args, ps_node_t* node)
     ps_node_spin(node);
     if (rate != 0 && remaining < pubsub::Duration(0.0))
     {
-      ps_msg_t cpy = ps_msg_cpy(&msg);
+      ps_msg_t cpy = ps_msg_cpy(&msg, 0);
       ps_pub_publish(&pub, &cpy);
       next = next + pubsub::Duration(1.0/rate);
     }
@@ -826,11 +840,18 @@ int main(int num_args_real, char** args)
       pubsub::ArgParser parser;
       parser.AddOption({ "w", "window" }, "Window size for averaging.", "100");
       parser.AddFlag({ "tcp" }, "Prefer the TCP transport.");
+      parser.AddFlag({ "udp" }, "Prefer the UDP transport.");
       if (subverb == "hz")
         parser.SetUsage("Usage: info topic hz TOPIC\n\nDetermines the rate of publication for a given topic.");
       else
         parser.SetUsage("Usage: info topic bw TOPIC\n\nDetermines the single subscriber bandwidth for a given topic.");
       parser.Parse(args, num_args, 2);
+
+      if (parser.GetBool("tcp") && parser.GetBool("udp"))
+      {
+        printf("ERROR: Cannot provide both --tcp and --udp options.\n");
+        exit(2);
+      }
 
       // create a subscriber
       ps_sub_t sub;
@@ -867,9 +888,11 @@ int main(int num_args_real, char** args)
 
           ps_subscriber_options opts;
           ps_subscriber_options_init(&opts);
-          opts.cb = cb;
+          opts.cb_raw = cb;
           opts.cb_data = &message_times;
-          opts.preferred_transport = parser.GetBool("tcp") ? 1 : 0;
+          opts.preferred_transport = -1;
+          opts.preferred_transport = parser.GetBool("tcp") ? 1 : opts.preferred_transport;
+          opts.preferred_transport = parser.GetBool("udp") ? 0 : opts.preferred_transport;
           ps_node_create_subscriber_adv(&node, info->first.c_str(), 0, &sub, &opts);
           break;
         }

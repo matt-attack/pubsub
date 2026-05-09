@@ -8,14 +8,14 @@ extern "C"
 {
 #endif
 
-    struct ps_allocator_t
-    {
-	    void*(*alloc)(unsigned int size, void* context);
-	    void(*free)(void*);
-	    void* context;
-    };
+  struct ps_allocator_t
+  {
+	  void*(*alloc)(unsigned int size, void* context);
+	  void(*free)(void*, void* context);
+	  void* context;
+  };
 
-    extern struct ps_allocator_t ps_default_allocator;
+  extern struct ps_allocator_t ps_default_allocator;
 
 	enum ps_field_types
 	{
@@ -31,8 +31,10 @@ extern "C"
 		FT_Float32 = 9,
 		FT_Float64 = 10,
 		FT_MaxFloat,// all floats and ints are less than this, not present in messages
-		FT_String,
+		FT_String,// null terminated dynamic length string
 		FT_Struct,//indicates the number of fields following contained in it
+		FT_StructDefinition,
+		FT_ArrayString// null terminated fixed length string
 	};
 	typedef enum ps_field_types ps_field_types;
 
@@ -49,8 +51,13 @@ extern "C"
 		ps_field_types type;
 		ps_field_flags flags;// packed in upper bits of type, but broken out here
 		const char* name;
-		unsigned int length;//length of the array, 0 if dynamic
-		unsigned short content_length;//number of fields inside this struct
+		uint32_t length;//length of the array, 0 if dynamic, or if this is a struct definition, how many following fields are part of it
+		//context dependent field
+		union
+		{
+		  uint16_t string_length;// this field is a ArrayString, the length of said string
+		  uint16_t struct_index;// if this field is a struct, this is the index of the struct definition in the list of fields
+		};
 	};
 	
 	struct ps_msg_enum_t
@@ -60,17 +67,27 @@ extern "C"
 		int field;// the field this is associated with in the message
 	};
 
-
 	// encoded message
 	struct ps_msg_t
 	{
 		void* data;
 		unsigned int len;
 	};
+	
+	struct ps_msg_ref_t
+	{
+	  void* data;
+	  unsigned int len;
+	  unsigned int refcount;
+	};
+	
+	void ps_msg_ref_add(struct ps_msg_ref_t* msg);
+	void ps_msg_ref_free(struct ps_msg_ref_t* msg, struct ps_allocator_t* allocator);
 
 	struct ps_allocator_t;
-	typedef struct ps_msg_t(*ps_fn_encode_t)(struct ps_allocator_t* allocator, const void* msg);
+	typedef struct ps_msg_t(*ps_fn_encode_t)(const void* msg, struct ps_allocator_t* allocator);
 	typedef void*(*ps_fn_decode_t)(const void* data, struct ps_allocator_t* allocator);// allocates the message
+	typedef void (*ps_fn_free_t)(void* msg, struct ps_allocator_t* allocator);// frees the message
 	struct ps_message_definition_t
 	{
 		unsigned int hash;
@@ -79,21 +96,22 @@ extern "C"
 		struct ps_msg_field_t* fields;
 		ps_fn_encode_t encode;
 		ps_fn_decode_t decode;
+		ps_fn_free_t free;
 		unsigned int num_enums;
 		struct ps_msg_enum_t* enums;
 	};
 
 	// Serializes a given message definition to a buffer.
 	// Returns: Number of bytes written
-	int ps_serialize_message_definition(void* start, const struct ps_message_definition_t* definition);
+	int ps_serialize_message_definition(void* dst, const struct ps_message_definition_t* definition);
 
 	// Deserializes a message definition from the specified buffer.
-	void ps_deserialize_message_definition(const void* start, struct ps_message_definition_t* definition);
+	void ps_deserialize_message_definition(const void* src, struct ps_message_definition_t* definition);
 
 	// print out the deserialized contents of the message to console, for rostopic echo like implementations
 	// in yaml format
-	// if field is non-null only print out the content of that field
-	void ps_deserialize_print(const void* data, const struct ps_message_definition_t* definition, unsigned int max_array_size, const char* field);
+	// if field_name is non-null only print out the content of that field
+	void ps_deserialize_print(const void* data, const struct ps_message_definition_t* definition, unsigned int max_array_size, const char* field_name);
 	
 	struct ps_deserialize_iterator
 	{
@@ -108,11 +126,11 @@ extern "C"
 	
 	// Create an iteratator to iterate through the fields of a serialized message
 	// Returns: The iterator
-	struct ps_deserialize_iterator ps_deserialize_start(const char* msg, const struct ps_message_definition_t* definition);
+	struct ps_deserialize_iterator ps_deserialize_start(const void* msg, const struct ps_message_definition_t* definition);
 	
 	// Iterate through a serialized message one field at a time
 	// Returns: Start pointer in the message for the current field or zero when at the end
-	const char* ps_deserialize_iterate(struct ps_deserialize_iterator* iter, const struct ps_msg_field_t** f, uint32_t* l);
+	const void* ps_deserialize_iterate(struct ps_deserialize_iterator* iter, const struct ps_msg_field_t** f, uint32_t* l);
 
 	// Frees a dynamically allocated message definition
 	void ps_free_message_definition(struct ps_message_definition_t* definition);
@@ -132,7 +150,7 @@ extern "C"
 
 	// Makes a copy of a given serialized message
 	// Returns: The new copy
-	struct ps_msg_t ps_msg_cpy(const struct ps_msg_t* msg);
+	struct ps_msg_t ps_msg_cpy(const struct ps_msg_t* msg, struct ps_allocator_t* allocator);
 
 #ifdef __cplusplus
 }

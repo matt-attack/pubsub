@@ -15,7 +15,7 @@ int main()
   // Create the subscriber, the provided callback will be called each time a message comes in
   pubsub::Subscriber<pubsub::msg::String> subscriber(node, "data"/*topic name*/,
     [](const pubsub::msg::StringSharedPtr& msg) {
-      printf("Got message %s\n", msg->value);
+      printf("Got message %s\n", msg->value.c_str());
     }, 10/*maximum queue size, after this many messages build up the oldest will get dropped*/);
 
   // Create the "spinner" which executes callbacks and timers in a background thread

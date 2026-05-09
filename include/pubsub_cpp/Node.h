@@ -3,8 +3,9 @@
 #include <pubsub/Node.h>
 #include <pubsub/Publisher.h>
 #include <pubsub/Subscriber.h>
+#include <pubsub/Parameter.h>
 #include <pubsub/System.h>
-
+#include <pubsub_cpp/allocator.h>
 
 #include <vector>
 #include <thread>
@@ -26,22 +27,22 @@
 
 namespace pubsub
 {
-static std::map<std::string, std::string> _remappings;
+extern std::map<std::string, std::string> _remappings;
 
 // how intraprocess passing works
 class SubscriberBase;
 class PublisherBase;
 
 // this mutex protects both of the below
-static std::mutex _publisher_mutex;
-static std::multimap<std::string, PublisherBase*> _publishers;
-static std::multimap<std::string, SubscriberBase*> _subscribers;
+extern std::mutex _publisher_mutex;
+extern std::multimap<std::string, PublisherBase*> _publishers;
+extern std::multimap<std::string, SubscriberBase*> _subscribers;
 
 // this assumes topic and ns are properly checked
 // ns should not have a leading slash, topic should if it is absolute
 inline std::string handle_remap(const std::string& topic, const std::string& ns)
 {
-    //printf("Handling remap of %s in ns %s\n", topic.c_str(), ns.c_str());
+  //printf("Handling remap of %s in ns %s\n", topic.c_str(), ns.c_str());
 	// we need at least one character
 	if (topic.length() == 0)
 	{
@@ -87,10 +88,14 @@ inline std::string handle_remap(const std::string& topic, const std::string& ns)
 	}
 
 	// okay, we had no remappings, use our namespace
-    if (ns.length())
-	    return "/" + ns + "/" + topic;
-    else
-        return "/" + topic;
+  if (ns.length())
+  {
+	  return "/" + ns + "/" + topic;
+	}
+  else
+  {
+    return "/" + topic;
+  }
 }
 
 // not thread safe
@@ -119,7 +124,7 @@ inline void initialize(const char** args, const int argc)
 // valid names must be all lowercase and only
 inline std::string validate_name(const std::string& name, bool remove_leading_slashes = false)
 {
-    //printf("Validating %s\n", name.c_str());
+  //printf("Validating %s\n", name.c_str());
 	for (size_t i = 0; i < name.length(); i++)
 	{
 		if (name[i] >= 'A' && name[i] <= 'Z')
@@ -138,8 +143,8 @@ inline std::string validate_name(const std::string& name, bool remove_leading_sl
 	
       return name.substr(i);
 	}
-    else
-    {
+  else
+  {
       // remove any duplicate slashes we may have
       std::string out;
       if (name.length())
@@ -155,16 +160,78 @@ inline std::string validate_name(const std::string& name, bool remove_leading_sl
         out += name[i];
       }
       return out;
-    }
+  }
 	return name;
 }
+
+struct ParameterContainer
+{
+  std::mutex lock;
+  double d;
+  float f;
+  int i;
+  std::string s;
+  
+  operator double() const
+  {
+    return d;
+  }
+  
+  operator float() const
+  {
+    return f;
+  }
+  
+  operator int() const
+  {
+    return i;
+  }
+  
+  operator std::string() const
+  {
+    return s;
+  }
+};
+
+class Node;
+template <class T>
+class Parameter
+{
+  friend class Node;
+  std::shared_ptr<ParameterContainer> value;
+public:
+  
+  operator T() const
+  {
+    std::lock_guard<std::mutex> lock(value->lock);
+    return (T)*value;
+  }
+  
+  T get() const
+  {
+    std::lock_guard<std::mutex> lock(value->lock);
+    return (T)*value;
+  }
+  
+  /*void operator=(const T& new_value)
+  {
+    // todo update parameter value
+    value->d = new_value;
+  }*/
+};
 
 // todo need to make sure multiple subscribers in a process share data
 
 // safe to use each node in a different thread after initialize is called
 // making calls to functions on the same node is not thread safe
+typedef std::unique_ptr<SubscriberBase> SubscriberPtr;
+typedef std::unique_ptr<PublisherBase> PublisherPtr;
 class SubscriberBase;
 class Spinner;
+template<class T>
+class Subscriber;
+template<class T>
+class Publisher;
 class Node
 {
 	friend class Spinner;
@@ -177,6 +244,7 @@ class Node
 
 	ps_node_t node_;
 	bool marked_ = false;
+	bool use_intraprocess_;
 
 	ps_event_set_t* event_set_;
 public:
@@ -188,7 +256,7 @@ public:
 	// probably need to add advertise and subscribe functions to me
 	std::vector<SubscriberBase*> subscribers_;
 
-	Node(const std::string& name, bool use_broadcast = false) : original_name_(name), event_set_(0)
+	Node(const std::string& name, bool use_broadcast = false, bool enable_intraprocess = true) : original_name_(name), use_intraprocess_(enable_intraprocess), event_set_(0)
 	{
 		// look up the namespace for this node (todo)
 		std::string ns = "/";
@@ -206,17 +274,23 @@ public:
 
 	~Node()
 	{
+	  if (params_data_)
+	  {
+	    ps_destroy_parameters(params_data_.get());
+	  }
 		ps_node_destroy(&node_);
 	}
 
 	std::string getQualifiedName()
 	{
-        if (namespace_.length())
-		    return "/" + namespace_ + "/" + real_name_;
-        else
-        {
-            return "/" + real_name_;
-        }
+    if (namespace_.length())
+    {
+		  return "/" + namespace_ + "/" + real_name_;
+		}
+    else
+    {
+      return "/" + real_name_;
+    }
 	}
 
 	const std::string& getName()
@@ -239,14 +313,67 @@ public:
 		return ps_node_spin(&node_);
 	}
 
-    inline void setEventSet(ps_event_set_t* set)
-    {
-      event_set_ = set;
-    }
+  inline void setEventSet(ps_event_set_t* set)
+  {
+    event_set_ = set;
+  }
 
 	inline ps_event_set_t* getEventSet()
 	{
 		return event_set_;
+	}
+	
+	bool intraprocessEnabled()
+	{
+	  return use_intraprocess_;
+	}
+	
+	template <class T>
+	SubscriberBase* subscribe(const std::string& topic, std::function<void(const std::shared_ptr<T>&)> cb, unsigned int queue_size = 1, int preferred_transport = -1, int skip = 0)
+	{
+	  return new Subscriber<T>(*this, topic, cb, queue_size, preferred_transport, skip);
+	}
+	
+  template <class T>
+	Publisher<T>* advertise(const std::string& topic, bool latched = false, int preferred_transport = -1)
+	{
+	  return new Publisher<T>(*this, topic, latched, preferred_transport);
+	}
+	
+	std::unique_ptr<ps_parameters> params_data_;
+	std::map<std::string, std::weak_ptr<ParameterContainer>> params_;
+	
+	Parameter<double> parameter(const std::string& name, double default_value, const std::string& desc = "",
+	  double min = -10000, double max = 10000)
+	{
+	  if (!params_data_)
+	  {
+	    params_data_.reset(new ps_parameters);
+	    ps_create_parameters(getNode(), params_data_.get(), [](const char* name, double value, void* data)
+	    {
+	      auto tthis = (Node*)data;
+	      auto res = tthis->params_.find(name);
+	      if (res == tthis->params_.end())
+	      {
+	        return;
+	      }
+	      
+	      auto shrd = res->second.lock();
+	      if (shrd)
+	      {
+	        std::lock_guard<std::mutex> lock(shrd->lock);
+	        shrd->d = value;
+	      }
+	    }, this);
+	  }
+	  
+	  ps_add_parameter_double(params_data_.get(), name.c_str(), desc.c_str(), default_value, min, max);
+	  
+	  Parameter<double> p;
+	  p.value = std::make_shared<ParameterContainer>();
+	  p.value->d = default_value;
+	  params_[name] = p.value;
+	  return p;
 	}
 
 	// mark that we have a message to process
@@ -271,9 +398,17 @@ protected:
 	std::vector<SubscriberBase*> subs_;
 
 public:
+
+  virtual ~PublisherBase() {}
+  
 	const std::string& GetTopic()
 	{
 		return remapped_topic_;
+	}
+
+	ps_pub_t* GetPub()
+	{
+	  return &publisher_;
 	}
 
 	Node* GetNode()
@@ -282,16 +417,16 @@ public:
 	}
 };
 
-template<class T>
-class Subscriber;
 template<class T> 
 class Publisher: public PublisherBase
 {
 	std::shared_ptr<T> latched_msg_;
 public:
 	friend class Subscriber<T>;
+	
+	typedef std::unique_ptr<Publisher<T>> Ptr;
 
-	Publisher(Node& node, const std::string& topic, bool latched = false)// : topic_(topic)
+	Publisher(Node& node, const std::string& topic, bool latched = false, int preferred_transport = 0)// : topic_(topic)
 	{
 		node_ = &node;
 		topic_ = topic;
@@ -304,21 +439,21 @@ public:
 		remapped_topic_ = handle_remap(real_topic, node.getNamespace());
 
 		node.lock_.lock();
-		ps_node_create_publisher(node.getNode(), remapped_topic_.c_str(), T::GetDefinition(), &publisher_, latched);
+		ps_node_create_publisher_ex(node.getNode(), remapped_topic_.c_str(), T::GetDefinition(), &publisher_, latched, preferred_transport, T::Allocator::allocator());
 		node.lock_.unlock();
 
 		//add me to the publisher list
 		_publisher_mutex.lock();
 		_publishers.insert(std::pair<std::string, PublisherBase*>(remapped_topic_, this));
 
-        // look for any matching subscribers and add them to our list
-        auto iterpair = _subscribers.equal_range(topic);
-        for (auto it = iterpair.first; it != iterpair.second; ++it)
-        {
-          node.lock_.lock();
-          subs_.push_back(it->second);
-          node.lock_.unlock();
-        }
+    // look for any matching subscribers and add them to our list
+    auto iterpair = _subscribers.equal_range(topic);
+    for (auto it = iterpair.first; it != iterpair.second; ++it)
+    {
+      node.lock_.lock();
+      subs_.push_back(it->second);
+      node.lock_.unlock();
+    }
 		_publisher_mutex.unlock();
 	}
 
@@ -363,26 +498,34 @@ public:
 		{
 			latched_msg_ = msg;
 		}
-
-		// loop through shared subscribers
+		
 		node_->lock_.lock();
-		// now go through my local subscriber list
-		for (size_t i = 0; i < subs_.size(); i++)
+		
+		if (node_->intraprocessEnabled())
 		{
-			auto sub = subs_[i];
+		  // loop through shared subscribers
+		  // now go through my local subscriber list
+		  for (auto& sub: subs_)
+		  {
+			  // make sure message matches
+			  if (strcmp(sub->GetSub()->type->name, T::GetDefinition()->name) != 0)
+        {
+          continue;
+        }
+        
+			  printf("Publishing locally with no copy..\n");
 
-			//printf("Publishing locally with no copy..\n");
-
-			auto specific_sub = (Subscriber<T>*)sub;
-			ps_event_set_trigger(specific_sub->node_->getEventSet());
-			specific_sub->queue_mutex_.lock();
-			specific_sub->queue_.push_front(msg);
-			if (specific_sub->queue_.size() > specific_sub->queue_size_)
-			{
-				specific_sub->queue_.pop_back();
-			}
-			specific_sub->queue_mutex_.unlock();
-			specific_sub->node_->mark();
+			  auto specific_sub = (Subscriber<T>*)sub;
+			  ps_event_set_trigger(specific_sub->node_->getEventSet());
+			  specific_sub->queue_mutex_.lock();
+			  specific_sub->queue_.push_front(msg);
+			  if (specific_sub->queue_.size() > specific_sub->queue_size_)
+			  {
+				  specific_sub->queue_.pop_back();
+			  }
+			  specific_sub->queue_mutex_.unlock();
+			  specific_sub->node_->mark();
+		  }
 		}
 
 		ps_pub_publish_ez(&publisher_, (void*)msg.get());
@@ -394,38 +537,42 @@ public:
 	void publish(const T& msg)
 	{
 		std::shared_ptr<T> copy;
-		if (latched_) {
+		if (latched_)
+		{
 			copy = std::shared_ptr<T>(new T);
 			*copy = msg;
 			// save for later
 			latched_msg_ = copy;
 		}
+		
 		node_->lock_.lock();
-		// now go through my local subscriber list
-		for (size_t i = 0; i < subs_.size(); i++)
+
+		if (node_->intraprocessEnabled())
 		{
-			auto sub = subs_[i];
+		  // now go through my local subscriber list
+		  for (auto& sub: subs_)
+		  {
+			  printf("Publishing locally with a copy..\n");
+			  if (!copy)
+			  {
+				  //copy to shared ptr
+				  copy = std::shared_ptr<T>(new T);
+				  *copy = msg;
+			  }
 
-			//printf("Publishing locally with a copy..\n");
-			if (!copy)
-			{
-				//copy to shared ptr
-				copy = std::shared_ptr<T>(new T);
-				*copy = msg;
-			}
-
-			// help this isnt thread safe (or is it?)
-			auto specific_sub = (Subscriber<T>*)sub;
-			ps_event_set_trigger(specific_sub->node_->getEventSet());
-			specific_sub->queue_mutex_.lock();
-			specific_sub->queue_.push_front(copy);
-			if (specific_sub->queue_.size() > specific_sub->queue_size_)
-			{
-				specific_sub->queue_.pop_back();
-			}
-			specific_sub->queue_mutex_.unlock();
-			specific_sub->node_->mark();
-		}
+			  // help this isnt thread safe (or is it?)
+			  auto specific_sub = (Subscriber<T>*)sub;
+			  ps_event_set_trigger(specific_sub->node_->getEventSet());
+			  specific_sub->queue_mutex_.lock();
+			  specific_sub->queue_.push_front(copy);
+			  if (specific_sub->queue_.size() > specific_sub->queue_size_)
+			  {
+				  specific_sub->queue_.pop_back();
+			  }
+			  specific_sub->queue_mutex_.unlock();
+			  specific_sub->node_->mark();
+		  }
+    }
 
 		// note this still copies unnecessarily if the topic is latched
 		// todo make this only copy/encode if necessary
@@ -436,7 +583,7 @@ public:
 
 	unsigned int getNumSubscribers()
 	{
-		return ps_pub_get_subscriber_count(&publisher_);
+		return ps_pub_get_subscriber_count(&publisher_) + subs_.size();
 	}
 
 	void addCustomEndpoint(const int ip_addr, const short port, const unsigned int stream_id)
@@ -472,7 +619,6 @@ protected:
 				// if its latched, get the message from it
 				if (it->second->latched_)
 				{
-					// hmm, this should just queue not call
 					cb(it->second);
 				}
 				// add me to its sub list
@@ -481,7 +627,7 @@ protected:
 			}
 		}
 
-        _subscribers.insert(std::pair<std::string, SubscriberBase*>(topic, sub));
+    _subscribers.insert(std::pair<std::string, SubscriberBase*>(topic, sub));
 
 		_publisher_mutex.unlock();
 	}
@@ -499,25 +645,29 @@ protected:
 				// remove me from its list if im there
 				auto pos = std::find(it->second->subs_.begin(), it->second->subs_.end(), sub);
 				if (pos != it->second->subs_.end())
+				{
 					it->second->subs_.erase(pos);
+			  }
 				it->second->GetNode()->lock_.unlock();
 			}
 		}
 
-        //remove me from the subscriber list
-        auto subiterpair = _subscribers.equal_range(topic);
-        for (auto it = subiterpair.first; it != subiterpair.second; ++it)
-        {
-          if (it->second == sub)
-          {
-            _subscribers.erase(it);
-            break;
-          }
-        }
+    //remove me from the subscriber list
+    auto subiterpair = _subscribers.equal_range(topic);
+    for (auto it = subiterpair.first; it != subiterpair.second; ++it)
+    {
+      if (it->second == sub)
+      {
+        _subscribers.erase(it);
+        break;
+      }
+    }
 
 		_publisher_mutex.unlock();
 	}
 public:
+
+  virtual ~SubscriberBase() {}
 
 	ps_sub_t* GetSub()
 	{
@@ -527,8 +677,6 @@ public:
 	// returns if there are still more messages in the queue
 	virtual bool CallOne() = 0;
 };
-
-
 
 template<class T> 
 class Subscriber: public SubscriberBase
@@ -545,7 +693,9 @@ class Subscriber: public SubscriberBase
 
 public:
 
-	Subscriber(Node& node, const std::string& topic, std::function<void(const std::shared_ptr<T>&)> cb, unsigned int queue_size = 1, int preferred_transport = 0) : cb_(cb), queue_size_(queue_size)
+  typedef std::unique_ptr<Subscriber<T>> Ptr;
+
+	Subscriber(Node& node, const std::string& topic, std::function<void(const std::shared_ptr<T>&)> cb, unsigned int queue_size = 1, int preferred_transport = -1, int skip = 0) : cb_(cb), queue_size_(queue_size)
 	{
 		node_ = &node;
 
@@ -556,6 +706,7 @@ public:
 
 		auto cb2 = [](void* msg, unsigned int size, void* th, const ps_msg_info_t* info)
 		{
+		  printf("got actual message\n");
 			// convert to shared ptr
 			std::shared_ptr<T> msg_ptr((T*)msg);
 
@@ -571,32 +722,33 @@ public:
 
 		struct ps_subscriber_options options;
 		ps_subscriber_options_init(&options);
-
-		options.queue_size = 0;
+    options.skip = skip;
 		options.cb = cb2;
 		options.cb_data = this;
-		options.allocator = 0;
-		options.ignore_local = true;
+		options.allocator = T::Allocator::allocator();
+		options.ignore_local = node.intraprocessEnabled();
 		options.preferred_transport = preferred_transport;
-
 
 		node.lock_.lock();
 		ps_node_create_subscriber_adv(node.getNode(), remapped_topic_.c_str(), T::GetDefinition(), &subscriber_, &options);
 		node.subscribers_.push_back(this);
 		node.lock_.unlock();
 
-		AddSubscriber(remapped_topic_, this, [&](void* p){
-			auto pub = (Publisher<T>*)p;
-			ps_event_set_trigger(node_->getEventSet());
-			queue_mutex_.lock();
-			queue_.push_front(pub->latched_msg_);
-			if (queue_.size() > queue_size_)
-			{
-				queue_.pop_back();
-			}
-			queue_mutex_.unlock();
-			node_->mark();
-		});
+    if (node.intraprocessEnabled())
+    {
+		  AddSubscriber(remapped_topic_, this, [&](void* p){
+			  auto pub = (Publisher<T>*)p;
+			  ps_event_set_trigger(node_->getEventSet());
+			  queue_mutex_.lock();
+			  queue_.push_front(pub->latched_msg_);
+			  if (queue_.size() > queue_size_)
+			  {
+				  queue_.pop_back();
+			  }
+			  queue_mutex_.unlock();
+			  node_->mark();
+		  });
+		}
 	}
 
 	virtual bool CallOne()
@@ -615,6 +767,34 @@ public:
 		return false;
 	}
 
+  std::shared_ptr<const T> PopOne()
+  {
+    queue_mutex_.lock();
+    if (!queue_.size())
+    {
+      queue_mutex_.unlock();
+      return {};
+    }
+    auto back = queue_.back();
+    queue_.pop_back();
+    queue_mutex_.unlock();
+    return back;
+  }	
+  
+  void PushOne(const std::shared_ptr<T>& msg)
+  {
+    auto specific_sub = this;
+		//ps_event_set_trigger(specific_sub->node_->getEventSet());
+		specific_sub->queue_mutex_.lock();
+		specific_sub->queue_.push_front(msg);
+		if (specific_sub->queue_.size() > specific_sub->queue_size_)
+		{
+			specific_sub->queue_.pop_back();
+		}
+		specific_sub->queue_mutex_.unlock();
+		//specific_sub->node_->mark();
+  }
+
 	~Subscriber()
 	{
 		close();
@@ -632,16 +812,13 @@ public:
 		node_->lock_.lock();
 		auto it = std::find(node_->subscribers_.begin(), node_->subscribers_.end(), this);
 		if (it != node_->subscribers_.end())
+		{
 			node_->subscribers_.erase(it);
+	  }
 		ps_sub_destroy(&subscriber_);
 		node_->lock_.unlock();
 
 		node_ = 0;
-	}
-
-	T* deque()
-	{
-		return (T*)ps_sub_deque(&subscriber_);
 	}
 
 	const std::string& getQualifiedTopic()
