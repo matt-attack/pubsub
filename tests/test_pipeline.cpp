@@ -31,7 +31,7 @@ TEST(test_playback_basic, []()
   // Create the subscriber block
   auto pb_node = std::make_unique<PipelineBlock<Data>>("test");
   pb_node->subscribe(&Data::msg, "/data", true);
-  pb_node->start([&](const Data& data, pubsub::Time time)
+  pb_node->update([&](const Data& data, pubsub::Time time)
   {
     received.push_back(data.msg->value);
   });
@@ -132,7 +132,7 @@ TEST(test_playback_timeout, []()
       printf("called timeout\n");
       timeouts.push_back(timeout);
     });
-    pb_node->start([&](const Data& data, pubsub::Time time)
+    pb_node->update([&](const Data& data, pubsub::Time time)
     {
       received.push_back(data.msg->value);
     });
@@ -190,7 +190,7 @@ TEST(test_playback_chain, []()
     auto pb_node = std::make_unique<PipelineBlock<Data>>("test");
     pb_node->subscribe(&Data::msg, "/data", true);
     auto ipub = pb_node->advertise<pubsub::msg::Int>("/data2");
-    pb_node->start([ipub] (const Data& data, pubsub::Time time)
+    pb_node->update([ipub] (const Data& data, pubsub::Time time)
     {
       ipub.publish(data.msg, time);
     });
@@ -203,7 +203,7 @@ TEST(test_playback_chain, []()
   {
     auto pb_node2 = std::make_unique<PipelineBlock<Data>>("test2");
     pb_node2->subscribe(&Data::msg, "/data", true);
-    pb_node2->start([&](const Data& data, pubsub::Time time)
+    pb_node2->update([&](const Data& data, pubsub::Time time)
     {
       received.push_back(data.msg->value);
     });
@@ -244,7 +244,7 @@ TEST(test_playback_timer_sub, []()
   std::vector<pubsub::Time> received;
 
   auto pb_node = std::make_unique<PipelineTimer<Data>>("test", 1.0);
-  pb_node->start([&](const Data& data, pubsub::Time time)
+  pb_node->update([&](const Data& data, pubsub::Time time)
   {
     printf("loop\n");
     received.push_back(time);
@@ -280,7 +280,7 @@ TEST(test_playback_timer_subscriber, []() {
   auto pb_node = std::make_unique<PipelineTimer<Data>>("test", 1.0);
   {
     pb_node->subscribe(&Data::msg, "/data", false);
-    pb_node->start([&](const Data& data, pubsub::Time time)
+    pb_node->update([&](const Data& data, pubsub::Time time)
     {
       //printf("loop\n");
       received.push_back(time);
@@ -419,7 +419,7 @@ TEST(test_simulation_loop, []()
     auto pb_node = std::make_unique<PipelineTimer<Data>>("sim", 1.0);
     pb_node->subscribe(&Data::msg, "/cmd", false);
     auto ipub = pb_node->advertise<pubsub::msg::Int>("/pose");
-    pb_node->start([ipub, &position, &received](const Data& data, pubsub::Time time)
+    pb_node->update([ipub, &position, &received](const Data& data, pubsub::Time time)
     {
       pubsub::msg::Int out;
       out.value = position + (data.msg ? data.msg->value : 0);
@@ -436,7 +436,7 @@ TEST(test_simulation_loop, []()
     auto pb_node = std::make_unique<PipelineBlock<Data>>("test");
     pb_node->subscribe(&Data::msg, "/pose", true);
     auto ipub = pb_node->advertise<pubsub::msg::Int>("/cmd");
-    pb_node->start([ipub, &context] (const Data& data, pubsub::Time time)
+    pb_node->update([ipub, &context] (const Data& data, pubsub::Time time)
     {
       printf("control loop x: %li\n", data.msg->value);
       
@@ -492,7 +492,7 @@ TEST(test_abort, []()
   {
     auto pb_node = std::make_unique<PipelineTimer<Data>>("sim", 1.0);
     pb_node->subscribe(&Data::msg, "/cmd", false);
-    pb_node->start([&received, &context](const Data& data, pubsub::Time time)
+    pb_node->update([&received, &context](const Data& data, pubsub::Time time)
     {
       received.push_back(time);
       context.abort();
@@ -535,7 +535,7 @@ TEST(test_abort2, []()
   {
     auto pb_node = std::make_unique<PipelineBlock<Data>>("sim");
     pb_node->subscribe(&Data::msg, "/data", true);
-    pb_node->start([&received](const Data& data, pubsub::Time time)
+    pb_node->update([&received](const Data& data, pubsub::Time time)
     {
       received.push_back(time);
     });
@@ -577,7 +577,7 @@ TEST(test_simulation_loop_2, []()
     auto pb_node = std::make_unique<PipelineTimer<Data>>("sim", 1.0);
     pb_node->subscribe(&Data::msg, "/cmd2", false);
     auto ipub = pb_node->advertise<pubsub::msg::Int>("/pose");
-    pb_node->start([ipub, &position, &received](const Data& data, pubsub::Time time)
+    pb_node->update([ipub, &position, &received](const Data& data, pubsub::Time time)
     {
       pubsub::msg::Int out;
       out.value = position + (data.msg ? data.msg->value : 0);
@@ -594,7 +594,7 @@ TEST(test_simulation_loop_2, []()
     auto pb_node = std::make_unique<PipelineBlock<Data>>("test");
     pb_node->subscribe(&Data::msg, "/pose", true);
     auto ipub = pb_node->advertise<pubsub::msg::Int>("/cmd");
-    pb_node->start([ipub, &received2] (const Data& data, pubsub::Time time)
+    pb_node->update([ipub, &received2] (const Data& data, pubsub::Time time)
     {
       printf("control loop x: %li\n", data.msg->value);
 
@@ -614,7 +614,7 @@ TEST(test_simulation_loop_2, []()
     pb_node->subscribe(&Data::msg, "/cmd", true);
     pb_node->subscribe(&Data::msg2, "/fake", true);// try with two topics to validate multiple driving
     auto ipub = pb_node->advertise<pubsub::msg::Int>("/cmd2");
-    pb_node->start([ipub, &received3] (const Data& data, pubsub::Time time)
+    pb_node->update([ipub, &received3] (const Data& data, pubsub::Time time)
     {
       printf("control loop 2: %li\n", data.msg->value);
       ipub.publish(data.msg, time);

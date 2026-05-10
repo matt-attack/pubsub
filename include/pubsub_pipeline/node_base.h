@@ -129,7 +129,7 @@ struct Block
   }
   
   template <typename T>
-  void start(std::function<void(const T&, pubsub::Time time)> cb);
+  void update(std::function<void(const T&, pubsub::Time time)> cb);
   
   inline void set_on_shutdown(std::function<void()> cb)
   {
@@ -174,15 +174,13 @@ public:
     block.holder.reset(new Holder());
     block.data.reset(new Block::RealBlock());
     block.data->is_timer = false;
-    
-    // todo rename this as it isnt really "start"
-    start([this](const T& msg, pubsub::Time time) { update(msg, time); });
+    update([this](const T& msg, pubsub::Time time) { update(msg, time); });
   }
   
   virtual void update(const T& message, pubsub::Time time) {}
   
-  void start(std::function<void(const T&, pubsub::Time time)> cb) {
-    Block::start<T>(cb);
+  void update(std::function<void(const T&, pubsub::Time time)> cb) {
+    Block::update<T>(cb);
   }
 };
 
@@ -194,28 +192,9 @@ public:
   
   virtual void update(const T& message, pubsub::Time time) {}
   
-  void start(std::function<void(const T&, pubsub::Time time)> cb) {
-    Block::start<T>(cb);
+  void update(std::function<void(const T&, pubsub::Time time)> cb) {
+    Block::update<T>(cb);
   }
-};
-
-// Dummy node that has no blocks and drives execution in playback
-struct MockNode: public PipelineBlock<int>
-{
-  MockNode(Context& ctx) : PipelineBlock<int>("mock") {
-    set_context(&ctx);
-  }
-
-  ~MockNode() {
-    shutdown();
-  }
-
-  inline void shutdown() {
-    // stop all pubs and timers
-  
-  }
-  
-  inline Publisher advertise(const std::string& topic);
 };
 
 template <class T>
@@ -252,8 +231,27 @@ PipelineTimer<T>::PipelineTimer(const std::string& name, double rate)
   });
     
   // todo rename this as it isnt really "start"
-  start([this](const T& msg, pubsub::Time time) { update(msg, time); });
+  update([this](const T& msg, pubsub::Time time) { update(msg, time); });
 }
+
+// Dummy node that has no blocks and drives execution in playback
+struct MockNode: public PipelineBlock<int>
+{
+  MockNode(Context& ctx) : PipelineBlock<int>("mock") {
+    set_context(&ctx);
+  }
+
+  ~MockNode() {
+    shutdown();
+  }
+
+  inline void shutdown() {
+    // stop all pubs and timers
+  
+  }
+  
+  inline Publisher advertise(const std::string& topic);
+};
 
 Publisher MockNode::advertise(const std::string& topic)
 {
@@ -483,7 +481,7 @@ Publisher Block::advertise(const std::string& topic)
 }
 
 template <typename T>
-void Block::start(std::function<void(const T&, pubsub::Time)> cb)
+void Block::update(std::function<void(const T&, pubsub::Time)> cb)
 {
   this->data->do_thing = [cb](pubsub::Time time, void* hldr)
   {
