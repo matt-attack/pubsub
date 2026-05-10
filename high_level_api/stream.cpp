@@ -18,35 +18,6 @@ void Stream::enqueue_placeholders(pubsub::Time time)
   }
 }
 
-void Stream::enqueue_timer(pubsub::Time time)
-{
-  if (subscribers.size() == 0)
-  {
-    return;
-  }
-  auto context= subscribers[0]->context;
-  auto& stream_mutex = context->stream_mutex;
-  //todo should probably block if this gets too far ahead (how do I know how long that is?)
-  Sample s;
-  s.remaining = subscribers.size();
-  s.time = time;
-  s.timer_sample = true;
-  s.index = index_counter++;
-  stream_mutex.lock();
-  //check if we have too many samples queued and block if so
-  //we have too many samples if
-  samples.insert(s);
-  
-  enqueue_placeholders(time);
-  stream_mutex.unlock();
-    
-  for (const auto& sub: subscribers)
-  {
-    sub->data->counts[topic]++;
-    sub->data->cv.notify_one();
-  }
-}
-
 void Stream::enqueue_end()
 {
   if (subscribers.size() == 0)
@@ -66,7 +37,7 @@ void Stream::enqueue_end()
   while (samples.size())
   {
     auto iter = --samples.end();
-    if (!iter->message && !iter->timer_sample)
+    if (!iter->message)
     {
       printf("deleting placeholder at time %f on topic %s\n", iter->time.usec/1e6, topic.c_str());
       samples.erase(iter);

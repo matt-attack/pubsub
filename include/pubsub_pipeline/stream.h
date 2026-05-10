@@ -14,7 +14,6 @@
 struct Sample
 {
   pubsub::Time time;
-  bool timer_sample = false;
   bool is_end = false;
   
   mutable int remaining = 0;
@@ -47,8 +46,6 @@ struct Stream
   uint32_t index_counter = 0;
   
   bool ended = false;
-  
-  void enqueue_timer(pubsub::Time time);
   
   void enqueue_holder(pubsub::Time time, HolderBase* msg);
 

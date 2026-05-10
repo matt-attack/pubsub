@@ -44,6 +44,9 @@ TEST(test_playback_basic, []()
   // Actually start receiving nodes
   context.start_playback(pubsub::Time(1), pubsub::Time(2));
   
+  //todo test throw if someone creates a pub after start
+  //todo test throw if someone creates a timer with an invalid rate
+  
   auto pose = pubsub::msg::IntSharedPtr(new pubsub::msg::Int);
   pose->value = 0;
   pub->publish(*pose, pubsub::Time(1));
@@ -56,7 +59,78 @@ TEST(test_playback_basic, []()
   // wait for system to run until end
   context.join();
   
+  EXPECT(received.size() == 2);
+  EXPECT(received[0] == 0);
+  EXPECT(received[1] == 1);
+  
   // todo times of 0 break timers
+});
+
+TEST(test_playback_multidriving, []()
+{
+  // Validate that we get all driving messages in the expected order
+  Context context;
+  
+  struct Data
+  {
+    pubsub::msg::Int::SharedPtr msg1, msg2;
+  };
+  
+  std::vector<std::pair<int, int>> received;
+
+  // Create the subscriber block
+  auto pb_node = std::make_unique<PipelineBlock<Data>>("test");
+  pb_node->subscribe(&Data::msg1, "/data1", true);
+  pb_node->subscribe(&Data::msg2, "/data2", true);
+  pb_node->update([&](const Data& data, pubsub::Time time)
+  {
+    if (data.msg1)
+    {
+      received.push_back({1, data.msg1->value});
+    }
+    else
+    {
+      received.push_back({2, data.msg2->value});
+    }
+  });
+  context.add_node(std::move(pb_node));
+  
+  // Create mock node to publish and drive the execution of the pipeline
+  MockNode mock(context);
+  auto pub1 = std::make_shared<Publisher>(mock.advertise("/data1"));
+  auto pub2 = std::make_shared<Publisher>(mock.advertise("/data2"));
+  
+  // Actually start receiving nodes
+  context.start_playback(pubsub::Time(1), pubsub::Time(4));
+  
+  auto pose = pubsub::msg::IntSharedPtr(new pubsub::msg::Int);
+  pose->value = 0;
+  pub1->publish(*pose, pubsub::Time(1));
+  pose->value = 1;
+  pub2->publish(*pose, pubsub::Time(2));
+  pub1.reset();// end stream 1 first
+  
+  pose->value = 2;
+  pub2->publish(*pose, pubsub::Time(3));
+  pose->value = 3;
+  pub2->publish(*pose, pubsub::Time(4));
+  pub2.reset();
+  
+  // wait for system to run until end
+  context.join();
+  
+  EXPECT(received.size() == 4);
+  
+  // todo times of 0 break timers
+  
+  EXPECT(received[0].first == 1);
+  EXPECT(received[0].second == 0);
+  EXPECT(received[1].first == 2);
+  EXPECT(received[1].second == 1);
+  EXPECT(received[2].first == 2);
+  EXPECT(received[2].second == 2);
+  EXPECT(received[3].first == 2);
+  EXPECT(received[3].second == 3);
 });
 
 /*TEST(test_playback_buffering, []()

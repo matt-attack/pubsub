@@ -201,10 +201,9 @@ void Context::abort()
 }
 
 
-void thread_live(Block* node)
+void Context::thread_live(Block* node)
 {
   std::string name_ = node->name;
-  //std::string driving = node->data->driving[0].topic;// todo fix me for multiple driving
   int idx = 0;
   auto context = node->context;
   
@@ -267,7 +266,7 @@ void thread_live(Block* node)
   }
 }
 
-void thread_playback(Block* node, pubsub::Time start_time, pubsub::Time end_time)
+void Context::thread_playback(Block* node, pubsub::Time start_time, pubsub::Time end_time)
 {
   std::string name_ = node->name;
   // if there are no driving topics, warn and exit
@@ -321,11 +320,10 @@ void thread_playback(Block* node, pubsub::Time start_time, pubsub::Time end_time
     {
       auto& sub = node->data->driving[0];
       
-      // we're a timer!
+      // we're a timer! just make fake driving messages since we always know when we plan to run
       driving_sub = &sub;
       // dont need to wait for a message, just run
       timer_sample.time = next_timer_time;
-      timer_sample.timer_sample = true;
       driving_msg = &timer_sample;
       next_timer_time += pubsub::Duration(1.0/node->rate);
       
@@ -336,9 +334,8 @@ void thread_playback(Block* node, pubsub::Time start_time, pubsub::Time end_time
       }
       
       // publish any placeholders here
-      //lk.unlock();
+      // note this function needs locks held, but we already hold them
       streams[sub.topic].enqueue_placeholders(next_timer_time);
-      //lk.lock();
     }
     else if (node->data->driving.size() == 1)
     {
@@ -364,7 +361,7 @@ void thread_playback(Block* node, pubsub::Time start_time, pubsub::Time end_time
         {
 
         }
-        else if (!msg.message && !msg.timer_sample)
+        else if (!msg.message)
         {
           // its a placeholder, wait for the real message
           printf("[%s] found placeholder on topic %s at time %li, waiting for real message\n", name_.c_str(), sub.topic.c_str(), msg.time.usec);
@@ -402,7 +399,7 @@ void thread_playback(Block* node, pubsub::Time start_time, pubsub::Time end_time
             {
 
             }
-            else if (!msg.message && !msg.timer_sample)
+            else if (!msg.message)
             {
               // its a placeholder, wait for the real message
               printf("[%s] found placeholder on topic %s, waiting for real message\n", name_.c_str(), sub.topic.c_str());
@@ -440,15 +437,14 @@ void thread_playback(Block* node, pubsub::Time start_time, pubsub::Time end_time
       }
       
       // clear any other driving messages from the struct
-      // todo only have to do this on the onees we dont select
+      // todo only have to do this on the ones we don't select
       for (auto& sub: node->data->driving)
       {
         sub.clear();
       }
       
       // finally go through the available messages by time, and consume the one with the smallest timestamp
-      // todo can probably make thist list above
-      int i = 0;
+      // todo can probably make this list above
       for (auto& sub: node->data->driving)
       {
         auto& stream = streams[sub.topic];
@@ -468,7 +464,6 @@ void thread_playback(Block* node, pubsub::Time start_time, pubsub::Time end_time
           }
           break;
         }
-        i++;
       }
       
       // then fall through to below
@@ -481,11 +476,7 @@ void thread_playback(Block* node, pubsub::Time start_time, pubsub::Time end_time
       continue;
     }
     
-    // todo how do I get message times of non-driving messages?
-    
     // exit if we hit the end
-    // todo this logic is wrong with multiple driving at the end
-    // we need to wait for the last stream to end to exit
     if (driving_msg->is_end)
     {
       printf("[%s] exiting thread, got last message\n", name_.c_str());
@@ -498,7 +489,7 @@ void thread_playback(Block* node, pubsub::Time start_time, pubsub::Time end_time
     
     // update the sample with the driving
     bool call_callback = true;
-    if (driving_copy.timer_sample)
+    if (node->data->is_timer)
     {
       printf("was timer sample at %f\n", driving_copy.time.usec/1e6);
       if (first_loop)
@@ -521,6 +512,7 @@ void thread_playback(Block* node, pubsub::Time start_time, pubsub::Time end_time
     }
     
     // check if we should trigger a timeout (and if so how many)
+    //todo disallow this with timers
     if (node->data->timeout > 0)
     {
       pubsub::Duration timeout(node->data->timeout); 

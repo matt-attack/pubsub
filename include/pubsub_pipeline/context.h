@@ -11,9 +11,6 @@
 
 #include <pubsub_cpp/Node.h>
 
-void thread_playback(Block*, pubsub::Time, pubsub::Time);
-void thread_live(Block*);
-
 // Defines a
 class MockNode;
 class Publisher;
@@ -26,8 +23,9 @@ class Context
   friend class Block;
   template <typename T>
   friend class PipelineTimer;
-  friend void thread_live(Block*);
-  friend void thread_playback(Block*, pubsub::Time, pubsub::Time);
+  
+  static void thread_live(Block*);
+  static void thread_playback(Block*, pubsub::Time, pubsub::Time);
 
   bool is_playback;
   pubsub::Node* node = 0;

@@ -14,10 +14,6 @@
 
 #include <pthread.h>
 
-// for now we just support driving + latched and timer
-
-// Okay each component is a Node, each node can have multiple 
-
 struct Sub
 {
   std::string topic;
@@ -209,6 +205,11 @@ PipelineTimer<T>::PipelineTimer(const std::string& name, double rate)
      
     HolderBase* clone() override { return new Holder(*this); }
   };
+  
+  if (rate <= 0.0)
+  {
+    throw std::invalid_argument("Cannot have a timer with a rate <= 0.0");
+  }
     
   auto& block = *this;
   block.holder.reset(new Holder());
@@ -229,8 +230,7 @@ PipelineTimer<T>::PipelineTimer(const std::string& name, double rate)
     stream.topic = timer_name;
     stream.publishers++;
   });
-    
-  // todo rename this as it isnt really "start"
+
   update([this](const T& msg, pubsub::Time time) { update(msg, time); });
 }
 
@@ -239,15 +239,6 @@ struct MockNode: public PipelineBlock<int>
 {
   MockNode(Context& ctx) : PipelineBlock<int>("mock") {
     set_context(&ctx);
-  }
-
-  ~MockNode() {
-    shutdown();
-  }
-
-  inline void shutdown() {
-    // stop all pubs and timers
-  
   }
   
   inline Publisher advertise(const std::string& topic);
@@ -451,8 +442,6 @@ Publisher Block::advertise(const std::string& topic)
       {
         return;
       }
-      
-      // todo lock context mutex
         
       // decrement our topic count and 
       // enqueue end messages if there are no more publishers left
