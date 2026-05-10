@@ -200,22 +200,6 @@ void Context::abort()
   node_mutex.unlock();
 }
 
-void Context::publish_end()
-{ 
-  // publish ends for timer streams
-  for (auto& stream: streams)
-  {
-    if (stream.first[0] != '~' || stream.second.ended)
-    {
-      continue;
-    }
-      
-    printf("[%s] enqueing endstop message on topic %s\n", "context", stream.first.c_str());
-    stream.second.ended = true;
-    stream.second.enqueue_end();
-  }
-}
-
 
 void thread_live(Block* node)
 {

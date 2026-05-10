@@ -34,8 +34,6 @@ class Publisher
   Block* node_;
   std::string topic_;
 
-public:
-  // todo make private
   // used to clear the publisher when we go out of scope
   std::shared_ptr<HolderBase> reference_;
 public:
@@ -44,9 +42,10 @@ public:
   
   }
 
-  Publisher(Block* b, std::string t) {
+  Publisher(Block* b, std::string t, HolderBase* ref) {
     node_ = b;
     topic_ = t;
+    reference_.reset(ref);
   }
 
   template <class T>
@@ -95,6 +94,8 @@ struct Block
       }
     }
   };
+
+  // Holder for callback data
   std::shared_ptr<HolderBase> holder;
   std::shared_ptr<RealBlock> data;
   double rate = 0.0;
@@ -258,8 +259,6 @@ Publisher MockNode::advertise(const std::string& topic)
 {
   auto ctx = context;
   ctx->streams[topic].publishers++;
-  
-  ctx->mock_pubs++;
     
   struct XHolder: public HolderBase
   {
@@ -269,28 +268,21 @@ Publisher MockNode::advertise(const std::string& topic)
     XHolder(std::string topic, Context* ctx) : topic(topic), ctx(ctx) {}
      
     ~XHolder() {
-      // todo lock this properly
       ctx->stream_mutex.lock();
         
       // decrement our topic count and 
       // enqueue end messages if there are no more publishers left
       auto& stream = ctx->streams[topic];
       stream.publishers--;
-      ctx->mock_pubs--;
+      auto pubs_left = stream.publishers;
       // if our mock node has no more pubs left, then end the context
       ctx->stream_mutex.unlock();
       
-      //subscribers[0].ctx->stream_mutex.unlock();
       printf("removing publisher %s\n", topic.c_str());
-      if (stream.publishers == 0)
+      if (pubs_left == 0)
       {
         printf("pushing end for publisher %s\n", topic.c_str());
         stream.enqueue_end();
-      }
-      
-      if (ctx->mock_pubs == 0)
-      {
-        ctx->publish_end();
       }
     }
         
@@ -302,9 +294,7 @@ Publisher MockNode::advertise(const std::string& topic)
     HolderBase* clone() override { return 0; }
   };
     
-  Publisher pub(this, topic);
-  pub.reference_.reset(new XHolder(topic, context));
-  return pub;
+  return Publisher(this, topic, new XHolder(topic, context));
 }
 
 template <class T>
@@ -468,10 +458,13 @@ Publisher Block::advertise(const std::string& topic)
         
       // decrement our topic count and 
       // enqueue end messages if there are no more publishers left
+      blk->context->stream_mutex.lock();
       auto& stream = blk->context->streams[topic];
       stream.publishers--;
+      auto pubs_left = stream.publishers;
+      blk->context->stream_mutex.unlock();
       printf("removing publisher %s\n", topic.c_str());
-      if (stream.publishers == 0)
+      if (pubs_left == 0)
       {
         printf("pushing end for publisher %s\n", topic.c_str());
         stream.enqueue_end();
@@ -486,17 +479,13 @@ Publisher Block::advertise(const std::string& topic)
     HolderBase* clone() override { return 0; }
   };
     
-  Publisher pub(this, topic);
-  pub.reference_.reset(new XHolder(topic, this));
-  return pub;
+  return Publisher(this, topic, new XHolder(topic, this));
 }
 
 template <typename T>
 void Block::start(std::function<void(const T&, pubsub::Time)> cb)
 {
-  auto holder = this->holder.get();
-  
-  this->data->do_thing = [cb, holder](pubsub::Time time, void* hldr)
+  this->data->do_thing = [cb](pubsub::Time time, void* hldr)
   {
     T& a = *(T*)hldr;
     cb(a, time);
@@ -585,7 +574,6 @@ void Block::subscribe(T offset, int index, const std::string& topic, bool drivin
   {
     throw std::invalid_argument("Cannot configure a topic as driving with a timer block.");
   }
-  // todo remove this with destructor
   
   Sub s;
   s.topic = topic;

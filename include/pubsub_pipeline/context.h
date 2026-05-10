@@ -110,10 +110,4 @@ public:
   void abort();
   
   void stop();
-
-private:
-  
-  int mock_pubs = 0;
-  
-  void publish_end();
 };

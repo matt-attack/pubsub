@@ -148,6 +148,7 @@ endfunction(my_export_target)
 
 my_export_target(pubsub "${CMAKE_CURRENT_SOURCE_DIR}/include" pubsub_msgs)
 my_export_target(pubsub_cpp "${CMAKE_CURRENT_SOURCE_DIR}/include" "")
+my_export_target(pubsub_pipeline "${CMAKE_CURRENT_SOURCE_DIR}/include" "")
 my_export_target(pubsub_msg_gen "${CMAKE_CURRENT_SOURCE_DIR}/include" "")
 
 install (TARGETS pubsub
