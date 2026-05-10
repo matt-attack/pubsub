@@ -17,6 +17,8 @@
 #include <algorithm>
 #include <memory>
 
+#include <cstdlib>
+
 
 // todo sometime fix this needing to be here for windows
 // might be a tcp issue
@@ -492,45 +494,7 @@ public:
 
 	// note due to locking only one publish can happen on a node at a time
 	// this does not copy the message for intraprocess
-	void publish(const std::shared_ptr<T>& msg)
-	{
-		if (latched_)
-		{
-			latched_msg_ = msg;
-		}
-		
-		node_->lock_.lock();
-		
-		if (node_->intraprocessEnabled())
-		{
-		  // loop through shared subscribers
-		  // now go through my local subscriber list
-		  for (auto& sub: subs_)
-		  {
-			  // make sure message matches
-			  if (strcmp(sub->GetSub()->type->name, T::GetDefinition()->name) != 0)
-        {
-          continue;
-        }
-        
-			  printf("Publishing locally with no copy..\n");
-
-			  auto specific_sub = (Subscriber<T>*)sub;
-			  ps_event_set_trigger(specific_sub->node_->getEventSet());
-			  specific_sub->queue_mutex_.lock();
-			  specific_sub->queue_.push_front(msg);
-			  if (specific_sub->queue_.size() > specific_sub->queue_size_)
-			  {
-				  specific_sub->queue_.pop_back();
-			  }
-			  specific_sub->queue_mutex_.unlock();
-			  specific_sub->node_->mark();
-		  }
-		}
-
-		ps_pub_publish_ez(&publisher_, (void*)msg.get());
-		node_->lock_.unlock();
-	}
+	void publish(const std::shared_ptr<T>& msg);
 
 	// note due to locking only one publish can happen on a node at a time
 	// this publish type copies the message for intraprocess
@@ -826,5 +790,49 @@ public:
 		return remapped_topic_;
 	}
 };
+
+
+// note due to locking only one publish can happen on a node at a time
+// this does not copy the message for intraprocess
+template<class T> 
+void Publisher<T>::publish(const std::shared_ptr<T>& msg)
+{
+	if (latched_)
+	{
+		latched_msg_ = msg;
+	}
+		
+	node_->lock_.lock();
+		
+	if (node_->intraprocessEnabled())
+	{
+	  // loop through shared subscribers
+	  // now go through my local subscriber list
+	  for (auto& sub: subs_)
+	  {
+		  // make sure message matches
+		  if (strcmp(sub->GetSub()->type->name, T::GetDefinition()->name) != 0)
+      {
+         continue;
+      }
+        
+		  printf("Publishing locally with no copy..\n");
+
+		  auto specific_sub = (Subscriber<T>*)sub;
+		  ps_event_set_trigger(specific_sub->node_->getEventSet());
+		  specific_sub->queue_mutex_.lock();
+		  specific_sub->queue_.push_front(msg);
+		  if (specific_sub->queue_.size() > specific_sub->queue_size_)
+		  {
+			  specific_sub->queue_.pop_back();
+		  }
+		  specific_sub->queue_mutex_.unlock();
+		  specific_sub->node_->mark();
+	  }
+	}
+
+	ps_pub_publish_ez(&publisher_, (void*)msg.get());
+	node_->lock_.unlock();
+}
 
 }
