@@ -72,6 +72,17 @@ add_dependencies(pubsub_cpp pubsub)
 set_property(TARGET pubsub_cpp PROPERTY CXX_STANDARD 11)
 set_target_properties(pubsub_cpp PROPERTIES DEBUG_POSTFIX "d")
 
+add_library (pubsub_pipeline
+  "high_level_api/context.cpp"
+  "high_level_api/stream.cpp"
+)
+target_link_libraries(pubsub_pipeline pubsub_cpp ${CMAKE_THREAD_LIBS_INIT})
+target_include_directories(pubsub_pipeline PUBLIC include)
+set_target_properties(pubsub_pipeline PROPERTIES POSITION_INDEPENDENT_CODE TRUE)
+add_dependencies(pubsub_pipeline pubsub_cpp)
+set_property(TARGET pubsub_pipeline PROPERTY CXX_STANDARD 11)
+set_target_properties(pubsub_pipeline PROPERTIES DEBUG_POSTFIX "d")
+
 #set(${PROJECT_NAME}_INCLUDE_DIRS ${PROJECT_SOURCE_DIR}/include
 #    CACHE INTERNAL "${PROJECT_NAME}: Include Directories" FORCE)
 
