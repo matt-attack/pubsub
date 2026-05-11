@@ -1,24 +1,42 @@
 #include "pubsub_pipeline/context.h"
 #include "pubsub_pipeline/node_base.h"
 
- void Context::add_node(std::unique_ptr<Block>&& node)
+void Context::add_node(std::unique_ptr<Block>&& new_node)
+{
+  new_node->set_context(this);
+  node_mutex.lock();
+  
+  // throw if we have a node with the same name
+  for (auto& node: nodes_)
   {
-    node->set_context(this);
-    node_mutex.lock();
-    nodes_.emplace_back(std::move(node));
-    
-    // now set it up
-    
-    // free the node on its shutdown to clear any pubs and such
-    int index = nodes_.size() - 1;
-    nodes_.back()->set_on_shutdown([this, index]() {
-      printf("freeing node\n");
-      node_mutex.lock();
-      nodes_[index].reset();
+    if (node->name == new_node->name)
+    {
       node_mutex.unlock();
-    });
-    node_mutex.unlock();
+      throw std::runtime_error("Context already contains a node with the name '" + node->name + "'. Block names must be unique within a context.");
+    }
   }
+  
+  if (new_node->data->driving.size() == 0)
+  {
+    node_mutex.unlock();
+    throw std::runtime_error("A block must contain at least one driving topic to function.");
+  }
+  
+  
+  nodes_.emplace_back(std::move(new_node));
+    
+  // now set it up
+    
+  // free the node on its shutdown to clear any pubs and such
+  int index = nodes_.size() - 1;
+  nodes_.back()->set_on_shutdown([this, index]() {
+    printf("freeing node\n");
+    node_mutex.lock();
+    nodes_[index].reset();
+    node_mutex.unlock();
+  });
+  node_mutex.unlock();
+}
   
 void Context::add_node(Block* block)
 {
@@ -271,39 +289,37 @@ void Context::thread_live(Block* node)
 void Context::thread_playback(Block* node, pubsub::Time start_time, pubsub::Time end_time)
 {
   std::string name_ = node->name;
-  // if there are no driving topics, warn and exit
-  // todo maybe this should throw at node construction?
+  // if there are no driving topics, the code below generally infinite loops, so fail out
+  // this case shouldnt occur anyways as we validate this on node add
   if (node->data->driving.size() == 0)
   {
-    printf("WARNING: Node %s has no driving topics so will not run.\n", name_.c_str());
-    node->data->do_thing = {};
-    node->data->do_timeout = {};
-    if (node->data->do_shutdown)
-    {
-      node->data->do_shutdown();
-    }
-    return;
+    throw std::runtime_error("Unexpected.");
   }
-  // we are a thread!
   auto ctx = node->data->context;
   auto& streams = ctx->streams;
   
   // todo need to get the start time of playback for this to work correctly
   pubsub::Time last_cb_time = start_time;
   
+  // if we can, try and start the timer just before the start of playback
+  // so that it fires "dry" (without any messages)
+  // this is useful for testing that people are properly checking for message presence
   pubsub::Time next_timer_time = start_time;
-  next_timer_time.usec -= 1;
+  if (next_timer_time.usec > 0)
+  {
+    next_timer_time.usec -= 1;
+  }
   
+  // if we are a timer place initial placeholders for our first timer update
+  if (node->data->is_timer)
   {
     auto& sub = node->data->driving[0];
-    ctx->stream_mutex.lock();
+    std::unique_lock<std::mutex> lk(ctx->stream_mutex);
     streams[sub.topic].enqueue_placeholders(next_timer_time);
-    ctx->stream_mutex.unlock();
   }
   bool first_loop = true;
   
   Sample timer_sample;
-  Sub timer_sub;
   // todo can I condense the ctx->running check and ps_okay check to a single one?
   while (ps_okay() && ctx->running)
   {
@@ -324,7 +340,6 @@ void Context::thread_playback(Block* node, pubsub::Time start_time, pubsub::Time
       
       // we're a timer! just make fake driving messages since we always know when we plan to run
       driving_sub = &sub;
-      // dont need to wait for a message, just run
       timer_sample.time = next_timer_time;
       driving_msg = &timer_sample;
       next_timer_time += pubsub::Duration(1.0/node->rate);
@@ -335,7 +350,8 @@ void Context::thread_playback(Block* node, pubsub::Time start_time, pubsub::Time
         break;
       }
       
-      // publish any placeholders here
+      // publish any placeholders for the next update, this is important
+      // as it can break deadlocks due to topic cycles
       // note this function needs locks held, but we already hold them
       streams[sub.topic].enqueue_placeholders(next_timer_time);
     }
@@ -344,7 +360,6 @@ void Context::thread_playback(Block* node, pubsub::Time start_time, pubsub::Time
       auto& sub = node->data->driving[0];
       if (node->data->counts[sub.topic] <= 0)
         node->data->cv.wait(lk);
-      // todo check ctx running here? not necessary afaik
       if (node->data->counts[sub.topic] > 0)
         node->data->counts[sub.topic]--;
       
@@ -467,8 +482,6 @@ void Context::thread_playback(Block* node, pubsub::Time start_time, pubsub::Time
           break;
         }
       }
-      
-      // then fall through to below
     }
     
     // no driving, dont bother yet
@@ -496,7 +509,7 @@ void Context::thread_playback(Block* node, pubsub::Time start_time, pubsub::Time
       printf("was timer sample at %f\n", driving_copy.time.usec/1e6);
       if (first_loop)
       {
-        // first loop is guaranteed to have no messages, so skip searching
+        // first cycle is guaranteed to have no messages, so skip searching
         // to bootstrap otherwise we can get stuck
         printf("was first loop, skipping look for messages\n");
         first_loop = false;
@@ -514,14 +527,15 @@ void Context::thread_playback(Block* node, pubsub::Time start_time, pubsub::Time
     }
     
     // check if we should trigger a timeout (and if so how many)
-    //todo disallow this with timers
     if (node->data->timeout > 0)
     {
       pubsub::Duration timeout(node->data->timeout); 
-      while (driving_msg->time > (last_cb_time + timeout)) {
+      while (driving_msg->time > (last_cb_time + timeout))
+      {
         auto cb_time = last_cb_time + timeout;
         printf("calling timeout %li\n", cb_time.usec);
         lk.unlock();
+        // todo we should probably call this with data just with no driving data
         node->data->do_timeout(cb_time);
         lk.lock();
         last_cb_time = cb_time;
@@ -534,8 +548,6 @@ void Context::thread_playback(Block* node, pubsub::Time start_time, pubsub::Time
     }
     
     // decrement reference count for msg
-
-    //printf("decremented references on driving to %i\n", driving_msg->remaining);
     driving_msg->remaining--;
     //driving_msg->owners.erase(name_);// for debugging
     if (driving_msg->remaining == 0)
@@ -654,15 +666,13 @@ void Context::thread_playback(Block* node, pubsub::Time start_time, pubsub::Time
           sub.cb(best_msg->message->get(), best_msg->time);
         }
         
-        //printf("subs loop\n");
         auto best_time = best_msg->time;
         auto best_index = best_msg->index;
         
         // dont use best_msg anymore as we are going to free it
-        // remove references
+        // remove references to any messages we already used
         for (auto it = stream.samples.begin(); it != stream.samples.end();)
         {
-          //printf("remove loop\n");
           const auto& msg = *it;
           if (msg.index >= sub.last_msg_idx && msg.index <= best_index)
           {
@@ -671,8 +681,6 @@ void Context::thread_playback(Block* node, pubsub::Time start_time, pubsub::Time
             //msg.owners.erase(name_); // for debugging
             if (msg.remaining == 0)
             {
-              // remove somehow
-              //printf("removed sample\n");
               it = stream.samples.erase(it);
               continue;
             }
@@ -715,7 +723,8 @@ call:
     //printf("[%s] callback took %f\n", name_.c_str(), good_duration);
   }
   
-  // todo need to run timeouts until end of playback
+  // todo need to run timeouts until end of playback or simulation
+  // for this to work I need the end time for simulation which we dont keep track of
   // todo whats the end time? perhaps we require it be provided at start?
   /*if (node->data->timeout > 0)
   {
@@ -731,9 +740,7 @@ call:
 exit:
   printf("[%s] exiting!\n", name_.c_str());
   
-  //todo perhaps the executor should own the block/node?
-  
-  // delete callback so it goes out of scope along with anything it captured
+  // delete callbacks so anything they capture go out of scope (such as publishers)
   node->data->do_thing = {};
   node->data->do_timeout = {};
   if (node->data->do_shutdown)

@@ -403,6 +403,9 @@ TEST(test_validation, []()
     pb_node->subscribe(&Data::msg, "/cmd", false);
     EXPECT_THROWS_MESSAGE(pb_node->subscribe(&Data::msg2, "/cmd2", true),
                   "Cannot configure a topic as driving with a timer block.");
+    
+    // not allowed to set a timeout on a timer
+    EXPECT_THROWS_TYPE(pb_node->timeout(1.0, [](pubsub::Time){}), std::invalid_argument);
 
     // test throw if someone creates a timer with an invalid rate
     EXPECT_THROWS_TYPE(std::make_unique<PipelineTimer<Data>>("sim", 0.0), std::invalid_argument);
@@ -430,6 +433,15 @@ TEST(test_validation, []()
 
     context.add_node(std::move(node1));
     EXPECT_THROWS_TYPE(context.add_node(std::move(node2)), std::runtime_error);
+
+    // a block must have a driving topic or we throw (the block would do nothing otherwise)
+    auto node3 = std::make_unique<PipelineBlock<Data>>("sim4");
+    node3->subscribe(&Data::vec, 0, "/cmd10", false);
+    EXPECT_THROWS_TYPE(context.add_node(std::move(node3)), std::runtime_error);
+    
+    // we also throw an exception if two nodes in a context have the same name
+    context.add_node(new PipelineTimer<Data>("duplicate", 1.0));
+    EXPECT_THROWS_TYPE(context.add_node(new PipelineTimer<Data>("duplicate", 1.0)), std::runtime_error)
   }
 });
 

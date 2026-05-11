@@ -125,6 +125,10 @@ struct Block
   
   inline void timeout(double timeout_sec, std::function<void(pubsub::Time)> cb)
   {
+    if (data->is_timer)
+    {
+      throw std::invalid_argument("Cannot configure a timeout on a timer.");
+    }
     data->do_timeout = cb;
     data->timeout = timeout_sec;
   }
