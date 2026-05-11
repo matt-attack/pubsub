@@ -16,7 +16,7 @@ set_property(TARGET pubsub_msg_gen PROPERTY CXX_STANDARD 11)
 # Nodelet manager
 add_executable(nodelet_manager "nodelet_manager.cpp")
 target_include_directories(nodelet_manager PUBLIC include/)
-target_link_libraries(nodelet_manager pubsub pubsub_cpp ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(nodelet_manager pubsub_pipeline ${CMAKE_THREAD_LIBS_INIT})
 set_property(TARGET nodelet_manager PROPERTY CXX_STANDARD 11)
 
 # This is used to generate messages for a package
