@@ -364,7 +364,7 @@ void Context::thread_playback(Block* node, pubsub::Time start_time, pubsub::Time
         else if (!msg.message)
         {
           // its a placeholder, wait for the real message
-          printf("[%s] found placeholder on topic %s at time %li, waiting for real message\n", name_.c_str(), sub.topic.c_str(), msg.time.usec);
+          printf("[%s] found placeholder on topic %s at time %f, waiting for real message\n", name_.c_str(), sub.topic.c_str(), msg.time.usec/1e6);
           break;
         }
 
@@ -535,10 +535,11 @@ void Context::thread_playback(Block* node, pubsub::Time start_time, pubsub::Time
 
     //printf("decremented references on driving to %i\n", driving_msg->remaining);
     driving_msg->remaining--;
+    //driving_msg->owners.erase(name_);// for debugging
     if (driving_msg->remaining == 0)
     {
       // remove the sample
-      //printf("[%s] freeing sample at %f on topic %s\n", name_.c_str(), driving_copy.time.toSec(), driving.c_str());
+      //printf("[%s] freeing sample at %f on topic %s\n", name_.c_str(), driving_copy.time.toSec(), driving_sub->topic.c_str());
       
       streams[driving_sub->topic].samples.erase(*driving_msg);
       //printf("freed message on topic %s %li left\n", driving_sub->topic.c_str(), streams[driving].samples.size());
@@ -665,6 +666,7 @@ void Context::thread_playback(Block* node, pubsub::Time start_time, pubsub::Time
           {
             // remove references
             msg.remaining--;
+            //msg.owners.erase(name_); // for debugging
             if (msg.remaining == 0)
             {
               // remove somehow
@@ -673,7 +675,7 @@ void Context::thread_playback(Block* node, pubsub::Time start_time, pubsub::Time
               continue;
             }
           }
-          else
+          else if (msg.index > best_index)
           {
             break;
           }

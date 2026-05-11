@@ -20,6 +20,7 @@ struct Sample
   int32_t index;
   
   std::shared_ptr<HolderBase> message;
+  // mutable std::set<std::string> owners;// for debugging refcounting
   
   bool operator <(const Sample& left) const {
     return time < left.time;

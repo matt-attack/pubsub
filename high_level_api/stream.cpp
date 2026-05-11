@@ -12,9 +12,17 @@ void Stream::enqueue_placeholders(pubsub::Time time)
     Sample s2;
     s2.remaining = stream.subscribers.size();
     s2.time = time;// todo when I have latency take that into account
-    s2.index = stream.index_counter++;
+    s2.index = stream.index_counter;
     s2.message = {};// placeholder
-    stream.samples.insert(s2);
+    auto res = stream.samples.insert(s2);
+    if (res.second)
+    {
+      stream.index_counter++;
+    }
+    else
+    {
+      printf("already had placeholder at this time on topic %s\n", topic.c_str());
+    }
   }
 }
 
@@ -71,6 +79,11 @@ void Stream::enqueue_holder(pubsub::Time time, HolderBase* msg)
   s.time = time;
   //s.index = index_counter++;
   s.message.reset(msg);
+  // for debugging refcounting
+  /*for (auto& sub: subscribers)
+  {
+    s.owners.insert(sub->name);
+  }*/
   stream_mutex.lock();
   
   // check if theres a placeholder I need to replace
