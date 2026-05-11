@@ -59,50 +59,51 @@ public:
   inline void publish_end() const;
 };
 
+struct RealBlock
+{
+  std::function<void(pubsub::Time, void*)> do_thing;
+  std::function<void(pubsub::Time)> do_timeout;
+  std::function<void()> do_shutdown;
+  std::condition_variable cv;
+  std::vector<Sub> subs;
+
+  // queue for callbacks, used in live mode
+  std::deque<std::pair<pubsub::Time, std::unique_ptr<HolderBase>>> queue;
+  bool is_timer = false;
+  double timeout = -1.0;
+
+  std::map<std::string, std::atomic<int>> counts;
+  std::vector<Sub> driving;
+
+  std::vector<pubsub::SubscriberBase*> subscribers;
+  
+  Context* context = 0;
+
+  std::vector<std::function<void(Context*)>> to_add;
+  std::map<std::string, std::shared_ptr<pubsub::PublisherBase>> pubs;
+
+  RealBlock()
+  {
+    
+  }
+
+  ~RealBlock() {
+    printf("real block out of scope\n");
+    for (auto sub: subscribers) {
+      delete sub;
+    }
+  }
+};
+
 struct Block
 {
-  struct RealBlock
-  {
-    std::function<void(pubsub::Time, void*)> do_thing;
-    std::function<void(pubsub::Time)> do_timeout;
-    std::function<void()> do_shutdown;
-    std::condition_variable cv;
-    std::vector<Sub> subs;
-    
-    // queue for callbacks, used in live mode
-    std::deque<std::pair<pubsub::Time, std::unique_ptr<HolderBase>>> queue;
-    bool is_timer = false;
-    double timeout = -1.0;
-    
-    std::map<std::string, std::atomic<int>> counts;
-    std::vector<Sub> driving;
-    
-    std::vector<pubsub::SubscriberBase*> subscribers;
-    
-    std::vector<std::function<void(Context*)>> to_add;
-    std::map<std::string, std::shared_ptr<pubsub::PublisherBase>> pubs;
-    
-    RealBlock()
-    {
-     
-    }
-    
-    ~RealBlock() {
-      printf("real block out of scope\n");
-      for (auto sub: subscribers) {
-        delete sub;
-      }
-    }
-  };
-
   // Holder for callback data
   std::shared_ptr<HolderBase> holder;
   std::shared_ptr<RealBlock> data;
   double rate = 0.0;
   std::string name;
-  Context* context = 0;
   
-  std::function<void()> on_context;
+  std::function<void(Context*)> on_context;
   
   Block(const std::string& name) : name(name)
   {
@@ -140,11 +141,11 @@ struct Block
 void Block::set_context(Context* ctx)
 { 
   // init everything with the context
-  context = ctx;
+  data->context = ctx;
   
   if (on_context)
   {
-    on_context();
+    on_context(ctx);
   }
   
   for (const auto& item: data->to_add)
@@ -172,7 +173,7 @@ public:
 
     auto& block = *this;
     block.holder.reset(new Holder());
-    block.data.reset(new Block::RealBlock());
+    block.data.reset(new RealBlock());
     block.data->is_timer = false;
     update([this](const T& msg, pubsub::Time time) { update(msg, time); });
   }
@@ -217,7 +218,7 @@ PipelineTimer<T>::PipelineTimer(const std::string& name, double rate)
     
   auto& block = *this;
   block.holder.reset(new Holder());
-  block.data.reset(new Block::RealBlock());
+  block.data.reset(new RealBlock());
   block.data->is_timer = true;
   block.rate = rate;
 
@@ -230,7 +231,7 @@ PipelineTimer<T>::PipelineTimer(const std::string& name, double rate)
     
     std::unique_lock<std::mutex> lk(context->stream_mutex);
     auto& stream = context->streams[timer_name];
-    stream.subscribers.push_back(this);
+    stream.subscribers.push_back(this->data);
     stream.topic = timer_name;
     stream.publishers++;
   });
@@ -250,7 +251,11 @@ struct MockNode: public PipelineBlock<int>
 
 Publisher MockNode::advertise(const std::string& topic)
 {
-  auto ctx = context;
+  auto ctx = data->context;
+  if (ctx->streams[topic].publishers > 0)
+  {
+    throw std::runtime_error("A publisher on topic '" + topic + "' already exists.");
+  }
   ctx->streams[topic].publishers++;
     
   struct XHolder: public HolderBase
@@ -287,7 +292,7 @@ Publisher MockNode::advertise(const std::string& topic)
     HolderBase* clone() override { return 0; }
   };
     
-  return Publisher(this, topic, new XHolder(topic, context));
+  return Publisher(this, topic, new XHolder(topic, data->context));
 }
 
 template <class T>
@@ -303,7 +308,7 @@ void Publisher::publish(T msg, pubsub::Time time) const
 template <class T>
 void Publisher::publish(std::shared_ptr<T> msg, pubsub::Time time) const
 {
-  auto context = node_->context;
+  auto context = node_->data->context;
   
   /*msg->header.sequence = ++
   
@@ -361,7 +366,7 @@ void Publisher::publish(std::shared_ptr<T> msg, pubsub::Time time) const
 
 void Publisher::publish(const void* ptr, pubsub::Time time, uint32_t hash) const
 {
-  auto context = node_->context;
+  auto context = node_->data->context;
   
   auto s = context->streams.find(topic_);
   if (s == context->streams.end())
@@ -389,7 +394,7 @@ void Publisher::publish(const void* ptr, pubsub::Time time, uint32_t hash) const
   
 void Publisher::publish_end() const
 {
-  auto context = node_->context;
+  auto context = node_->data->context;
   
   auto& name = node_->name;
   auto s = context->streams.find(topic_);
@@ -441,18 +446,18 @@ Publisher Block::advertise(const std::string& topic)
      
     ~XHolder() {
       // if this happens the publisher was destroyed before the context was created
-      if (!blk->context)
+      if (!blk->data->context)
       {
         return;
       }
         
       // decrement our topic count and 
       // enqueue end messages if there are no more publishers left
-      blk->context->stream_mutex.lock();
-      auto& stream = blk->context->streams[topic];
+      blk->data->context->stream_mutex.lock();
+      auto& stream = blk->data->context->streams[topic];
       stream.publishers--;
       auto pubs_left = stream.publishers;
-      blk->context->stream_mutex.unlock();
+      blk->data->context->stream_mutex.unlock();
       printf("removing publisher %s\n", topic.c_str());
       if (pubs_left == 0)
       {
@@ -498,7 +503,7 @@ void Block::subscribe(T offset, int index, const std::string& topic, bool drivin
   {
     std::unique_lock<std::mutex> lk(context->stream_mutex);
     auto& stream = context->streams[topic];
-    stream.subscribers.push_back(this);
+    stream.subscribers.push_back(this->data);
     stream.topic = topic;
     stream.type = MsgT::GetDefinition()->name;
     if (stream.hash)
@@ -641,7 +646,7 @@ void Block::subscribe(T offset, const std::string& topic, bool driving)
   data->to_add.push_back([topic, this, cb_holder, message_dest, driving](Context* context)
   {
     auto& stream = context->streams[topic];
-    stream.subscribers.push_back(this);
+    stream.subscribers.push_back(this->data);
     stream.topic = topic;
     stream.type = MsgT::GetDefinition()->name;
     if (stream.hash)

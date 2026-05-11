@@ -451,10 +451,10 @@ TEST(test_placeholders, []()
   auto& s1 = streams["/data"];
   s1.topic = "/data";
   s1.driven_topics.push_back("/driven");
-  s1.subscribers.push_back(pb_node.get());
+  s1.subscribers.push_back(pb_node->data);
   auto& s2 = streams["/driven"];
   s2.topic = "/driven";
-  s2.subscribers.push_back(pb_node.get());
+  s2.subscribers.push_back(pb_node->data);
 
   struct Holder: public HolderBase
   {

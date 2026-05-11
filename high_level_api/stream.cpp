@@ -60,8 +60,8 @@ void Stream::enqueue_end()
     
   for (const auto& sub: subscribers)
   {
-    sub->data->counts[topic]++;
-    sub->data->cv.notify_one();
+    sub->counts[topic]++;
+    sub->cv.notify_one();
   }
 }
 
@@ -69,6 +69,7 @@ void Stream::enqueue_holder(pubsub::Time time, HolderBase* msg)
 {
   if (subscribers.size() == 0)
   {
+    delete msg;
     return;
   }
   auto context = subscribers[0]->context;
@@ -156,8 +157,8 @@ void Stream::enqueue_holder(pubsub::Time time, HolderBase* msg)
   for (const auto& sub: subscribers)
   {
     //printf("enqueued with %s\n", sub.parent->name.c_str());
-    sub->data->counts[topic]++;
-    sub->data->cv.notify_one();
+    sub->counts[topic]++;
+    sub->cv.notify_one();
   }
   
   // make sure we dont get too far ahead of the rest of the system

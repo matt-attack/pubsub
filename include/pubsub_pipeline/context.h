@@ -15,6 +15,7 @@
 class MockNode;
 class Publisher;
 struct Stream;
+class Block;
 class Context
 {
   friend class MockNode;

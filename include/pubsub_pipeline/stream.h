@@ -28,11 +28,11 @@ struct Sample
 };
 
 // Stream of message samples in time order
-class Block;
+class RealBlock;
 struct Stream
 {
   std::set<Sample> samples;
-  std::vector<Block*> subscribers;
+  std::vector<std::shared_ptr<RealBlock>> subscribers;
   std::string topic;
   std::string type;
   

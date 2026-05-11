@@ -188,7 +188,9 @@ void Context::stop()
 void Context::abort()
 {
   // shutdown all threads
+  stream_mutex.lock();
   running = false;
+  stream_mutex.unlock();
   node_mutex.lock();
   for (const auto& block: nodes_)
   {
@@ -205,7 +207,7 @@ void Context::thread_live(Block* node)
 {
   std::string name_ = node->name;
   int idx = 0;
-  auto context = node->context;
+  auto context = node->data->context;
   
   if (node->rate > 0)
   {
@@ -283,7 +285,7 @@ void Context::thread_playback(Block* node, pubsub::Time start_time, pubsub::Time
     return;
   }
   // we are a thread!
-  auto ctx = node->context;
+  auto ctx = node->data->context;
   auto& streams = ctx->streams;
   
   // todo need to get the start time of playback for this to work correctly
