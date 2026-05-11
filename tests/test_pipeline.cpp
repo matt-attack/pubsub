@@ -45,7 +45,6 @@ TEST(test_playback_basic, []()
   context.start_playback(pubsub::Time(1), pubsub::Time(2));
   
   //todo test throw if someone creates a pub after start
-  //todo test throw if someone creates a timer with an invalid rate
   
   auto pose = pubsub::msg::IntSharedPtr(new pubsub::msg::Int);
   pose->value = 0;
@@ -395,17 +394,42 @@ TEST(test_validation, []()
   struct Data
   {
     pubsub::msg::Int::SharedPtr msg, msg2;
+    std::vector<pubsub::msg::Int::SharedPtr> vec;
   };
 
   {
     auto pb_node = std::make_unique<PipelineTimer<Data>>("sim", 1.0);
     //todo maybe dont even give the option to a timer block to do this
-    pb_node->subscribe(&Data::msg, "/cmd2", false);
-    EXPECT_THROWS([&]() { pb_node->subscribe(&Data::msg, "/cmd2", true); },
+    pb_node->subscribe(&Data::msg, "/cmd", false);
+    EXPECT_THROWS_MESSAGE(pb_node->subscribe(&Data::msg2, "/cmd2", true),
                   "Cannot configure a topic as driving with a timer block.");
 
-    //todo should throw if duplicate subs are added
-    //also, lets simplify expect throws
+    // test throw if someone creates a timer with an invalid rate
+    EXPECT_THROWS_TYPE(std::make_unique<PipelineTimer<Data>>("sim", 0.0), std::invalid_argument);
+    EXPECT_THROWS_TYPE(std::make_unique<PipelineTimer<Data>>("sim", -1.0), std::invalid_argument);
+    
+    // todo should throw if duplicate subs are added
+    //should throw if either topic or the pointer is the same
+    EXPECT_THROWS_TYPE(pb_node->subscribe(&Data::msg2, "/cmd", false), std::runtime_error);
+    EXPECT_THROWS_TYPE(pb_node->subscribe(&Data::msg, "/cmd2", false), std::runtime_error);
+    
+    // now check for the same with vectors. first check for duplicate name
+    EXPECT_THROWS_TYPE(pb_node->subscribe(&Data::vec, 0, "/cmd", false), std::runtime_error);
+    
+    // then check for failure if offset and index is the same
+    pb_node->subscribe(&Data::vec, 0, "/cmd10", false);
+    pb_node->subscribe(&Data::vec, 1, "/cmd11", false);
+    EXPECT_THROWS_TYPE(pb_node->subscribe(&Data::vec, 1, "/cmd12", false), std::runtime_error);
+    
+    // should throw if multiple things publish to the same topic
+    auto node1 = std::make_unique<PipelineTimer<Data>>("sim2", 1.0);
+    node1->advertise<pubsub::msg::Int>("/topic");
+    
+    auto node2 = std::make_unique<PipelineTimer<Data>>("sim3", 1.0);
+    node2->advertise<pubsub::msg::Int>("/topic");
+    
+    context.add_node(std::move(node1));
+    EXPECT_THROWS_TYPE(context.add_node(std::move(node2)), std::runtime_error);
   }
 });
 

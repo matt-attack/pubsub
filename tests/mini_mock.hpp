@@ -84,27 +84,73 @@ static int mini_mock_failed_conditions_count = 0;
     } \
 }
 
+// If an exception is not thrown
+// - an automatic message will be printed (with file name and line number)
+// - the test continues
+// - the test will fail at the end
+#define EXPECT_THROWS(statement) \
+  { \
+    bool threw = false; \
+    try { \
+      statement; \
+    } catch (std::exception& e) { \
+       threw = true; \
+       std::cout << GREEN << "    (" #statement << ") threw as expected with message: \"" << err.what() << "\""; \
+    } \
+    if (!threw) { \
+      mini_mock_failed_conditions_count++; \
+      std::cout << RED << "    (" #statement << ") failed to throw"; \
+    } \
+    std::cout << " at " <<__FILE__ << ":"<< __LINE__ << END_COLOR << '\n'; \
+  }
+
 // If an exception matching the provided message is not thrown
 // - an automatic message will be printed (with file name and line number)
 // - the test continues
 // - the test will fail at the end
-void EXPECT_THROWS(std::function<void()> function, const std::string& message)
-{
-	bool threw = false;
-	try
-	{
-	  function();
-	}
-	catch (std::exception& err)
-	{
-	  threw = true;
-	  if (message.length())
-	  {
-	    EXPECT(std::string(err.what()) == message);
-	  }
-	}
-	EXPECT(threw);
-}
+#define EXPECT_THROWS_MESSAGE(statement, message) \
+  { \
+    bool threw = false; \
+    try { \
+      statement; \
+    } catch (std::exception& err) { \
+       threw = true; \
+       if (std::string(err.what()) != message) { \
+         std::cout << RED << "    (" #statement << ") threw unexpected message: \"" << err.what() << "\""; \
+       } else { \
+         std::cout << GREEN << "    (" #statement << ") threw as expected with message: \"" << err.what() << "\""; \
+       }\
+    } \
+    if (!threw) { \
+      mini_mock_failed_conditions_count++; \
+      std::cout << RED << "    (" #statement << ") failed to throw"; \
+    } \
+    std::cout << " at " <<__FILE__ << ":"<< __LINE__ << END_COLOR << '\n'; \
+  }
+
+// If an exception matching the provided type is not thrown
+// - an automatic message will be printed (with file name and line number)
+// - the test continues
+// - the test will fail at the end
+#define EXPECT_THROWS_TYPE(statement, type) \
+  { \
+    bool threw = false; \
+    try { \
+      statement; \
+    } catch (type& err) { \
+      threw = true; \
+      std::cout << GREEN << "    (" #statement << ") threw as expected with message: \"" << err.what() << "\""; \
+    } catch (...) { \
+      threw = true; \
+      mini_mock_failed_conditions_count++; \
+      std::cout << RED << "    (" #statement << ") failed to throw expected type"; \
+    }\
+    if (!threw) { \
+      mini_mock_failed_conditions_count++; \
+      std::cout << RED << "    (" #statement << ") failed to throw"; \
+    } \
+    std::cout << " at " <<__FILE__ << ":"<< __LINE__ << END_COLOR << '\n'; \
+  }
 
 // If condition is false :
 // - the given message will be printed

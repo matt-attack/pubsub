@@ -63,9 +63,7 @@ TEST(test_fixed_string_cpp, []() {
 	// test what happens when you assign too much
 	{
 	  pubsub::FixedString<5> string;
-	  EXPECT_THROWS([&](){
-	    string = "hello paul";
-	  }, "Too big.");
+	  EXPECT_THROWS_MESSAGE(string = "hello paul", "Too big.");
 	}
 });
 

@@ -19,9 +19,13 @@ struct Sub
   std::string topic;
   // index of last consumed message
   int32_t last_msg_idx = -1;// todo should I use int64?
-  
+
   std::function<void(const void* msg, pubsub::Time time)> cb;
   std::function<void()> clear;
+
+  // used to check for duplicate/overlapping subscribers
+  void* offset = 0;
+  int index = 0;
 };
 
 struct Block;
@@ -412,14 +416,13 @@ Publisher Block::advertise(const std::string& topic)
 {
   data->to_add.push_back([topic, this](Context* context)
   {
+    if (context->streams[topic].publishers > 0)
+    {
+      throw std::runtime_error("Topic '" + topic + "' is published in multiple nodes.");
+    }
     if (context->node && (!context->is_playback || context->always_publish))
     {
-      auto pub = data->pubs.find(topic);
-      if (pub == data->pubs.end())
-      {
-        data->pubs[topic] = std::shared_ptr<pubsub::PublisherBase>(new pubsub::Publisher<T>(*context->node, topic));
-        pub = data->pubs.find(topic);
-      }
+      data->pubs[topic] = std::shared_ptr<pubsub::PublisherBase>(new pubsub::Publisher<T>(*context->node, topic));
     }
     else
     {
@@ -562,8 +565,35 @@ void Block::subscribe(T offset, int index, const std::string& topic, bool drivin
     throw std::invalid_argument("Cannot configure a topic as driving with a timer block.");
   }
   
+  // throw if a topic with this name exists in either driving or subs
+  for (const auto& sub: cb_holder->driving)
+  {
+    if (sub.topic == topic)
+    {
+      throw std::runtime_error("Already subscribed to topic '" + topic + "' on this node.");
+    }
+    if (sub.offset == (void*)message_dest && sub.index == index)
+    {
+      throw std::runtime_error("A topic '" + sub.topic + "' on this node is already associated with this element.");
+    }
+  }
+  
+  for (const auto& sub: cb_holder->subs)
+  {
+    if (sub.topic == topic)
+    {
+      throw std::runtime_error("Already subscribed to topic '" + topic + "' on this node.");
+    }
+    if (sub.offset == (void*)message_dest && sub.index == index)
+    {
+      throw std::runtime_error("A topic '" + sub.topic + "' on this node is already associated with this element.");
+    }
+  }
+  
   Sub s;
   s.topic = topic;
+  s.offset = (void*)message_dest;
+  s.index = index;
   s.cb = [message_dest, index](const void* msg, pubsub::Time time)
   {
     //printf("stored message\n");
@@ -672,8 +702,34 @@ void Block::subscribe(T offset, const std::string& topic, bool driving)
     throw std::invalid_argument("Cannot configure a topic as driving with a timer block.");
   }
   
+  // throw if a topic with this name exists in either driving or subs
+  for (const auto& sub: cb_holder->driving)
+  {
+    if (sub.topic == topic)
+    {
+      throw std::runtime_error("Already subscribed to topic '" + topic + "' on this node.");
+    }
+    if (sub.offset == (void*)message_dest)
+    {
+      throw std::runtime_error("A topic '" + sub.topic + "' on this node is already associated with this element.");
+    }
+  }
+  
+  for (const auto& sub: cb_holder->subs)
+  {
+    if (sub.topic == topic)
+    {
+      throw std::runtime_error("Already subscribed to topic '" + topic + "' on this node.");
+    }
+    if (sub.offset == (void*)message_dest)
+    {
+      throw std::runtime_error("A topic '" + sub.topic + "' on this node is already associated with this element.");
+    }
+  }
+  
   Sub s;
   s.topic = topic;
+  s.offset = (void*)message_dest;
   s.cb = [message_dest](const void* msg, pubsub::Time time)
   {
     //printf("stored message\n");
