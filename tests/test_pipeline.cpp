@@ -40,7 +40,7 @@ TEST(test_playback_basic, []()
   context.add_block(std::move(pb_node));
   
   // Create mock node to publish and drive the execution of the pipeline
-  MockNode mock(context);
+  MockBlock mock(context);
   auto pub = std::make_shared<Publisher>(mock.advertise("/data"));
   
   // Actually start receiving nodes
@@ -95,7 +95,7 @@ TEST(test_playback_multidriving, []()
   context.add_block(std::move(pb_node));
   
   // Create mock node to publish and drive the execution of the pipeline
-  MockNode mock(context);
+  MockBlock mock(context);
   auto pub1 = std::make_shared<Publisher>(mock.advertise("/data1"));
   auto pub2 = std::make_shared<Publisher>(mock.advertise("/data2"));
   
@@ -157,7 +157,7 @@ TEST(test_playback_multidriving, []()
   context.add_block(std::move(pb_node));
   
   // Create mock node to publish and drive the execution of the pipeline
-  MockNode mock(context);
+  MockBlock mock(context);
   auto pub = std::make_shared<Publisher>(mock.advertise("/data"));
   
   // Actually start receiving nodes
@@ -211,7 +211,7 @@ TEST(test_playback_timeout, []()
   context.add_block(std::move(pb_node));
   
   // Create mock node to publish and drive the execution of the pipeline
-  MockNode mock(context);
+  MockBlock mock(context);
   auto pub = std::make_shared<Publisher>(mock.advertise("/data"));
   
   // Actually start receiving nodes
@@ -281,7 +281,7 @@ TEST(test_playback_chain, []()
     context.add_block(std::move(pb_node2));
   }
   
-  MockNode mock(context);
+  MockBlock mock(context);
   auto pub = std::make_shared<Publisher>(mock.advertise("/data"));
   
   // Actually start receiving nodes
@@ -322,7 +322,7 @@ TEST(test_playback_timer_sub, []()
   });
   context.add_block(pb_node);
   
-  MockNode mock(context);
+  MockBlock mock(context);
   auto pub = std::make_shared<Publisher>(mock.advertise("/data"));
   
   context.start_playback(pubsub::Time(10, 0), pubsub::Time(21, 0));
@@ -360,7 +360,7 @@ TEST(test_playback_timer_subscriber, []() {
   }
   context.add_block(std::move(pb_node));
   
-  MockNode mock(context);
+  MockBlock mock(context);
   auto pub = std::make_shared<Publisher>(mock.advertise("/data"));
   
   context.start_playback(pubsub::Time(10, 0), pubsub::Time(21, 0));
@@ -596,7 +596,7 @@ TEST(test_stop, []()
     context.add_block(std::move(pb_node));
   }
   
-  MockNode mock(context);
+  MockBlock mock(context);
   auto pub = std::make_shared<Publisher>(mock.advertise("/data"));
   
   // Actually start receiving nodes
@@ -630,20 +630,10 @@ TEST(test_abort, []()
     context.add_block(std::move(pb_node));
   }
   
-  MockNode mock(context);
-  auto pub = std::make_shared<Publisher>(mock.advertise("/data"));
+  MockBlock mock(context);
   
   // Actually start receiving nodes
   context.start_playback(pubsub::Time(1), pubsub::Time(11, 0));
-  
-  // nothing subscribes to these, but they force timer updates between 0.999999 and 10.999999 seconds
-  auto pose = pubsub::msg::IntSharedPtr(new pubsub::msg::Int);
-  pose->value = 0;
-  pub->publish(*pose, pubsub::Time(1, 0));
-  pub->publish(*pose, pubsub::Time(10, 0));
-  
-  // make all publishers go out of scope, this automatically ends timers too
-  pub.reset();
   
   // wait for system to run until end
   context.join();
@@ -673,7 +663,7 @@ TEST(test_abort2, []()
   }
   
   // Advertise but don't publish on the requested topic so that it gets stuck waiting
-  MockNode mock(context);
+  MockBlock mock(context);
   auto pub = std::make_shared<Publisher>(mock.advertise("/data"));
   
   // Actually start receiving nodes
@@ -754,7 +744,7 @@ TEST(test_simulation_loop_2, []()
     context.add_block(std::move(pb_node));
   }
 
-  MockNode mock(context);
+  MockBlock mock(context);
 
   // Actually start the simulation
   context.start_playback(pubsub::Time(1), pubsub::Time(11, 0));

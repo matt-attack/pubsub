@@ -16,14 +16,14 @@ namespace pubsub
 namespace pipeline
 {
 
-class MockNode;
+class MockBlock;
 class Publisher;
 struct Stream;
 class BlockBase;
 // Defines an operating environment for a series of Blocks, either playback or live
 class Context
 {
-  friend class MockNode;
+  friend class MockBlock;
   friend class Publisher;
   friend struct Stream;
   friend class BlockBase;

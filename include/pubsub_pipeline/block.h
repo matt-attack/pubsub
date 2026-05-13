@@ -274,16 +274,16 @@ Timer<T>::Timer(const std::string& name, double rate)
 }
 
 // Dummy node that has no blocks and drives execution in playback
-struct MockNode: public Block<int>
+struct MockBlock: public Block<int>
 {
-  MockNode(Context& ctx) : Block<int>("mock") {
+  MockBlock(Context& ctx) : Block<int>("mock") {
     set_context(&ctx);
   }
   
   inline Publisher advertise(const std::string& topic);
 };
 
-Publisher MockNode::advertise(const std::string& topic)
+Publisher MockBlock::advertise(const std::string& topic)
 {
   auto ctx = data->context;
   if (ctx->streams[topic].publishers > 0)
