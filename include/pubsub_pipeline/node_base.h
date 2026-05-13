@@ -14,6 +14,11 @@
 
 #include <pthread.h>
 
+namespace pubsub
+{
+namespace pipeline
+{
+
 struct Sub
 {
   std::string topic;
@@ -28,10 +33,10 @@ struct Sub
   int index = 0;
 };
 
-struct Block;
+struct BlockBase;
 class Publisher
 {
-  Block* node_;
+  BlockBase* block_;
   std::string topic_;
 
   // used to clear the publisher when we go out of scope
@@ -42,8 +47,8 @@ public:
   
   }
 
-  Publisher(Block* b, std::string t, HolderBase* ref) {
-    node_ = b;
+  Publisher(BlockBase* b, std::string t, HolderBase* ref) {
+    block_ = b;
     topic_ = t;
     reference_.reset(ref);
   }
@@ -59,7 +64,7 @@ public:
   inline void publish_end() const;
 };
 
-struct RealBlock
+struct BlockData
 {
   std::function<void(pubsub::Time, void*)> do_thing;
   std::function<void(pubsub::Time)> do_timeout;
@@ -82,38 +87,40 @@ struct RealBlock
   std::vector<std::function<void(Context*)>> to_add;
   std::map<std::string, std::shared_ptr<pubsub::PublisherBase>> pubs;
 
-  RealBlock()
+  BlockData()
   {
     
   }
 
-  ~RealBlock() {
+  ~BlockData() {
     printf("real block out of scope\n");
-    for (auto sub: subscribers) {
+    for (auto sub: subscribers)
+    {
       delete sub;
     }
   }
 };
 
-struct Block
+struct BlockBase
 {
   // Holder for callback data
   std::shared_ptr<HolderBase> holder;
-  std::shared_ptr<RealBlock> data;
+  std::shared_ptr<BlockData> data;
   double rate = 0.0;
   std::string name;
   
   std::function<void(Context*)> on_context;
   
-  Block(const std::string& name) : name(name)
+  BlockBase(const std::string& name) : name(name)
   {
     
   }
   
   inline void set_context(Context* ctx);
   
-  virtual ~Block() {}
-    
+  virtual ~BlockBase() {}
+
+protected:
   template <typename T>
   void subscribe(T offset, const std::string& topic, bool driving = false);
   
@@ -123,26 +130,30 @@ struct Block
   template <typename T>
   Publisher advertise(const std::string& topic);
   
-  inline void timeout(double timeout_sec, std::function<void(pubsub::Time)> cb)
+  inline void set_timeout(double timeout_sec, std::function<void(pubsub::Time)> cb = {})
   {
     if (data->is_timer)
     {
       throw std::invalid_argument("Cannot configure a timeout on a timer.");
     }
-    data->do_timeout = cb;
+    if (cb)
+    {
+      data->do_timeout = cb;
+    }
     data->timeout = timeout_sec;
   }
   
   template <typename T>
-  void update(std::function<void(const T&, pubsub::Time time)> cb);
-  
+  void set_update(std::function<void(const T&, pubsub::Time time)> cb);
+
+public:
   inline void set_on_shutdown(std::function<void()> cb)
   {
     data->do_shutdown = cb;
   }
 };
 
-void Block::set_context(Context* ctx)
+void BlockBase::set_context(Context* ctx)
 { 
   // init everything with the context
   data->context = ctx;
@@ -160,11 +171,15 @@ void Block::set_context(Context* ctx)
 }
 
 template <typename T>
-class PipelineBlock: public Block
+class Block: public BlockBase
 {
 public:
-  PipelineBlock(const std::string& name)
-    : Block(name)
+  using BlockBase::subscribe;
+  using BlockBase::set_timeout;
+  using BlockBase::advertise;
+  
+  Block(const std::string& name)
+    : BlockBase(name)
   {
     struct Holder: public HolderBase
     {
@@ -175,36 +190,52 @@ public:
       HolderBase* clone() override { return new Holder(*this); }
     };
 
-    auto& block = *this;
-    block.holder.reset(new Holder());
-    block.data.reset(new RealBlock());
-    block.data->is_timer = false;
-    update([this](const T& msg, pubsub::Time time) { update(msg, time); });
+    holder.reset(new Holder());
+    data.reset(new BlockData());
+    data->is_timer = false;
+    set_update([this](const T& msg, pubsub::Time time) { update(msg, time); });
+    set_timeout(-1.0, [this](pubsub::Time time) { timeout(time); });
   }
+
+  virtual void timeout(pubsub::Time time) {}
   
   virtual void update(const T& message, pubsub::Time time) {}
   
-  void update(std::function<void(const T&, pubsub::Time time)> cb) {
-    Block::update<T>(cb);
+  void set_update(std::function<void(const T&, pubsub::Time time)> cb) {
+    BlockBase::set_update<T>(cb);
   }
 };
 
 template <typename T>
-class PipelineTimer: public Block
+class Timer: public BlockBase
 {
 public:
-  PipelineTimer(const std::string& name, double rate);
+  using BlockBase::advertise;
+
+  Timer(const std::string& name, double rate);
   
   virtual void update(const T& message, pubsub::Time time) {}
   
-  void update(std::function<void(const T&, pubsub::Time time)> cb) {
-    Block::update<T>(cb);
+  template <typename T2>
+  void subscribe(T2 offset, const std::string& topic)
+  {
+    BlockBase::subscribe(offset, topic, false);
+  }
+  
+  template <typename T2>
+  void subscribe(T2 offset, int index, const std::string& topic)
+  {
+    BlockBase::subscribe(offset, index, topic, false);
+  }
+  
+  void set_update(std::function<void(const T&, pubsub::Time time)> cb) {
+    BlockBase::set_update<T>(cb);
   }
 };
 
 template <class T>
-PipelineTimer<T>::PipelineTimer(const std::string& name, double rate)
-  : Block(name)
+Timer<T>::Timer(const std::string& name, double rate)
+  : BlockBase(name)
 {
   struct Holder: public HolderBase
   {
@@ -219,12 +250,11 @@ PipelineTimer<T>::PipelineTimer(const std::string& name, double rate)
   {
     throw std::invalid_argument("Cannot have a timer with a rate <= 0.0");
   }
-    
-  auto& block = *this;
-  block.holder.reset(new Holder());
-  block.data.reset(new RealBlock());
-  block.data->is_timer = true;
-  block.rate = rate;
+
+  holder.reset(new Holder());
+  data.reset(new BlockData());
+  data->is_timer = true;
+  rate = rate;
 
   data->to_add.push_back([this, rate](Context* context)
   { 
@@ -240,13 +270,13 @@ PipelineTimer<T>::PipelineTimer(const std::string& name, double rate)
     stream.publishers++;
   });
 
-  update([this](const T& msg, pubsub::Time time) { update(msg, time); });
+  set_update([this](const T& msg, pubsub::Time time) { update(msg, time); });
 }
 
 // Dummy node that has no blocks and drives execution in playback
-struct MockNode: public PipelineBlock<int>
+struct MockNode: public Block<int>
 {
-  MockNode(Context& ctx) : PipelineBlock<int>("mock") {
+  MockNode(Context& ctx) : Block<int>("mock") {
     set_context(&ctx);
   }
   
@@ -312,7 +342,7 @@ void Publisher::publish(T msg, pubsub::Time time) const
 template <class T>
 void Publisher::publish(std::shared_ptr<T> msg, pubsub::Time time) const
 {
-  auto context = node_->data->context;
+  auto context = block_->data->context;
   
   /*msg->header.sequence = ++
   
@@ -325,7 +355,7 @@ void Publisher::publish(std::shared_ptr<T> msg, pubsub::Time time) const
    d. block execution id - this may not always be present, probably need to store this in a threadlocal
    e. block name*/
   
-  auto& name = node_->name;
+  auto& name = block_->name;
 
   auto s = context->streams.find(topic_);
   if (s == context->streams.end())
@@ -338,7 +368,7 @@ void Publisher::publish(std::shared_ptr<T> msg, pubsub::Time time) const
 
   if (!context->is_playback)
   {
-    auto pub = node_->data->pubs.find(topic_);
+    auto pub = block_->data->pubs.find(topic_);
     auto real_pub = (pubsub::Publisher<T>*)pub->second.get();
     real_pub->publish(msg);
   }
@@ -361,7 +391,7 @@ void Publisher::publish(std::shared_ptr<T> msg, pubsub::Time time) const
     s->second.enqueue_holder(time, h);
     if (context->always_publish)
     {
-      auto pub = node_->data->pubs.find(topic_);
+      auto pub = block_->data->pubs.find(topic_);
       auto real_pub = (pubsub::Publisher<T>*)pub->second.get();
       real_pub->publish(msg);
     }
@@ -370,7 +400,7 @@ void Publisher::publish(std::shared_ptr<T> msg, pubsub::Time time) const
 
 void Publisher::publish(const void* ptr, pubsub::Time time, uint32_t hash) const
 {
-  auto context = node_->data->context;
+  auto context = block_->data->context;
   
   auto s = context->streams.find(topic_);
   if (s == context->streams.end())
@@ -398,9 +428,9 @@ void Publisher::publish(const void* ptr, pubsub::Time time, uint32_t hash) const
   
 void Publisher::publish_end() const
 {
-  auto context = node_->data->context;
+  auto context = block_->data->context;
   
-  auto& name = node_->name;
+  auto& name = block_->name;
   auto s = context->streams.find(topic_);
   if (s == context->streams.end())
   {
@@ -421,7 +451,7 @@ void Publisher::publish_end() const
 }
 
 template <typename T>
-Publisher Block::advertise(const std::string& topic)
+Publisher BlockBase::advertise(const std::string& topic)
 {
   data->to_add.push_back([topic, this](Context* context)
   {
@@ -444,9 +474,9 @@ Publisher Block::advertise(const std::string& topic)
   struct XHolder: public HolderBase
   {
     std::string topic;
-    Block* blk;
+    BlockBase* blk;
       
-    XHolder(std::string topic, Block* blk) : topic(topic), blk(blk) {}
+    XHolder(std::string topic, BlockBase* blk) : topic(topic), blk(blk) {}
      
     ~XHolder() {
       // if this happens the publisher was destroyed before the context was created
@@ -482,7 +512,7 @@ Publisher Block::advertise(const std::string& topic)
 }
 
 template <typename T>
-void Block::update(std::function<void(const T&, pubsub::Time)> cb)
+void BlockBase::set_update(std::function<void(const T&, pubsub::Time)> cb)
 {
   this->data->do_thing = [cb](pubsub::Time time, void* hldr)
   {
@@ -492,7 +522,7 @@ void Block::update(std::function<void(const T&, pubsub::Time)> cb)
 }
 
 template <typename T>
-void Block::subscribe(T offset, int index, const std::string& topic, bool driving)
+void BlockBase::subscribe(T offset, int index, const std::string& topic, bool driving)
 {
   // offset is a vector
   typedef typename member_pointer_value<T>::type ValueT;
@@ -637,7 +667,7 @@ void Block::subscribe(T offset, int index, const std::string& topic, bool drivin
 }
 
 template <typename T>
-void Block::subscribe(T offset, const std::string& topic, bool driving)
+void BlockBase::subscribe(T offset, const std::string& topic, bool driving)
 {
   typedef typename member_pointer_value<T>::type ValueT;
   typedef typename member_pointer_class<T>::type ClassT;
@@ -762,30 +792,25 @@ void Block::subscribe(T offset, const std::string& topic, bool driving)
   printf("added %s at topic %s\n", typeid(ValueT).name(), topic.c_str());
 }
 
-extern std::map<std::string, std::function<void*()>>* loaders;
+}
+}
 
-#define CLASS_LOADER_REGISTER_CLASS_INTERNAL_WITH_MESSAGE(Derived, Base, UniqueID, Message) \
+extern std::map<std::string, std::function<void*()>>* block_loaders;
+
+#define REGISTER_BLOCK(Derived, name) \
   namespace \
   { \
-  struct ProxyExec ## UniqueID \
+  struct RegisterExec ## Derived \
   { \
-    typedef  Derived _derived; \
-    typedef  Base _base; \
-    ProxyExec ## UniqueID() \
+    RegisterExec ## Derived() \
     { \
-      if (!std::string(Message).empty()) { \
-        printf("%s", Message); \
+      if (block_loaders == 0) { \
+        block_loaders = new std::map<std::string, std::function<void*()>>(); \
       } \
-      if (loaders == 0) { \
-        loaders = new std::map<std::string, std::function<void*()>>(); \
-      } \
-      (*loaders)[ Message ] = []() { \
+      (*block_loaders)[ name ] = []() { \
         return new Derived(); \
       }; \
     } \
-private: \
   }; \
-  static ProxyExec ## UniqueID g_register_plugin_ ## UniqueID; \
+  static RegisterExec ## Derived _register_block_ ## Derived; \
   }  // namespace
-
-#define REGISTER_BLOCK(Derived, name) CLASS_LOADER_REGISTER_CLASS_INTERNAL_WITH_MESSAGE(Derived, Block, Derived, name)

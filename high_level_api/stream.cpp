@@ -1,5 +1,7 @@
-#include "pubsub_pipeline/stream.h"
-#include <pubsub_pipeline/node_base.h>
+#include <pubsub_pipeline/stream.h>
+#include <pubsub_pipeline/block.h>
+
+using pubsub::pipeline::Stream;
 
 void Stream::enqueue_placeholders(pubsub::Time time)
 {
@@ -78,7 +80,7 @@ void Stream::enqueue_holder(pubsub::Time time, HolderBase* msg)
   Sample s;
   s.remaining = subscribers.size();
   s.time = time;
-  //s.index = index_counter++;
+  // dont set index yet, we might replace a placeholder and steal that index
   s.message.reset(msg);
   // for debugging refcounting
   /*for (auto& sub: subscribers)
@@ -98,6 +100,7 @@ void Stream::enqueue_holder(pubsub::Time time, HolderBase* msg)
   if (samples.size())
   {
     auto last = samples.rbegin();
+    // if the last message is end, check the one before it to see if it was the placeholder
     if (last->is_end)
     {
       if (samples.size() > 1)
@@ -139,8 +142,6 @@ void Stream::enqueue_holder(pubsub::Time time, HolderBase* msg)
   }
   printf("looped over %i samples on topic %s\n", loops, topic.c_str());
   
-  //basically we have a read position and two write positions
-  
   // insert placeholders in other streams
   if (!found)
   {
@@ -161,7 +162,7 @@ void Stream::enqueue_holder(pubsub::Time time, HolderBase* msg)
     sub->cv.notify_one();
   }
   
-  // make sure we dont get too far ahead of the rest of the system
+  // make sure we dont get too far ahead of the rest of the system to bound memory usage
   // todo make these are changable
   const pubsub::Duration max_ahead_time(5, 0);
   const int min_ahead_size = 10;

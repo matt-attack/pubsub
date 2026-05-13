@@ -11,22 +11,27 @@
 
 #include <pubsub_cpp/Node.h>
 
-// Defines a
+namespace pubsub
+{
+namespace pipeline
+{
+
 class MockNode;
 class Publisher;
 struct Stream;
-class Block;
+class BlockBase;
+// Defines an operating environment for a series of Blocks, either playback or live
 class Context
 {
   friend class MockNode;
   friend class Publisher;
   friend struct Stream;
-  friend class Block;
+  friend class BlockBase;
   template <typename T>
-  friend class PipelineTimer;
+  friend class Timer;
   
-  static void thread_live(Block*);
-  static void thread_playback(Block*, pubsub::Time, pubsub::Time);
+  static void thread_live(BlockBase*);
+  static void thread_playback(BlockBase*, pubsub::Time, pubsub::Time);
 
   bool is_playback;
   pubsub::Node* node = 0;
@@ -35,11 +40,11 @@ class Context
   int timer_id = 0;
   bool always_publish = false;
   volatile bool run_timers = true;
-  std::vector<std::unique_ptr<Block>> nodes_;
   volatile bool running = true;
-  std::mutex node_mutex;
   
-  std::vector<std::thread> node_threads_;
+  std::mutex block_mutex_;
+  std::vector<std::unique_ptr<BlockBase>> blocks_;
+  std::vector<std::thread> block_threads_;
 public:
 
   const std::map<std::string, Stream>& get_streams()
@@ -83,30 +88,24 @@ public:
     join();
   }
 
-  void add_node(std::unique_ptr<Block>&& node);
+  void add_block(std::unique_ptr<BlockBase>&& node);
   
-  void add_node(Block* block);
+  void add_block(BlockBase* block);
   
+  // wait for all blocks to exit
   void join();
   
-  static void recurse(
-    std::map<std::string, std::vector<std::string>>& inputs_to_outputs,
-    std::vector<std::string>& out, std::string topic)
-  {
-    out.push_back(topic);
-    for (const auto& out_topic: inputs_to_outputs[topic])
-    {
-      recurse(inputs_to_outputs, out, out_topic);
-    }
-  }
-  
-  // todo make start time implicit like it is for timers
+  // Start all blocks running in this context in playback mode between the given start and end time
   void start_playback(pubsub::Time start_time, pubsub::Time end_time);
   
-  // Start all nodes and blocks running in this context
+  // Start all blocks running in this context
   void start();
   
+  // exit playback ASAP
   void abort();
   
+  // in playback, stop all timers forcing simulation to end after current cycle
   void stop();
 };
+}
+}

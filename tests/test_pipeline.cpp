@@ -9,12 +9,14 @@
 #include <pubsub/Int.msg.h>
 #include <pubsub/PointCloud.msg.h>
 
-#include <pubsub_pipeline/node_base.h>
+#include <pubsub_pipeline/block.h>
 
 #include <vector>
 #include <set>
 
 #include "mini_mock.hpp"
+
+using namespace pubsub::pipeline;
 
 TEST(test_playback_basic, []()
 {
@@ -29,13 +31,13 @@ TEST(test_playback_basic, []()
   std::vector<int> received;
 
   // Create the subscriber block
-  auto pb_node = std::make_unique<PipelineBlock<Data>>("test");
+  auto pb_node = std::make_unique<Block<Data>>("test");
   pb_node->subscribe(&Data::msg, "/data", true);
-  pb_node->update([&](const Data& data, pubsub::Time time)
+  pb_node->set_update([&](const Data& data, pubsub::Time time)
   {
     received.push_back(data.msg->value);
   });
-  context.add_node(std::move(pb_node));
+  context.add_block(std::move(pb_node));
   
   // Create mock node to publish and drive the execution of the pipeline
   MockNode mock(context);
@@ -61,8 +63,6 @@ TEST(test_playback_basic, []()
   EXPECT(received.size() == 2);
   EXPECT(received[0] == 0);
   EXPECT(received[1] == 1);
-  
-  // todo times of 0 break timers
 });
 
 TEST(test_playback_multidriving, []()
@@ -78,10 +78,10 @@ TEST(test_playback_multidriving, []()
   std::vector<std::pair<int, int>> received;
 
   // Create the subscriber block
-  auto pb_node = std::make_unique<PipelineBlock<Data>>("test");
+  auto pb_node = std::make_unique<Block<Data>>("test");
   pb_node->subscribe(&Data::msg1, "/data1", true);
   pb_node->subscribe(&Data::msg2, "/data2", true);
-  pb_node->update([&](const Data& data, pubsub::Time time)
+  pb_node->set_update([&](const Data& data, pubsub::Time time)
   {
     if (data.msg1)
     {
@@ -92,7 +92,7 @@ TEST(test_playback_multidriving, []()
       received.push_back({2, data.msg2->value});
     }
   });
-  context.add_node(std::move(pb_node));
+  context.add_block(std::move(pb_node));
   
   // Create mock node to publish and drive the execution of the pipeline
   MockNode mock(context);
@@ -120,8 +120,6 @@ TEST(test_playback_multidriving, []()
   
   EXPECT(received.size() == 4);
   
-  // todo times of 0 break timers
-  
   EXPECT(received[0].first == 1);
   EXPECT(received[0].second == 0);
   EXPECT(received[1].first == 2);
@@ -146,7 +144,7 @@ TEST(test_playback_multidriving, []()
 
   // Create the subscriber block
   volatile bool wait = true;
-  auto pb_node = std::make_unique<PipelineBlock<Data>>("test");
+  auto pb_node = std::make_unique<Block<Data>>("test");
   pb_node->subscribe(&Data::msg, "/data", true);
   pb_node->start([&](const Data& data, pubsub::Time time)
   {
@@ -156,7 +154,7 @@ TEST(test_playback_multidriving, []()
     }
     received.push_back(data.msg->value);
   });
-  context.add_node(std::move(pb_node));
+  context.add_block(std::move(pb_node));
   
   // Create mock node to publish and drive the execution of the pipeline
   MockNode mock(context);
@@ -197,20 +195,20 @@ TEST(test_playback_timeout, []()
   std::vector<pubsub::Time> timeouts;
 
   // Create the subscriber block
-  auto pb_node = std::make_unique<PipelineBlock<Data>>("test");
+  auto pb_node = std::make_unique<Block<Data>>("test");
   {
     pb_node->subscribe(&Data::msg, "/data", true);
-    pb_node->timeout(0.0005, [&](pubsub::Time timeout)
+    pb_node->set_timeout(0.0005, [&](pubsub::Time timeout)
     {
       printf("called timeout\n");
       timeouts.push_back(timeout);
     });
-    pb_node->update([&](const Data& data, pubsub::Time time)
+    pb_node->set_update([&](const Data& data, pubsub::Time time)
     {
       received.push_back(data.msg->value);
     });
   }
-  context.add_node(std::move(pb_node));
+  context.add_block(std::move(pb_node));
   
   // Create mock node to publish and drive the execution of the pipeline
   MockNode mock(context);
@@ -260,27 +258,27 @@ TEST(test_playback_chain, []()
 
   // Create the subscriber block
   {
-    auto pb_node = std::make_unique<PipelineBlock<Data>>("test");
+    auto pb_node = std::make_unique<Block<Data>>("test");
     pb_node->subscribe(&Data::msg, "/data", true);
     auto ipub = pb_node->advertise<pubsub::msg::Int>("/data2");
-    pb_node->update([ipub] (const Data& data, pubsub::Time time)
+    pb_node->set_update([ipub] (const Data& data, pubsub::Time time)
     {
       ipub.publish(data.msg, time);
     });
     // make sure ipub goes out of scope here
-    context.add_node(std::move(pb_node));
+    context.add_block(std::move(pb_node));
   }
   
   // Create the subscriber block
   
   {
-    auto pb_node2 = std::make_unique<PipelineBlock<Data>>("test2");
+    auto pb_node2 = std::make_unique<Block<Data>>("test2");
     pb_node2->subscribe(&Data::msg, "/data", true);
-    pb_node2->update([&](const Data& data, pubsub::Time time)
+    pb_node2->set_update([&](const Data& data, pubsub::Time time)
     {
       received.push_back(data.msg->value);
     });
-    context.add_node(std::move(pb_node2));
+    context.add_block(std::move(pb_node2));
   }
   
   MockNode mock(context);
@@ -316,13 +314,13 @@ TEST(test_playback_timer_sub, []()
   
   std::vector<pubsub::Time> received;
 
-  auto pb_node = std::make_unique<PipelineTimer<Data>>("test", 1.0);
-  pb_node->update([&](const Data& data, pubsub::Time time)
+  auto pb_node = new Timer<Data>("test", 1.0);
+  pb_node->set_update([&](const Data& data, pubsub::Time time)
   {
     printf("loop\n");
     received.push_back(time);
-  });// todo this is kinda annoying, have to remember to call it
-  context.add_node(std::move(pb_node));
+  });
+  context.add_block(pb_node);
   
   MockNode mock(context);
   auto pub = std::make_shared<Publisher>(mock.advertise("/data"));
@@ -350,17 +348,17 @@ TEST(test_playback_timer_subscriber, []() {
   std::vector<pubsub::Time> received;
   std::vector<pubsub::msg::Int::SharedPtr> received_msgs;
 
-  auto pb_node = std::make_unique<PipelineTimer<Data>>("test", 1.0);
+  auto pb_node = std::make_unique<Timer<Data>>("test", 1.0);
   {
-    pb_node->subscribe(&Data::msg, "/data", false);
-    pb_node->update([&](const Data& data, pubsub::Time time)
+    pb_node->subscribe(&Data::msg, "/data");
+    pb_node->set_update([&](const Data& data, pubsub::Time time)
     {
       //printf("loop\n");
       received.push_back(time);
       received_msgs.push_back(data.msg);
     });
   }
-  context.add_node(std::move(pb_node));
+  context.add_block(std::move(pb_node));
   
   MockNode mock(context);
   auto pub = std::make_shared<Publisher>(mock.advertise("/data"));
@@ -398,50 +396,51 @@ TEST(test_validation, []()
   };
 
   {
-    auto pb_node = std::make_unique<PipelineTimer<Data>>("sim", 1.0);
-    // todo maybe dont even give the option to a timer block to do this
-    pb_node->subscribe(&Data::msg, "/cmd", false);
-    EXPECT_THROWS_MESSAGE(pb_node->subscribe(&Data::msg2, "/cmd2", true),
-                  "Cannot configure a topic as driving with a timer block.");
+    auto pb_node = std::make_unique<Timer<Data>>("sim", 1.0);
+    pb_node->subscribe(&Data::msg, "/cmd");
+    // this is no longer possible since its not exposed in api
+    //EXPECT_THROWS_MESSAGE(pb_node->subscribe(&Data::msg2, "/cmd2", true),
+    //              "Cannot configure a topic as driving with a timer block.");
     
     // not allowed to set a timeout on a timer
-    EXPECT_THROWS_TYPE(pb_node->timeout(1.0, [](pubsub::Time){}), std::invalid_argument);
+    // this is no longer possible since its not exposed in api
+    //EXPECT_THROWS_TYPE(pb_node->timeout(1.0, [](pubsub::Time){}), std::invalid_argument);
 
     // test throw if someone creates a timer with an invalid rate
-    EXPECT_THROWS_TYPE(std::make_unique<PipelineTimer<Data>>("sim", 0.0), std::invalid_argument);
-    EXPECT_THROWS_TYPE(std::make_unique<PipelineTimer<Data>>("sim", -1.0), std::invalid_argument);
+    EXPECT_THROWS_TYPE(std::make_unique<Timer<Data>>("sim", 0.0), std::invalid_argument);
+    EXPECT_THROWS_TYPE(std::make_unique<Timer<Data>>("sim", -1.0), std::invalid_argument);
 
     // should throw if duplicate subs are added, either with same topic or same destination
-    EXPECT_THROWS_TYPE(pb_node->subscribe(&Data::msg2, "/cmd", false), std::runtime_error);
-    EXPECT_THROWS_TYPE(pb_node->subscribe(&Data::msg, "/cmd2", false), std::runtime_error);
+    EXPECT_THROWS_TYPE(pb_node->subscribe(&Data::msg2, "/cmd"), std::runtime_error);
+    EXPECT_THROWS_TYPE(pb_node->subscribe(&Data::msg, "/cmd2"), std::runtime_error);
 
     // now check for the same with vectors. first check for duplicate name
-    EXPECT_THROWS_TYPE(pb_node->subscribe(&Data::vec, 0, "/cmd", false), std::runtime_error);
+    EXPECT_THROWS_TYPE(pb_node->subscribe(&Data::vec, 0, "/cmd"), std::runtime_error);
 
     // should throw if subscriber offset and index is the same
-    pb_node->subscribe(&Data::vec, 0, "/cmd10", false);
-    pb_node->subscribe(&Data::vec, 1, "/cmd11", false);
-    pb_node->subscribe(&Data::vec2, 1, "/cmd12", false);
-    EXPECT_THROWS_TYPE(pb_node->subscribe(&Data::vec, 1, "/cmd13", false), std::runtime_error);
+    pb_node->subscribe(&Data::vec, 0, "/cmd10");
+    pb_node->subscribe(&Data::vec, 1, "/cmd11");
+    pb_node->subscribe(&Data::vec2, 1, "/cmd12");
+    EXPECT_THROWS_TYPE(pb_node->subscribe(&Data::vec, 1, "/cmd13"), std::runtime_error);
 
     // should throw when node is added if multiple things publish to the same topic
-    auto node1 = std::make_unique<PipelineTimer<Data>>("sim2", 1.0);
+    auto node1 = std::make_unique<Timer<Data>>("sim2", 1.0);
     node1->advertise<pubsub::msg::Int>("/topic");
 
-    auto node2 = std::make_unique<PipelineTimer<Data>>("sim3", 1.0);
+    auto node2 = std::make_unique<Timer<Data>>("sim3", 1.0);
     node2->advertise<pubsub::msg::Int>("/topic");
 
-    context.add_node(std::move(node1));
-    EXPECT_THROWS_TYPE(context.add_node(std::move(node2)), std::runtime_error);
+    context.add_block(std::move(node1));
+    EXPECT_THROWS_TYPE(context.add_block(std::move(node2)), std::runtime_error);
 
     // a block must have a driving topic or we throw (the block would do nothing otherwise)
-    auto node3 = std::make_unique<PipelineBlock<Data>>("sim4");
+    auto node3 = std::make_unique<Block<Data>>("sim4");
     node3->subscribe(&Data::vec, 0, "/cmd10", false);
-    EXPECT_THROWS_TYPE(context.add_node(std::move(node3)), std::runtime_error);
+    EXPECT_THROWS_TYPE(context.add_block(std::move(node3)), std::runtime_error);
     
     // we also throw an exception if two nodes in a context have the same name
-    context.add_node(new PipelineTimer<Data>("duplicate", 1.0));
-    EXPECT_THROWS_TYPE(context.add_node(new PipelineTimer<Data>("duplicate", 1.0)), std::runtime_error)
+    context.add_block(new Timer<Data>("duplicate", 1.0));
+    EXPECT_THROWS_TYPE(context.add_block(new Timer<Data>("duplicate", 1.0)), std::runtime_error)
   }
 });
 
@@ -457,7 +456,7 @@ TEST(test_placeholders, []()
   {
     pubsub::msg::Int::SharedPtr msg;
   };
-  auto pb_node = std::make_unique<PipelineBlock<Data>>("test");
+  auto pb_node = std::make_unique<Block<Data>>("test");
   pb_node->set_context(&context);
 
   auto& s1 = streams["/data"];
@@ -526,10 +525,10 @@ TEST(test_simulation_loop, []()
   
   // The simulator is just a simple block that takes in a control message and runs on a timer
   {
-    auto pb_node = std::make_unique<PipelineTimer<Data>>("sim", 1.0);
-    pb_node->subscribe(&Data::msg, "/cmd", false);
+    auto pb_node = std::make_unique<Timer<Data>>("sim", 1.0);
+    pb_node->subscribe(&Data::msg, "/cmd");
     auto ipub = pb_node->advertise<pubsub::msg::Int>("/pose");
-    pb_node->update([ipub, &position, &received](const Data& data, pubsub::Time time)
+    pb_node->set_update([ipub, &position, &received](const Data& data, pubsub::Time time)
     {
       pubsub::msg::Int out;
       out.value = position + (data.msg ? data.msg->value : 0);
@@ -538,15 +537,15 @@ TEST(test_simulation_loop, []()
       received.push_back(time);
       ipub.publish(out, time);
     });
-    context.add_node(std::move(pb_node));
+    context.add_block(std::move(pb_node));
   }
 
   // Create the subscriber block
   {
-    auto pb_node = std::make_unique<PipelineBlock<Data>>("test");
+    auto pb_node = std::make_unique<Block<Data>>("test");
     pb_node->subscribe(&Data::msg, "/pose", true);
     auto ipub = pb_node->advertise<pubsub::msg::Int>("/cmd");
-    pb_node->update([ipub, &context] (const Data& data, pubsub::Time time)
+    pb_node->set_update([ipub, &context] (const Data& data, pubsub::Time time)
     {
       printf("control loop x: %li\n", data.msg->value);
       
@@ -563,7 +562,38 @@ TEST(test_simulation_loop, []()
       }
     });
     // make sure ipub goes out of scope here
-    context.add_node(std::move(pb_node));
+    context.add_block(std::move(pb_node));
+  }
+  
+  // Actually start receiving nodes
+  context.start_playback(pubsub::Time(1), pubsub::Time(11, 0));
+  
+  // wait for system to run until end
+  context.join();
+  
+  EXPECT(position == 5);
+  EXPECT(received.size() == 7);
+});
+
+TEST(test_stop, []()
+{
+  // Test that stopping a context works
+  Context context;
+  
+  struct Data
+  {
+    pubsub::msg::Int::SharedPtr msg;
+  };
+  
+  std::vector<pubsub::Time> received;
+  {
+    auto pb_node = std::make_unique<Timer<Data>>("sim", 1.0);
+    pb_node->set_update([&received, &context](const Data& data, pubsub::Time time)
+    {
+      received.push_back(time);
+      context.stop();
+    });
+    context.add_block(std::move(pb_node));
   }
   
   MockNode mock(context);
@@ -572,20 +602,10 @@ TEST(test_simulation_loop, []()
   // Actually start receiving nodes
   context.start_playback(pubsub::Time(1), pubsub::Time(11, 0));
   
-  // nothing subscribes to these, but they force timer updates between 0.999999 and 10.999999 seconds
-  auto pose = pubsub::msg::IntSharedPtr(new pubsub::msg::Int);
-  pose->value = 0;
-  pub->publish(*pose, pubsub::Time(1, 0));
-  pub->publish(*pose, pubsub::Time(10, 0));
-  
-  // make all publishers go out of scope, this automatically ends timers too
-  pub.reset();
-  
   // wait for system to run until end
   context.join();
-  
-  EXPECT(position == 5);
-  EXPECT(received.size() == 7);
+
+  EXPECT(received.size() == 1);
 });
 
 TEST(test_abort, []()
@@ -600,14 +620,14 @@ TEST(test_abort, []()
   
   std::vector<pubsub::Time> received;
   {
-    auto pb_node = std::make_unique<PipelineTimer<Data>>("sim", 1.0);
-    pb_node->subscribe(&Data::msg, "/cmd", false);
-    pb_node->update([&received, &context](const Data& data, pubsub::Time time)
+    auto pb_node = std::make_unique<Timer<Data>>("sim", 1.0);
+    pb_node->subscribe(&Data::msg, "/cmd");
+    pb_node->set_update([&received, &context](const Data& data, pubsub::Time time)
     {
       received.push_back(time);
       context.abort();
     });
-    context.add_node(std::move(pb_node));
+    context.add_block(std::move(pb_node));
   }
   
   MockNode mock(context);
@@ -643,13 +663,13 @@ TEST(test_abort2, []()
   
   std::vector<pubsub::Time> received;
   {
-    auto pb_node = std::make_unique<PipelineBlock<Data>>("sim");
+    auto pb_node = std::make_unique<Block<Data>>("sim");
     pb_node->subscribe(&Data::msg, "/data", true);
-    pb_node->update([&received](const Data& data, pubsub::Time time)
+    pb_node->set_update([&received](const Data& data, pubsub::Time time)
     {
       received.push_back(time);
     });
-    context.add_node(std::move(pb_node));
+    context.add_block(std::move(pb_node));
   }
   
   // Advertise but don't publish on the requested topic so that it gets stuck waiting
@@ -684,10 +704,10 @@ TEST(test_simulation_loop_2, []()
 
   // The simulator is just a simple block that takes in a control message and runs on a timer
   {
-    auto pb_node = std::make_unique<PipelineTimer<Data>>("sim", 1.0);
-    pb_node->subscribe(&Data::msg, "/cmd2", false);
+    auto pb_node = std::make_unique<Timer<Data>>("sim", 1.0);
+    pb_node->subscribe(&Data::msg, "/cmd2");
     auto ipub = pb_node->advertise<pubsub::msg::Int>("/pose");
-    pb_node->update([ipub, &position, &received](const Data& data, pubsub::Time time)
+    pb_node->set_update([ipub, &position, &received](const Data& data, pubsub::Time time)
     {
       pubsub::msg::Int out;
       out.value = position + (data.msg ? data.msg->value : 0);
@@ -696,15 +716,15 @@ TEST(test_simulation_loop_2, []()
       received.push_back(time);
       ipub.publish(out, time);
     });
-    context.add_node(std::move(pb_node));
+    context.add_block(std::move(pb_node));
   }
 
   // Create the subscriber block
   {
-    auto pb_node = std::make_unique<PipelineBlock<Data>>("test");
+    auto pb_node = std::make_unique<Block<Data>>("test");
     pb_node->subscribe(&Data::msg, "/pose", true);
     auto ipub = pb_node->advertise<pubsub::msg::Int>("/cmd");
-    pb_node->update([ipub, &received2] (const Data& data, pubsub::Time time)
+    pb_node->set_update([ipub, &received2] (const Data& data, pubsub::Time time)
     {
       printf("control loop x: %li\n", data.msg->value);
 
@@ -715,23 +735,23 @@ TEST(test_simulation_loop_2, []()
       received2.push_back(time);
     });
     // make sure ipub goes out of scope here
-    context.add_node(std::move(pb_node));
+    context.add_block(std::move(pb_node));
   }
 
   // Create the subscriber block
   {
-    auto pb_node = std::make_unique<PipelineBlock<Data>>("test2");
+    auto pb_node = std::make_unique<Block<Data>>("test2");
     pb_node->subscribe(&Data::msg, "/cmd", true);
     pb_node->subscribe(&Data::msg2, "/fake", true);// try with two topics to validate multiple driving
     auto ipub = pb_node->advertise<pubsub::msg::Int>("/cmd2");
-    pb_node->update([ipub, &received3] (const Data& data, pubsub::Time time)
+    pb_node->set_update([ipub, &received3] (const Data& data, pubsub::Time time)
     {
       printf("control loop 2: %li\n", data.msg->value);
       ipub.publish(data.msg, time);
       received3.push_back(time);
     });
     // make sure ipub goes out of scope here
-    context.add_node(std::move(pb_node));
+    context.add_block(std::move(pb_node));
   }
 
   MockNode mock(context);

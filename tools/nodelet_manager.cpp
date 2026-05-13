@@ -1,4 +1,4 @@
-#include <pubsub_pipeline/node_base.h>
+#include <pubsub_pipeline/block.h>
 
 #include <pubsub_cpp/arg_parse.h>
 

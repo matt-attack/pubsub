@@ -10,6 +10,11 @@
 #include <string>
 #include <vector>
 
+namespace pubsub
+{
+namespace pipeline
+{
+
 // A message sample in a stream.
 struct Sample
 {
@@ -28,11 +33,11 @@ struct Sample
 };
 
 // Stream of message samples in time order
-class RealBlock;
+class BlockData;
 struct Stream
 {
   std::set<Sample> samples;
-  std::vector<std::shared_ptr<RealBlock>> subscribers;
+  std::vector<std::shared_ptr<BlockData>> subscribers;
   std::string topic;
   std::string type;
   
@@ -54,3 +59,6 @@ struct Stream
 //private:
   void enqueue_placeholders(pubsub::Time time);
 };
+
+}
+}

@@ -1,5 +1,10 @@
 #pragma once
 
+namespace pubsub
+{
+namespace pipeline
+{
+
 /// Base class which just has a virtual destructor
 struct HolderBase
 {
@@ -10,3 +15,6 @@ struct HolderBase
   
   virtual HolderBase* clone() = 0;
 };
+
+}
+}

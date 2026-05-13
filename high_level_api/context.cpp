@@ -1,7 +1,20 @@
 #include "pubsub_pipeline/context.h"
-#include "pubsub_pipeline/node_base.h"
+#include "pubsub_pipeline/block.h"
 
-void Context::add_node(std::unique_ptr<Block>&& new_node)
+using pubsub::pipeline::Context;
+
+static void recurse(
+  std::map<std::string, std::vector<std::string>>& inputs_to_outputs,
+  std::vector<std::string>& out, std::string topic)
+{
+  out.push_back(topic);
+  for (const auto& out_topic: inputs_to_outputs[topic])
+  {
+    recurse(inputs_to_outputs, out, out_topic);
+  }
+}
+
+void Context::add_block(std::unique_ptr<BlockBase>&& new_block)
 {
   new_node->set_context(this);
   node_mutex.lock();
@@ -21,9 +34,8 @@ void Context::add_node(std::unique_ptr<Block>&& new_node)
     node_mutex.unlock();
     throw std::runtime_error("A block must contain at least one driving topic to function.");
   }
-  
-  
-  nodes_.emplace_back(std::move(new_node));
+
+  blocks_.emplace_back(std::move(new_block));
     
   // now set it up
     
@@ -38,15 +50,15 @@ void Context::add_node(std::unique_ptr<Block>&& new_node)
   node_mutex.unlock();
 }
   
-void Context::add_node(Block* block)
+void Context::add_block(BlockBase* block)
 {
-  add_node(std::move(std::unique_ptr<Block>(block)));
+  add_block(std::move(std::unique_ptr<BlockBase>(block)));
 }
 
 void Context::join()
 {
   // wait for all nodes to finish
-  for (auto& thread: node_threads_)
+  for (auto& thread: block_threads_)
   {
     if (thread.joinable())
     {
@@ -55,7 +67,6 @@ void Context::join()
   }
 }
 
-// todo make start time implicit like it is for timers
 void Context::start_playback(pubsub::Time start_time, pubsub::Time end_time)
 {
   if (!is_playback)
@@ -96,9 +107,8 @@ void Context::start_playback(pubsub::Time start_time, pubsub::Time end_time)
   // discover the message dependency graph
   // first lets get inputs and outputs of each block
   std::map<std::string, std::vector<std::string>> inputs_to_outputs;
-  for (auto& block: nodes_)
+  for (auto& block: blocks_)
   {
-    //auto& subs = block->data->subs;
     auto& driving_subs = block->data->driving;
     auto& pubs = block->data->pubs;
     for (const auto& sub: driving_subs)
@@ -152,18 +162,19 @@ void Context::start_playback(pubsub::Time start_time, pubsub::Time end_time)
   }
   
   // start all of the block threads
-  node_mutex.lock();
-  for (auto& block: nodes_)
+  std::unique_lock<std::mutex> lk(block_mutex_);
+  for (auto& block: blocks_)
   {
     auto copy = block.get();
-    node_threads_.emplace_back([copy, start_time, end_time]()
+    block_threads_.emplace_back([copy, start_time, end_time]()
     {
       thread_playback(copy, start_time, end_time);
     });
-    auto handle = node_threads_.back().native_handle();
+#ifdef __linux__
+    auto handle = block_threads_.back().native_handle();
     pthread_setname_np(handle, block->name.substr(0, 15).c_str());
-  }  
-  node_mutex.unlock();
+#endif
+  }
 }
 
 void Context::start()
@@ -174,33 +185,33 @@ void Context::start()
   }
   
   // start all of the block threads
-  node_mutex.lock();
-  for (auto& block: nodes_)
+  std::unique_lock<std::mutex> lk(block_mutex_);
+  for (auto& block: blocks_)
   {
     auto copy = block.get();
-    node_threads_.emplace_back([copy]()
+    block_threads_.emplace_back([copy]()
     {
       thread_live(copy);
     });
-    auto handle = node_threads_.back().native_handle();
+#ifdef __linux__
+    auto handle = block_threads_.back().native_handle();
     pthread_setname_np(handle, block->name.substr(0, 15).c_str());
+#endif
   }
-  node_mutex.unlock();
 }
 
 void Context::stop()
 {
   // stop timers and let existing data propagate
   run_timers = false;
-  node_mutex.lock();
-  for (const auto& block: nodes_)
+  std::unique_lock<std::mutex> lk(block_mutex_);
+  for (const auto& block: blocks_)
   {
     if (block)
     {
       block->data->cv.notify_one();
     }
   }
-  node_mutex.unlock();
 }
 
 void Context::abort()
@@ -209,19 +220,18 @@ void Context::abort()
   stream_mutex.lock();
   running = false;
   stream_mutex.unlock();
-  node_mutex.lock();
-  for (const auto& block: nodes_)
+  std::unique_lock<std::mutex> lk(block_mutex_);
+  for (const auto& block: blocks_)
   {
     if (block)
     {
       block->data->cv.notify_one();
     }
   }
-  node_mutex.unlock();
 }
 
 
-void Context::thread_live(Block* node)
+void Context::thread_live(BlockBase* node)
 {
   std::string name_ = node->name;
   int idx = 0;
@@ -286,7 +296,7 @@ void Context::thread_live(Block* node)
   }
 }
 
-void Context::thread_playback(Block* node, pubsub::Time start_time, pubsub::Time end_time)
+void Context::thread_playback(BlockBase* node, pubsub::Time start_time, pubsub::Time end_time)
 {
   std::string name_ = node->name;
   // if there are no driving topics, the code below generally infinite loops, so fail out
@@ -298,7 +308,6 @@ void Context::thread_playback(Block* node, pubsub::Time start_time, pubsub::Time
   auto ctx = node->data->context;
   auto& streams = ctx->streams;
   
-  // todo need to get the start time of playback for this to work correctly
   pubsub::Time last_cb_time = start_time;
   
   // if we can, try and start the timer just before the start of playback
