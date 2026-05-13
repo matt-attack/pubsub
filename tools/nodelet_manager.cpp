@@ -7,12 +7,36 @@
 #include <cassert>
 #include <dlfcn.h>
 
-typedef void*(*fun)(void*);
+typedef void*(*LoadFunction)(const char*);
+typedef char**(*ListFunction)();
 
-struct Loader
+using namespace pubsub::pipeline;
+
+class Loader
 {
-  void* (*load)(const char*) = 0;
-  char** (*list)() = 0;
+  LoadFunction load_ = 0;
+  ListFunction list_ = 0;
+
+public:
+
+  Loader() {}
+  
+  Loader(LoadFunction load, ListFunction list) : load_(load), list_(list) {}
+  
+  BlockBase* load_block(const std::string& name)
+  {
+    auto nodelet = (BlockBase*)load_(name.c_str());
+    if (nodelet == 0)
+    {
+      return 0;
+    }
+    return nodelet;
+  }
+  
+  operator bool()
+  {
+    return list_ != 0;
+  }
   
   std::vector<std::string> names;
 };
@@ -26,24 +50,24 @@ Loader load_library(const std::string& path)
     return Loader();
   }
 
-  Loader l;
- 
-  *(void**)(&l.load) = dlsym(handle, "create_nodelet");
-  if (l.load == 0)
+  auto load_fn = (LoadFunction)dlsym(handle, "create_nodelet");
+  if (load_fn == 0)
   {
     printf("Failed to load symbol\n");
     return Loader();
   }
   
-  *(void**)(&l.list) = dlsym(handle, "list_nodelets");
-  if (l.list == 0)
+  auto list_fn = (ListFunction)dlsym(handle, "list_nodelets");
+  if (list_fn == 0)
   {
     printf("Failed to load symbol\n");
     return Loader();
   }
+  
+  Loader l(load_fn, list_fn);
   
   // get available nodelets
-  auto list = l.list();
+  auto list = list_fn();
   auto list_start = list;
   while (*list != 0)
   {
@@ -55,8 +79,6 @@ Loader load_library(const std::string& path)
   
   return l;
 }
-
-using namespace pubsub::pipeline;
 
 int main(int argc, char** argv)
 {
@@ -105,7 +127,7 @@ int main(int argc, char** argv)
   for (const auto& list: to_load)
   {
     Loader loader = load_library(list.first);
-    if (!loader.load)
+    if (!loader)
     {
       printf("Failed to load library\n");
       return -1;
@@ -118,13 +140,13 @@ int main(int argc, char** argv)
   
     for (const auto& item: list.second)
     {
-      auto nodelet = (BlockBase*)loader.load(item.c_str());
+      auto nodelet = loader.load_block(item);
       if (nodelet == 0)
       {
         printf("failed to create nodelet\n");
         return -1;
       }
-      context.add_block(std::move(std::unique_ptr<BlockBase>(nodelet)));
+      context.add_block(nodelet);
     }
   }
   

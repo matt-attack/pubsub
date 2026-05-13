@@ -755,19 +755,9 @@ TEST(test_simulation_loop_2, []()
   }
 
   MockNode mock(context);
-  auto pub = std::make_shared<Publisher>(mock.advertise("/data"));
 
-  // Actually start receiving nodes
+  // Actually start the simulation
   context.start_playback(pubsub::Time(1), pubsub::Time(11, 0));
-
-  // nothing subscribes to these, but they force timer updates between 0.999999 and 10.999999 seconds
-  auto pose = pubsub::msg::IntSharedPtr(new pubsub::msg::Int);
-  pose->value = 0;
-  pub->publish(*pose, pubsub::Time(1, 0));
-  pub->publish(*pose, pubsub::Time(10, 0));
-
-  // make all publishers go out of scope, this automatically ends timers too
-  pub.reset();
 
   // wait for system to run until end
   context.join();
