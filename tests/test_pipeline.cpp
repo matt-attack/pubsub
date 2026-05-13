@@ -9,7 +9,7 @@
 #include <pubsub/Int.msg.h>
 #include <pubsub/PointCloud.msg.h>
 
-#include <pubsub_pipeline/node_base.h>
+#include <pubsub_pipeline/block.h>
 
 #include <vector>
 #include <set>

@@ -1,5 +1,5 @@
 #include "pubsub_pipeline/context.h"
-#include "pubsub_pipeline/node_base.h"
+#include "pubsub_pipeline/block.h"
 
 using pubsub::pipeline::Context;
 
