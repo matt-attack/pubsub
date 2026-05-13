@@ -254,7 +254,7 @@ Timer<T>::Timer(const std::string& name, double rate)
   holder.reset(new Holder());
   data.reset(new BlockData());
   data->is_timer = true;
-  rate = rate;
+  this->rate = rate;
 
   data->to_add.push_back([this, rate](Context* context)
   { 
