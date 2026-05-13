@@ -1,5 +1,5 @@
 #include "pubsub_pipeline/context.h"
-#include "pubsub_pipeline/block.h"
+#include "pubsub_pipeline/node_base.h"
 
 using pubsub::pipeline::Context;
 
@@ -16,22 +16,22 @@ static void recurse(
 
 void Context::add_block(std::unique_ptr<BlockBase>&& new_block)
 {
-  new_node->set_context(this);
-  node_mutex.lock();
+  new_block->set_context(this);
   
-  // throw if we have a node with the same name
-  for (auto& node: nodes_)
+  std::unique_lock<std::mutex> lk(block_mutex_);
+  
+  // throw if we have a block with the same name
+  for (auto& block: blocks_)
   {
-    if (node->name == new_node->name)
+    if (block->name == new_block->name)
     {
-      node_mutex.unlock();
-      throw std::runtime_error("Context already contains a node with the name '" + node->name + "'. Block names must be unique within a context.");
+      throw std::runtime_error("Context already contains a node with the name '" + block->name + "'. Block names must be unique within a context.");
     }
   }
-  
-  if (new_node->data->driving.size() == 0)
+
+  // make sure nobody tries to add a node that does nothing
+  if (new_block->data->driving.size() == 0)
   {
-    node_mutex.unlock();
     throw std::runtime_error("A block must contain at least one driving topic to function.");
   }
 
@@ -40,14 +40,12 @@ void Context::add_block(std::unique_ptr<BlockBase>&& new_block)
   // now set it up
     
   // free the node on its shutdown to clear any pubs and such
-  int index = nodes_.size() - 1;
-  nodes_.back()->set_on_shutdown([this, index]() {
+  int index = blocks_.size() - 1;
+  blocks_.back()->set_on_shutdown([this, index]() {
     printf("freeing node\n");
-    node_mutex.lock();
-    nodes_[index].reset();
-    node_mutex.unlock();
+    std::unique_lock<std::mutex> lk(block_mutex_);
+    blocks_[index].reset();
   });
-  node_mutex.unlock();
 }
   
 void Context::add_block(BlockBase* block)
