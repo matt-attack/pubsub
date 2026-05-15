@@ -35,7 +35,7 @@ int main()
   {
     auto now = pubsub::Time::now();
 
-	// Build and publish the message
+    // Build and publish the message
     pubsub::msg::String msg;
     char value[20];
     sprintf(value, "Hello %f", (now-start).toSec());
@@ -44,8 +44,7 @@ int main()
   });
 
   // Wait for the spinner to exit (on control-c)
-  spinner.wait();
+  spinner.run();
 
   return 0;
 }
-

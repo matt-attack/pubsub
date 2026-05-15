@@ -7,6 +7,8 @@ extern "C"
 
 void ps_sleep(unsigned int time_ms);
 
+void ps_sleep_us(unsigned int time_us);
+
 uint64_t GetTimeMs();
 
 #ifdef ARDUINO

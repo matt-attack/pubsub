@@ -31,19 +31,13 @@ struct ps_sub_t
 
 	struct ps_allocator_t* allocator;
 
-	// used instead of a queue optionally
 	ps_subscriber_fn_cb_t cb;
+	ps_subscriber_fn_cb_t cb_raw;
 	void* cb_data;
 
-    unsigned int preferred_transport;// udp or tcp
+	int preferred_transport;// udp or tcp, or -1 for no preference
 
 	unsigned int skip;
-
-	// queue is implemented as a deque
-	int queue_start;// start index of items in the queue (loops around on positive side)
-	int queue_size;// maximum size of the queue
-	int queue_len;// current queue size
-	void** queue;// pointers to each of the queue items
 };
 
 #pragma pack(push)
@@ -58,10 +52,7 @@ struct ps_sub_req_header_t
 };
 #pragma pack(pop)
 
-void ps_sub_enqueue(struct ps_sub_t* sub, void* message, int data_size, const struct ps_msg_info_t* message_info);
-
-// if the subscriber was initialized with a type this returns decoded messages
-void* ps_sub_deque(struct ps_sub_t* sub);
+void ps_sub_receive(struct ps_sub_t* sub, void* encoded_message, int data_size, bool is_reference, const struct ps_msg_info_t* message_info);
 
 void ps_sub_destroy(struct ps_sub_t* sub);
 

@@ -1,6 +1,7 @@
 #include <pubsub/Events.h>
 
 #include <stdbool.h>
+#include <stdio.h>
 
 #ifndef WIN32
 #include <unistd.h>
@@ -14,12 +15,23 @@
 void ps_event_set_create(struct ps_event_set_t* set)
 {
 #ifdef WIN32
-  set->num_handles = 1;
+  // Old version which had an event per socket
+  /*set->num_handles = 1;
   set->handles = (HANDLE*)malloc(sizeof(HANDLE));
   set->sockets = (int*)malloc(sizeof(int));
 
   set->handles[0] = WSACreateEvent();
+  set->sockets[0] = -1;*/
+  
+  // New version which uses one event for all sockets
+  set->num_handles = 3;
+  set->handles = (HANDLE*)malloc(sizeof(HANDLE)*3);
+  set->sockets = (int*)malloc(sizeof(int));
+
+  set->handles[0] = WSACreateEvent();
   set->sockets[0] = -1;
+  set->handles[1] = WSACreateEvent();
+  set->handles[2] = CreateWaitableTimer(NULL, TRUE, NULL); 
 #else
   set->fd = epoll_create(1);
   set->num_events = 0;
@@ -53,8 +65,10 @@ void ps_event_set_destroy(struct ps_event_set_t* set)
 
 void ps_event_set_add_socket(struct ps_event_set_t* set, int socket)
 {
+  //printf("add socket read %i\n", socket);
 #ifdef WIN32
-  // allocate a new spot
+  // Old version which creates an event per socket
+  /*// allocate a new spot
   int cur_size = set->num_handles;
   HANDLE* new_handles = (HANDLE*)malloc(sizeof(HANDLE)*(cur_size + 1));
   int* new_sockets = (int*)malloc(sizeof(int)*(cur_size + 1));
@@ -72,7 +86,10 @@ void ps_event_set_add_socket(struct ps_event_set_t* set, int socket)
   set->handles[cur_size + 0] = WSACreateEvent();
   set->sockets[cur_size + 0] = socket;
 
-  WSAEventSelect(socket, set->handles[cur_size + 0], FD_READ);
+  WSAEventSelect(socket, set->handles[cur_size + 0], FD_READ);*/
+  
+  // New version which always uses the same event
+  WSAEventSelect(socket, set->handles[1], FD_READ);
 #else
   struct epoll_event event;
   event.events = EPOLLIN;
@@ -84,8 +101,10 @@ void ps_event_set_add_socket(struct ps_event_set_t* set, int socket)
 
 void ps_event_set_add_socket_write(struct ps_event_set_t* set, int socket)
 {
+  //printf("add socket read write %i\n", socket);
 #ifdef WIN32
-  // find the handle and change the select
+  // Old version which creates an event per socket
+  /*// find the handle and change the select
   for (unsigned int i = 0; i < set->num_handles; i++)
   {
     if (set->sockets[i] == socket)
@@ -93,7 +112,10 @@ void ps_event_set_add_socket_write(struct ps_event_set_t* set, int socket)
       WSAEventSelect(socket, set->handles[i], FD_READ | FD_WRITE);
       break;
     }
-  }
+  }*/
+  
+  // New version which always uses the same event 
+  WSAEventSelect(socket, set->handles[1], FD_READ | FD_WRITE);
 #else
   struct epoll_event event;
   event.events = EPOLLIN | EPOLLOUT;
@@ -104,7 +126,21 @@ void ps_event_set_add_socket_write(struct ps_event_set_t* set, int socket)
 
 void ps_event_set_add_socket_write_only(struct ps_event_set_t* set, int socket)
 {
+  //printf("add socket write only %i\n", socket);
 #ifdef WIN32
+  // Old version which creates an event per socket
+  /*// find the handle and change the select
+  for (int i = 0; i < set->num_handles; i++)
+  {
+    if (set->sockets[i] == socket)
+    {
+      WSAEventSelect(socket, set->handles[i], FD_READ | FD_WRITE);
+      break;
+    }
+  }*/
+  
+  // New version which always uses the same event 
+  WSAEventSelect(socket, set->handles[1], FD_WRITE);
 #else
   struct epoll_event event;
   event.events = EPOLLOUT;
@@ -115,8 +151,10 @@ void ps_event_set_add_socket_write_only(struct ps_event_set_t* set, int socket)
 
 void ps_event_set_remove_socket_write(struct ps_event_set_t* set, int socket)
 {
+  //printf("remove socket write %i\n", socket);
 #ifdef WIN32
-  // find the handle and change the select
+  // Old version which creates an event per socket
+  /*// find the handle and change the select
   for (unsigned int i = 0; i < set->num_handles; i++)
   {
     if (set->sockets[i] == socket)
@@ -124,7 +162,10 @@ void ps_event_set_remove_socket_write(struct ps_event_set_t* set, int socket)
       WSAEventSelect(socket, set->handles[i], FD_READ);
       break;
     }
-  }
+  }*/
+  
+  // New version which always uses the same event 
+  WSAEventSelect(socket, set->handles[1], FD_READ);
 #else
   struct epoll_event event;
   event.events = EPOLLIN;
@@ -136,8 +177,10 @@ void ps_event_set_remove_socket_write(struct ps_event_set_t* set, int socket)
 
 void ps_event_set_remove_socket(struct ps_event_set_t* set, int socket)
 {
+  //printf("remove socket %i\n", socket);
 #ifdef WIN32
-  // find the socket to remove then remove it
+  // Old version which creates an event per socket
+  /*// find the socket to remove then remove it
   bool found = false;
   unsigned int index = 0;
   for (; index < set->num_handles; index++)
@@ -179,8 +222,10 @@ void ps_event_set_remove_socket(struct ps_event_set_t* set, int socket)
   free(set->handles);
   free(set->sockets);
   set->handles = new_handles;
-  set->sockets = new_sockets;
+  set->sockets = new_sockets;*/
 
+  // New version which always uses the same event 
+  WSAEventSelect(socket, set->handles[1], 0);
 #else
   struct epoll_event event;
   event.events = EPOLLIN;
@@ -206,7 +251,7 @@ void ps_event_set_trigger(struct ps_event_set_t* set)
 unsigned int ps_event_set_count(const struct ps_event_set_t* set)
 {
 #ifdef WIN32
-  return set->num_handles-1;
+  return set->num_handles-1;// this is wrong, but oh well
 #else
   return set->num_events;
 #endif
@@ -242,7 +287,19 @@ void ps_event_set_wait(struct ps_event_set_t* set, unsigned int timeout_ms)
 void ps_event_set_set_timer(struct ps_event_set_t* set, unsigned int timeout_us)
 {
 #ifdef WIN32
-  // todo
+  // todo test
+  // use CreateWaitableTimer and SetWaitableTimer + WaitForMultipleObjectsEx
+
+  LARGE_INTEGER due;
+  due.QuadPart = 10*timeout_us;// in 100ns intervals
+  due.QuadPart = -due.QuadPart;// negative = relative
+
+  if (!SetWaitableTimer(set->handles[2], &due, 0, NULL, NULL, 0))
+  {
+    printf("CreateWaitableTimer failed (%d)\n", GetLastError());
+    return;
+  }
+
 #else
   if (set->timer_fd == 0)
   {

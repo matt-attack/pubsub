@@ -17,12 +17,13 @@ struct ps_endpoint_t;
 struct ps_sub_t;
 struct ps_pub_t;
 struct ps_msg_t;
+struct ps_msg_ref_t;
 struct ps_client_t;
 
 void ps_udp_subscribe(struct ps_sub_t* sub, const struct ps_endpoint_t* ep);
 
 void ps_udp_unsubscribe(struct ps_sub_t* sub);
 
-void ps_udp_publish(struct ps_pub_t* pub, struct ps_client_t* client, struct ps_msg_t* msg);
+void ps_udp_publish(struct ps_pub_t* pub, struct ps_client_t* client, struct ps_msg_ref_t* msg);
 
 #endif

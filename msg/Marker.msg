@@ -1,9 +1,4 @@
-# Frame
-# 0 = wgs84 (lon, lat, alt)
-# 1 = odom (x,y,z)
-FRAME_WGS84=0
-FRAME_ODOM=1
-enum uint8 frame
+Header header
 
 # Marker ID
 uint16 id

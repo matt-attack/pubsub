@@ -13,6 +13,12 @@ set_target_properties(info PROPERTIES OUTPUT_NAME "pubsub")
 add_executable(pubsub_msg_gen "generator.cpp")
 set_property(TARGET pubsub_msg_gen PROPERTY CXX_STANDARD 11)
 
+# Nodelet manager
+add_executable(nodelet_manager "nodelet_manager.cpp")
+target_include_directories(nodelet_manager PUBLIC include/)
+target_link_libraries(nodelet_manager pubsub_pipeline ${CMAKE_THREAD_LIBS_INIT})
+set_property(TARGET nodelet_manager PROPERTY CXX_STANDARD 11)
+
 # This is used to generate messages for a package
 macro(generate_messages)
   set(options "DIRECTORY" "TARGET")
@@ -53,13 +59,14 @@ macro(generate_messages)
   target_include_directories(${ARG_TARGET} INTERFACE ${CMAKE_CURRENT_BINARY_DIR}/include/)
 endmacro()
 
-generate_messages(FILES 
+generate_messages(FILES
   Joy.msg
   String.msg 
   Float.msg
   Image.msg
   Costmap.msg
   PointCloud.msg
+  PointCloud2.msg
   Marker.msg
   Path.msg
   Parameters.msg
@@ -69,16 +76,14 @@ generate_messages(FILES
   Log.msg
   Path2D.msg
   Odom.msg
+  Int.msg
+  Frames.msg
 )
 
-
-# Build the test program
-add_executable(pubsubtest "PubSubTest.cpp")
-target_link_libraries(pubsubtest pubsub pubsub_msgs)
-add_dependencies(pubsubtest pubsub pubsub_msgs)
-set_property(TARGET pubsubtest PROPERTY CXX_STANDARD 11)
-
-add_executable(throughput_test "throughput_test.cpp")
-target_link_libraries(throughput_test pubsub pubsub_cpp pubsub_msgs)
-add_dependencies(throughput_test pubsub pubsub_cpp pubsub_msgs)
-set_property(TARGET throughput_test PROPERTY CXX_STANDARD 11)
+generate_messages(FILES 
+  Test.msg
+TARGET
+  pubsub_test_msgs
+DIRECTORY
+  tests
+)

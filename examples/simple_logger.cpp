@@ -32,8 +32,7 @@ int main()
 		
 		// okay, since we are publishing with shared pointer we actually need to allocate the string properly
 		auto shared = pubsub::msg::StringSharedPtr(new pubsub::msg::String);
-		shared->value = new char[strlen(msg.value) + 1];
-		strcpy(shared->value, msg.value);
+		shared->value = msg.value;
 		string_pub.publish(shared);
 
 		msg.value = 0;// so it doesnt get freed by the destructor since we allocated it ourself

@@ -4,6 +4,7 @@
 
 #include <map>
 
+#include <cstdint>
 #include <vector>
 #include <string>
 #include <sstream>
@@ -26,16 +27,16 @@ struct enumeration
 {
 	std::string name;
 	std::string value;
-	int field_num;
 };
 
+struct field;
 struct Type
 {
 	std::string name;
 	std::string base_type;
 	std::string type_enum;
 	// if zero size, a basic type
-	std::vector<std::pair<Type*, std::string>> fields;
+	std::vector<field*> fields;
 };
 
 // stupid hack
@@ -48,16 +49,20 @@ struct field
 
 	int array_size;
 	
+	int string_size;
+	
 	std::string flag;
 
 	uint32_t line_number;
+	
+	std::vector<int> associated_enums;
 
-	std::string getBaseType()
+	std::string getBaseType() const
 	{
 		return type->base_type;
 	}
 	
-	std::string getFlags()
+	std::string getFlags() const
 	{
 		if (flag == "enum")
 			return "FF_ENUM";
@@ -71,12 +76,12 @@ struct field
 		return "invalid";
 	}
 
-	std::string getTypeEnum()
+	std::string getTypeEnum() const
 	{
 		return type->type_enum;
 	}
 	
-	void GenerateFree(std::string& output)
+	void GenerateFree(std::string& output) const
 	{
 		if (type->name == "string" && array_size != 1)
 		{
@@ -100,7 +105,7 @@ struct field
 		}
 	}
 	
-	void GenerateCopy(std::string& output, const std::string& source)
+	void GenerateCopy(std::string& output, const std::string& source) const
 	{
 		if (type->name == "string")
 		{
@@ -223,8 +228,10 @@ std::string generate(const char* definition, const char* name)
 	types["int8"] = new Type{"int8", "int8_t", "FT_Int8", {}};
 	types["float"] = new Type{"float", "float", "FT_Float32", {}};
 	types["double"] = new Type{"double", "double", "FT_Float64", {}};
+	types["astring"] = new Type{"astring", "char", "FT_ArrayString", {}};
 
 	// also generate the hash while we are at it
+	std::vector<int> unassociated_enums;
 	uint32_t hash = 0;
 	uint32_t line_number = 0;
 	for (auto& line : lines)
@@ -284,7 +291,7 @@ std::string generate(const char* definition, const char* name)
 				}
 
 				// make sure no type with this name exists
-				if (types.find(name) != types.end())
+				if (name == "Header" || types.find(name) != types.end())
 				{
 					printf("%s:%i ERROR: A type with the name '%s' already exists.\n", _current_file.c_str(), line_number, name.c_str());
 					throw 7;
@@ -294,8 +301,31 @@ std::string generate(const char* definition, const char* name)
 				current_struct->name = name;
 				current_struct->base_type = name;
 				current_struct->type_enum = "FT_Struct";
+				unassociated_enums.clear();// if they come before a struct defintion we arent sure what they go with
 				continue;
 			}
+			
+			int string_size = 0;
+		  if (type.find(':') != -1)
+		  {
+		    int index = type.find(':');
+				string_size = std::stoi(type.substr(index + 1));
+				type = type.substr(0, index);
+				
+				if (type.find("string") == -1)
+				{
+				  printf("%s:%i ERROR: The element count syntax can only be used with strings'.\n", _current_file.c_str(), line_number);
+				  throw 7;
+				}
+				
+				type = "astring";
+				
+				if (string_size < 1)
+				{
+				  printf("%s:%i ERROR: Element count must be greater than 0'.\n", _current_file.c_str(), line_number);
+				  throw 7;
+				}
+		  }
 
 			// lookup the type
 			Type* real_type = 0;
@@ -303,6 +333,20 @@ std::string generate(const char* definition, const char* name)
 			if (res != types.end())
 			{
 				real_type = res->second;
+			}
+			else if (type == "Header")
+			{
+			  // define the header
+			  auto header_type = new Type();
+				header_type->name = "Header";
+				header_type->base_type = "struct Header";
+				header_type->type_enum = "FT_Struct";
+				header_type->fields.push_back(new field{ "timestamp", types["uint64"], 1, string_size, "", line_number, {} });
+				header_type->fields.push_back(new field{ "sequence", types["uint32"], 1, string_size, "", line_number, {} });
+				header_type->fields.push_back(new field{ "frame", types["astring"], 1, 12, "", line_number, {} });
+				//header_type->fields.push_back(new field{ name, real_type, size, string_size, "", line_number, unassociated_enums });
+				real_type = header_type;
+				types["Header"] = header_type;
 			}
 			else
 			{
@@ -313,11 +357,14 @@ std::string generate(const char* definition, const char* name)
 			if (current_struct)
 			{
 				// this belongs in the struct
-				current_struct->fields.push_back({real_type, name});
+				current_struct->fields.push_back(new field{ name, real_type, size, string_size, "", line_number, unassociated_enums });
+				unassociated_enums.clear();
 				continue;
 			}
+			// todo error for duplicate field names
 			// also fill in array size
-			fields.push_back({ name, real_type, size, "", line_number });
+			fields.push_back({ name, real_type, size, string_size, "", line_number, unassociated_enums });
+			unassociated_enums.clear();
 		}
 		// a line with flags maybe?
 		else if (words.size() == 3 && !has_equal)
@@ -352,8 +399,17 @@ std::string generate(const char* definition, const char* name)
 				throw 7;
 			}
 
+			if (current_struct)
+			{
+				// this belongs in the struct
+				current_struct->fields.push_back(new field{ name, real_type, size, 0, flag, line_number, unassociated_enums });
+				unassociated_enums.clear();
+				continue;
+			}
+
 			// also fill in array size
-			fields.push_back({ name, real_type, size, flag, line_number});
+			fields.push_back({ name, real_type, size, 0, flag, line_number, unassociated_enums});
+			unassociated_enums.clear();
 		}
 		else
 		{
@@ -366,7 +422,9 @@ std::string generate(const char* definition, const char* name)
 				std::string name = strip_whitespace(equals[0]);
 				std::string value = strip_whitespace(equals[1]);
 				//printf("it was an enum: %s=%s\n", equals[0].c_str(), equals[1].c_str());
-				enumerations.push_back({ name, value, (int)fields.size()});
+				
+				enumerations.push_back({ name, value });
+				unassociated_enums.push_back(enumerations.size() - 1);
 			}
 			else
 			{
@@ -377,7 +435,7 @@ std::string generate(const char* definition, const char* name)
 	}
 
 	std::string raw_name = split(name, '_').back();
-    std::string ns = std::string(name).substr(0, std::string(name).find_last_of('_')-1);
+  std::string ns = std::string(name).substr(0, std::string(name).find_last_of('_')-1);
 
 	// convert the name into a type
 	std::string type_name;
@@ -414,24 +472,41 @@ std::string generate(const char* definition, const char* name)
 		}
 
 		std::string struct_name = type_name + "_" + type.second->name;
-		type.second->base_type = struct_name;
+		type.second->base_type = "struct " + struct_name;
 		output += "struct " + struct_name + "\n{\n";
 		for (auto& field: type.second->fields)
 		{
 			// dont allow strings yet
-			if (field.first->base_type == "char*")
+			if (field->type->base_type == "char*")
 			{
-				printf("%s:%i ERROR: Strings not yet allowed in structs.\n", _current_file.c_str(), line_number);
+				printf("%s:%i ERROR: Dynamically sized strings not allowed in structs.\n", _current_file.c_str(), line_number);
 				throw 7;
 			}
 
-			if (field.first->type_enum == "FT_Struct")
+			if (field->type->type_enum == "FT_Struct")
 			{
 				printf("%s:%i ERROR: Structs not yet allowed in structs.\n", _current_file.c_str(), line_number);
 				throw 7;
 			}
-
-			output += "  " + field.first->base_type + " " + field.second + ";\n";
+			
+			if (field->array_size == 0)
+			{
+				printf("%s:%i ERROR: Dynamically sized arrays not allowed in structs.\n", _current_file.c_str(), line_number);
+				throw 7;
+			}
+			
+			if (field->type == types["astring"])
+			{
+			  output += "  " + field->type->base_type + " " + field->name + "[" + std::to_string(field->string_size) + "];\n";
+			}
+			else if (field->array_size > 1)
+			{
+			  output += "  " + field->type->base_type + " " + field->name + "[" + std::to_string(field->array_size) + "];\n";
+			}
+      else
+      {
+			  output += "  " + field->type->base_type + " " + field->name + ";\n";
+			}
 		}
 		output += "};\n\n";
 	}
@@ -440,7 +515,11 @@ std::string generate(const char* definition, const char* name)
 	output += "struct " + type_name + "\n{\n";
 	for (auto& field : fields)
 	{
-		if (field.array_size > 1)
+	  if (field.type == types["astring"])
+		{
+	    output += "  " + field.type->base_type + " " + field.name + "[" + std::to_string(field.string_size) + "];\n";
+	  }
+		else if (field.array_size > 1)
 		{
 			output += "  " + field.getBaseType() + " " + field.name + "[" + std::to_string(field.array_size) + "];\n";
 		}
@@ -462,38 +541,88 @@ std::string generate(const char* definition, const char* name)
 	//ps_message_definition_t std_msgs_String_def = { 123456789, "std_msgs/String", 1, std_msgs_String_fields };
 
 	// generate the fields
-	output += "struct ps_msg_field_t " + type_name + "_fields[] = {\n";
-	for (auto& field : fields)
+	output += "static struct ps_msg_field_t " + type_name + "_fields[] = {\n";
+	std::map<std::string, int> generated_structs;
+	std::map<const field*, int> field_indexes;
+	int field_index = 0;
+	for (const auto& field : fields)
 	{
 		if (field.getTypeEnum() == "FT_Struct")
 		{
-			// struct
-			auto& members = field.type->fields;
-			output += "  { " + field.getTypeEnum() + ", " + field.getFlags() + ", \"" + field.name + "\", ";
-			output += std::to_string(field.array_size) + ", " + std::to_string(members.size()) + " }, \n";// todo use for array types
+		  // add the struct if we haven't already
+		  int struct_index;
+		  if (generated_structs.find(field.type->name) == generated_structs.end())
+		  {
+		    struct_index = field_index;
+		    generated_structs[field.type->name] = struct_index;
+		    
+			  auto& members = field.type->fields;
+		    // add the struct itself
+		    output += "  { FT_StructDefinition, FF_NONE, \"" + field.type->name + "\", ";
+				output += std::to_string(members.size()) + ", 0 }, \n";
+		    field_index++;
 
-			// now add struct fields
-			for (auto& m : members)
-			{
-				output += "  { " + m.first->type_enum + ", " + "FF_NONE" + ", \"" + m.second + "\", ";
-				output += std::to_string(1) + ", 0 }, \n";// todo support array members
-			}
+		    // now add struct fields
+			  for (auto& m : members)
+			  {
+				  output += "  { " + m->type->type_enum + ", " + m->getFlags() + ", \"" + m->name + "\", ";
+				  output += std::to_string(m->array_size) + ", " + std::to_string(m->string_size) + " }, \n";
+				  field_indexes[m] = field_index++;
+			  }
+		  }
+		  else
+		  {
+		    struct_index = generated_structs[field.type->name];
+		  }
+
+      // add the field
+			output += "  { " + field.getTypeEnum() + ", " + field.getFlags() + ", \"" + field.name + "\", ";
+			output += std::to_string(field.array_size) + ", " + std::to_string(struct_index) + " }, \n";
 		}
 		else
 		{
+		  // add the field
 			output += "  { " + field.getTypeEnum() + ", " + field.getFlags() + ", \"" + field.name + "\", ";
-			output += std::to_string(field.array_size) + ", 0 }, \n";// todo use for array types
+			output += std::to_string(field.array_size) + ", " + std::to_string(field.string_size) + " }, \n";
 		}
+		field_indexes[&field] = field_index++;
 	}
 	output += "};\n\n";
 	
 	// generate enum metadata
 	if (enumerations.size())
 	{
-		output += "struct ps_msg_enum_t " + type_name + "_enums[] = {\n";
-		for (auto& e: enumerations)
+		output += "static struct ps_msg_enum_t " + type_name + "_enums[] = {\n";
+		int enum_id = 0;
+		for (const auto& e: enumerations)
 		{
-			output += "  {\"" + e.name + "\", " + e.value + ", " + std::to_string(e.field_num) + "},\n";
+		  // okay, lets flip the script, each field lists associated enums?
+		  // now search for the associated field
+		  int field_num = 255;
+		  for (const auto& field: fields)
+		  {
+		    for (const auto& sf: field.type->fields)
+		    {
+		      for (auto id: sf->associated_enums)
+		      {
+		        if (id == enum_id)
+		        {
+		          field_num = field_indexes[sf];
+		          break;
+		        }
+		      }
+		    }
+		    for (auto id: field.associated_enums)
+		    {
+		      if (id == enum_id)
+		      {
+		        field_num = field_indexes[&field];
+		        break;
+		      }
+		    }
+		  }
+			output += "  {\"" + e.name + "\", " + e.value + ", " + std::to_string(field_num) + "},\n";
+			enum_id++;
 		}
 		output += "};\n\n";
 	}
@@ -536,31 +665,41 @@ std::string generate(const char* definition, const char* name)
 	if (is_pure)
 	{
 		//generate simple de/serializaton
-		output += "void* " + type_name + "_decode(const void* data, struct ps_allocator_t* allocator)\n{\n";
+		output += "static void* " + type_name + "_decode(const void* data, struct ps_allocator_t* allocator)\n{\n";
 		output += "  struct " + type_name + "* out = (struct " + type_name + "*)allocator->alloc(sizeof(struct " + type_name + "), allocator->context);\n";
 		output += "  *out = *(struct " + type_name + "*)data;\n";
 		output += "  return out;\n";
 		output += "}\n\n";
 
 		// now for encode
-		output += "struct ps_msg_t " + type_name + "_encode(struct ps_allocator_t* allocator, const void* msg)\n{\n";
+		output += "static struct ps_msg_t " + type_name + "_encode(const void* msg, struct ps_allocator_t* allocator)\n{\n";
 		output += "  int len = sizeof(struct " + type_name + ");\n";
 		output += "  struct ps_msg_t omsg;\n";
 		output += "  ps_msg_alloc(len, allocator, &omsg);\n";
 		output += "  memcpy(ps_get_msg_start(omsg.data), msg, len);\n";
-		output += "  return omsg;\n}\n";
+		output += "  return omsg;\n}\n\n";
+
+		// finally free todo use allocator
+		output += "static void " + type_name + "_free(void* msg, struct ps_allocator_t* allocator)\n{\n";
+		output += "  allocator->free(msg, allocator->context);\n";
+		output += "}\n\n";
 	}
 	else
 	{
 		//need to split it in sections between the strings
-		output += "void* " + type_name + "_decode(const void* data, struct ps_allocator_t* allocator)\n{\n";
+		output += "static void* " + type_name + "_decode(const void* data, struct ps_allocator_t* allocator)\n{\n";
 		output += "  char* p = (char*)data;\n";
 		output += "  int len = sizeof(struct "+type_name+");\n";
 		output += "  struct "+type_name+"* out = (struct " + type_name + "*)allocator->alloc(len, allocator->context);\n";
 		// for now lets just decode non strings
 		for (size_t i = 0; i < fields.size(); i++)
 		{
-			if (fields[i].type == string_type)
+		  if (fields[i].type == types["astring"])
+		  {
+		    output += "  memcpy(out->" + fields[i].name + ", p, sizeof(" + fields[i].getBaseType() + ")*" + std::to_string(fields[i].string_size) + ");\n";
+		    output += "  p += sizeof(" + fields[i].getBaseType() + ")*" + std::to_string(fields[i].string_size) + ";\n";
+		  }
+			else if (fields[i].type == string_type)
 			{
 				if (fields[i].array_size == 1)
 				{
@@ -582,7 +721,7 @@ std::string generate(const char* definition, const char* name)
 					}
 					
 					output += "  out->" + fields[i].name + "_length = num_" + fields[i].name + ";\n";
-					output += "  out->" + fields[i].name + " = (char**)malloc(sizeof(char*)*num_" + fields[i].name + ");\n";
+					output += "  out->" + fields[i].name + " = (char**)allocator->alloc(sizeof(char*)*num_" + fields[i].name + ", allocator->context);\n";
 					
 					// allocate the array
 					// need to do it!
@@ -591,7 +730,7 @@ std::string generate(const char* definition, const char* name)
 					output += "    int len = *(uint32_t*)p;\n";
 					output += "    p += 4;\n";// add size of length
 					// now read and allocate each string
-					output += "    out->" + fields[i].name + "[i] = (char*)malloc(len);\n";
+					output += "    out->" + fields[i].name + "[i] = (char*)allocator->alloc(len, allocator->context);\n";
 					output += "    memcpy(out->" + fields[i].name + "[i], p, len);\n";
 					output += "    p += len;\n";
 					output += "  }\n";
@@ -627,14 +766,18 @@ std::string generate(const char* definition, const char* name)
 		output += "}\n\n";
 
 		//typedef ps_msg_t(*ps_fn_encode_t)(ps_allocator_t* allocator, const void* msg);
-		output += "struct ps_msg_t " + type_name + "_encode(struct ps_allocator_t* allocator, const void* data)\n{\n";
+		output += "static struct ps_msg_t " + type_name + "_encode(const void* data, struct ps_allocator_t* allocator)\n{\n";
 		output += "  const struct " + type_name + "* msg = (const struct " + type_name + "*)data;\n";
 		output += "  int len = sizeof(struct " + type_name + ");\n";
 		output += "  // calculate the encoded length of the message\n";
 		int n_arr = 0;
 		for (size_t i = 0; i < fields.size(); i++)
 		{
-			if (fields[i].type == string_type)
+		  if (fields[i].type == types["astring"])
+			{
+			  // these are already counted in struct size
+		  }
+			else if (fields[i].type == string_type)
 			{
 				if (fields[i].array_size == 1)
 				{
@@ -673,7 +816,7 @@ std::string generate(const char* definition, const char* name)
 		output += "  char* start = (char*)ps_get_msg_start(omsg.data);\n";
 		for (size_t i = 0; i < fields.size(); i++)
 		{
-			if (fields[i].type == string_type)
+		  if (fields[i].type == string_type)
 			{
 				if (fields[i].array_size == 1)
 				{
@@ -685,7 +828,7 @@ std::string generate(const char* definition, const char* name)
 					// now encode it
 					if (fields[i].array_size == 0)
 					{
-						// encode the array legnth
+						// encode the array length
 						output += "  *(uint32_t*)start = msg->" + fields[i].name + "_length;\n";
 						output += "  start += 4;\n";
 						output += "  for (int i = 0; i < msg->" + fields[i].name + "_length; i++)\n  {\n";
@@ -722,29 +865,68 @@ std::string generate(const char* definition, const char* name)
 				}
 				else
 				{
-					output += "  memcpy(start, &msg->" + fields[i].name + ", sizeof(" + fields[i].getBaseType() + "));\n";
-					output += "  start += sizeof(" + fields[i].getBaseType() + ");\n";
+				  if (fields[i].type == types["astring"])
+				  {
+				    output += "  memcpy(start, msg->" + fields[i].name + ", sizeof(" + fields[i].getBaseType() + ")*" + std::to_string(fields[i].string_size) + ");\n";
+					  output += "  start += sizeof(" + fields[i].getBaseType() + ")*" + std::to_string(fields[i].string_size) + ";\n";
+				  }
+				  else
+				  {
+					  output += "  memcpy(start, &msg->" + fields[i].name + ", sizeof(" + fields[i].getBaseType() + "));\n";
+					  output += "  start += sizeof(" + fields[i].getBaseType() + ");\n";
+					}
 				}
 			}
 		}
 		output += "  return omsg;\n";
 		output += "}\n";
+
+		// finally free
+		output += "static void " + type_name + "_free(void* data, struct ps_allocator_t* allocator)\n{\n";
+		output += "  struct " + type_name + "* msg = (struct " + type_name + "*)data;\n";
+		for (size_t i = 0; i < fields.size(); i++)
+		{
+			if (fields[i].type == string_type)
+			{
+				if (fields[i].array_size == 1)
+				{
+					output += "  allocator->free(msg->" + fields[i].name + ", allocator->context);\n";
+				}
+				else
+				{
+					if (fields[i].array_size == 0)
+					{
+						output += "  int num_" + fields[i].name + " = msg->" + fields[i].name + "_length;\n";
+					}
+					else
+					{
+						output += "  int num_" + fields[i].name + " = " + std::to_string(fields[i].array_size) + ";\n";
+					}
+
+					output += "  for (int i = 0; i < num_" + fields[i].name + "; i++) {\n";
+					output += "    allocator->free(msg->" + fields[i].name + "[i], allocator->context);\n";
+					output += "  }\n";
+					output += "  allocator->free(msg->" + fields[i].name + ", allocator->context);\n";
+				}
+			}
+			else if (fields[i].array_size == 0)
+			{
+				output += "  allocator->free(msg->" + fields[i].name + ", allocator->context);\n";
+			}
+		}
+		output += "  allocator->free(msg, allocator->context);\n";
+		output += "}\n\n";
 	}
 
 	// generate the actual message definition
-	int field_count = fields.size();
-	for (auto& f: fields)
-	{
-		field_count += f.type->fields.size();
-	}
-	output += "struct ps_message_definition_t " + type_name + "_def = { ";
+	output += "static struct ps_message_definition_t " + type_name + "_def = { ";
 	if (enumerations.size() == 0)
 	{
-		output += std::to_string(hash) + ", \"" + name + "\", " + std::to_string(field_count) + ", " + type_name + "_fields, " + type_name + "_encode, " + type_name + "_decode, 0, 0 };\n";
+		output += std::to_string(hash) + ", \"" + name + "\", " + std::to_string(field_index) + ", " + type_name + "_fields, " + type_name + "_encode, " + type_name + "_decode, " + type_name + "_free, 0, 0 };\n";
 	}
 	else
 	{
-		output += std::to_string(hash) + ", \"" + name + "\", " + std::to_string(field_count) + ", " + type_name + "_fields, " + type_name + "_encode, " + type_name + "_decode, " + std::to_string(enumerations.size()) + ", " + type_name + "_enums };\n";
+		output += std::to_string(hash) + ", \"" + name + "\", " + std::to_string(field_index) + ", " + type_name + "_fields, " + type_name + "_encode, " + type_name + "_decode, " + type_name + "_free, " + std::to_string(enumerations.size()) + ", " + type_name + "_enums };\n";
 	}
 
 	output += "\n#ifdef __cplusplus\n";
@@ -752,22 +934,64 @@ std::string generate(const char* definition, const char* name)
 	output += "#include <string>\n";
 	output += "#include <vector>\n";
 	//output += "#include <iostream>\n";
+	// todo only include if needed
+	output += "#include <pubsub_cpp/allocator.h>\n";
 	output += "#include <pubsub_cpp/array_vector.h>\n";
+	output += "#include <pubsub_cpp/array_string.h>\n";
 	output += "namespace " + ns + "\n{\n";
     output += "namespace msg\n{\n";
 	output += "#pragma pack(push, 1)\n";
-	output += "struct " + raw_name + "\n{\n";
+	output += "template <class AllocatorT = pubsub::DefaultAllocator>\n";
+	output += "struct " + raw_name + "_\n{\n";
+	output += "  typedef std::shared_ptr<" + raw_name + "_<AllocatorT>> SharedPtr;\n";
+	output += "  typedef std::shared_ptr<const " + raw_name + "_<AllocatorT>> SharedConstPtr;\n";
+	output += "  typedef AllocatorT Allocator;\n";
+	// generate internal structs
+	for (auto& type: types)
+	{
+		if (type.second->type_enum != "FT_Struct")
+		{
+			continue;
+		}
+
+		output += "  struct " + type.second->name + "\n  {\n";
+		for (auto& field: type.second->fields)
+		{			
+			if (field->type == types["astring"])
+			{
+			  output += "    pubsub::FixedString<" +  std::to_string(field->string_size) + "> " + field->name + ";\n";
+			}
+			else if (field->array_size > 1)
+      {
+			  output += "    " + field->type->base_type + " " + field->name + "[" + std::to_string(field->array_size) +"];\n";
+			}
+      else
+      {
+			  output += "    " + field->type->base_type + " " + field->name + ";\n";
+			}
+		}
+		type.second->base_type = type.second->name;
+		output += "  };\n\n";
+	}
 
 	for (auto f: fields)
 	{
 		std::string type = f.type == string_type ? "char*" : f.getBaseType();
-		if (f.array_size == 1)
+		if (f.type == types["astring"])
+		{
+			  output += "  pubsub::FixedString<" +  std::to_string(f.string_size) + "> " + f.name + ";\n";
+	  }
+		else if (f.type == string_type && f.array_size == 1)
+		{
+		  output += "  pubsub::CString<Allocator> " + f.name + ";\n";
+		}
+		else if (f.array_size == 1)
 		{
 			output += "  " + type + " " + f.name + ";\n";
 		}
 		else if (f.array_size == 0)
 		{
-			output += "  ArrayVector<" + type + "> " + f.name + ";\n";
+			output += "  pubsub::ArrayVector<" + type + ", Allocator> " + f.name + ";\n";
 		}
 		else
 		{
@@ -808,24 +1032,28 @@ std::string generate(const char* definition, const char* name)
 	output += "  void* operator new(size_t size)\n";
     output += "  {\n";
     //output += "    std::cout<< \"Overloading new operator with size: \" << size << std::endl;\n";
-    output += "    return malloc(size);\n";
+    output += "    return Allocator::allocator()->alloc(size, Allocator::allocator()->context);\n";
+    //output += "    return malloc(size);\n";
     output += "  }\n\n";
  
     output += "  void operator delete(void * p)\n";
     output += "  {\n";
     //output += "    std::cout<< \"Overloading delete operator \" << std::endl;\n";
-    output += "    free(p);\n";
+    output += "    Allocator::allocator()->free(p, Allocator::allocator()->context);\n";
+    //output += "    free(p);\n";
     output += "  }\n\n";
 
 	output += "  static const ps_message_definition_t* GetDefinition()\n  {\n";
 	output += "    return &" + type_name + "_def;\n  }\n\n";
 	output += "  ps_msg_t Encode() const\n  {\n";
-	output += "    return " + ns + "__" + raw_name + "_encode(&ps_default_allocator, this);\n  }\n\n";
-	output += "  static " + raw_name + "* Decode(const void* data)\n  {\n";
-	output += "    return (" + raw_name + "*)" + ns + "__" + raw_name + "_decode(data, &ps_default_allocator);\n  }\n";// + ns + "__" + raw_name + "_encode(0, this);\n  }\n";
+	output += "    return " + ns + "__" + raw_name + "_encode(this, Allocator::allocator());\n  }\n\n";
+	output += "  static " + raw_name + "_* Decode(const void* data)\n  {\n";
+	output += "    return (" + raw_name + "_*)" + ns + "__" + raw_name + "_decode(data, Allocator::allocator());\n  }\n";// + ns + "__" + raw_name + "_encode(0, this);\n  }\n";
 	output += "};\n";
+	output += "typedef " + raw_name + "_<> " + raw_name + ";\n";
+	output += "typedef std::shared_ptr<" + raw_name + "_<>> " + raw_name + "SharedPtr;\n";
+	output += "typedef std::shared_ptr<const " + raw_name + "_<>> " + raw_name + "SharedConstPtr;\n";
 	output += "#pragma pack(pop)\n";
-	output += "typedef std::shared_ptr<" + raw_name + "> " + raw_name + "SharedPtr;\n";
 	
 	output += "}\n";
 	output += "}\n";

@@ -87,20 +87,20 @@ TEST(test_cli_pub_latched, []() {
 		auto output = execute_command({"topic", "pub", "/data", "'hello'", "-l", "-r", "0"});
 	});
 
-	pubsub::Node node("simple_sub");
+	pubsub::Node node("simple_sub", false, false);
 	
 	pubsub::BlockingSpinnerWithTimers spinner;
 	spinner.setNode(node);
 
 	bool got_message = false;
 	pubsub::Subscriber<pubsub::msg::String> subscriber(node, "/data", [&](const pubsub::msg::StringSharedPtr& msg) {
-		printf("Got message %s in sub1\n", msg->value);
-		EXPECT(strcmp("hello", msg->value) == 0);
+		printf("Got message %s in sub1\n", msg->value.c_str());
+		EXPECT(msg->value == "hello");
 		got_message = true;
 		spinner.stop();
 	}, 10);
 
-	spinner.wait();
+	spinner.run();
 	EXPECT(got_message);
 	run = false;
 
@@ -113,20 +113,20 @@ TEST(test_cli_pub, []() {
 		auto output = execute_command({"topic", "pub", "/data", "'hello'", "-r", "20.0"});
 	});
 
-	pubsub::Node node("simple_sub");
+	pubsub::Node node("simple_sub", false, false);
 	
 	pubsub::BlockingSpinnerWithTimers spinner;
 	spinner.setNode(node);
 
 	bool got_message = false;
 	pubsub::Subscriber<pubsub::msg::String> subscriber(node, "/data", [&](const pubsub::msg::StringSharedPtr& msg) {
-		printf("Got message %s in sub1\n", msg->value);
-		EXPECT(strcmp("hello", msg->value) == 0);
+		printf("Got message %s in sub1\n", msg->value.c_str());
+		EXPECT(msg->value == "hello");
 		got_message = true;
 		spinner.stop();
 	}, 10);
 
-	spinner.wait();
+	spinner.run();
 	EXPECT(got_message);
 	run = false;
 

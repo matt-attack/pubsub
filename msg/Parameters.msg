@@ -11,9 +11,8 @@ enum uint8 type[]
 # The current value for the parameter
 string value[]
 
-# Inclusive maximum valid value for the parameter
+# Inclusive minimum valid value for the parameter
 double min[]
 
-# Inclusive minimum valid value for the parameter
-# Not valid for max
+# Inclusive maximum valid value for the parameter
 double max[]
