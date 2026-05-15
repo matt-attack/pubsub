@@ -580,10 +580,7 @@ TEST(test_stop, []()
   // Test that stopping a context works
   Context context;
   
-  struct Data
-  {
-    pubsub::msg::Int::SharedPtr msg;
-  };
+  struct Data {};
   
   std::vector<pubsub::Time> received;
   {
@@ -595,9 +592,6 @@ TEST(test_stop, []()
     });
     context.add_block(std::move(pb_node));
   }
-  
-  MockBlock mock(context);
-  auto pub = std::make_shared<Publisher>(mock.advertise("/data"));
   
   // Actually start receiving nodes
   context.start_playback(pubsub::Time(1), pubsub::Time(11, 0));
@@ -629,8 +623,6 @@ TEST(test_abort, []()
     });
     context.add_block(std::move(pb_node));
   }
-  
-  MockBlock mock(context);
   
   // Actually start receiving nodes
   context.start_playback(pubsub::Time(1), pubsub::Time(11, 0));
@@ -743,8 +735,6 @@ TEST(test_simulation_loop_2, []()
     // make sure ipub goes out of scope here
     context.add_block(std::move(pb_node));
   }
-
-  MockBlock mock(context);
 
   // Actually start the simulation
   context.start_playback(pubsub::Time(1), pubsub::Time(11, 0));
