@@ -73,7 +73,9 @@ struct BlockData
   std::vector<Sub> subs;
 
   // queue for callbacks, used in live mode
+  std::mutex queue_mutex;
   std::deque<std::pair<pubsub::Time, std::unique_ptr<HolderBase>>> queue;
+
   bool is_timer = false;
   double timeout = -1.0;
 
@@ -589,9 +591,10 @@ void BlockBase::subscribe(T offset, int index, const std::string& topic, bool dr
         {
           auto time = pubsub::Time::now();
           // trigger! need to copy the whole message dest
-          std::unique_lock<std::mutex> lk(context->stream_mutex);
+          std::unique_lock<std::mutex> lk(cb_holder->queue_mutex);
           auto clone = this->holder->clone();
           cb_holder->queue.push_back({time, std::unique_ptr<HolderBase>(clone)});
+          lk.unlock();
           cb_holder->cv.notify_one();
         }
       }, 100, 1);
@@ -726,9 +729,10 @@ void BlockBase::subscribe(T offset, const std::string& topic, bool driving)
         {
           auto time = pubsub::Time::now();
           // trigger! need to copy the whole message dest
-          std::unique_lock<std::mutex> lk(context->stream_mutex);
+          std::unique_lock<std::mutex> lk(cb_holder->queue_mutex);
           auto clone = this->holder->clone();
           cb_holder->queue.push_back({time, std::unique_ptr<HolderBase>(clone)});
+          lk.unlock();
           cb_holder->cv.notify_one();
         }
       }, 100, 1);

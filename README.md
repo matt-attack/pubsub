@@ -1,15 +1,15 @@
 # pubsub (name pending)
-A lightweight publisher subscriber system inspired by ROS. Intended for use on both embedded and full blown PCs.
+A lightweight publisher subscriber system inspired by ROS. Intended for use on both embedded and full blown PCs. It also comes with Pipeline a "nodelet"-like framework that enables deterministic simulation and replay (see more about that [here](Pipeline.md)).
 
-After having worked with ROS for the past few years, I have found a great appreciation for its tooling and simplicity. 
-This is an attempt to bring that kind of simplicity to more platforms, with simpler tooling and few (ideally none) dependency requirements.
+After having worked with ROS for the past few years, I have found a great appreciation for its tooling and straightforwardness.
+This is an attempt to bring that kind of straightforwardness to more platforms, with simpler tooling and few (ideally none) dependency requirements.
 
 I believe one of the ROS developers themselves said that you should not pay for features you do not use. 
 This is a principal that I am getting behind for this project.
 
 ## What is this package?
 
-This contains the implementation of the core of the middleware as well as simple debugging tools. It also contains higher level C++ wrappers that implement additional functionality (such as timers).
+This contains the implementation of the core of the middleware as well as simple debugging tools. It also contains higher level C++ wrappers that implement additional functionality (such as timers and the ).
 
 It handles networking, discovery, advertisement and code generation for serializing messages.
 
@@ -33,7 +33,7 @@ If you just want something small with the same functionality as ROS and easily w
 * Multicast or broadcast Publisher/Subscriber discovery
 * Code generation for message serialization/deserialization
 * UDP based best-effort networking (up to ~1500 bytes)
-  * Optional publisher side per subscriber downsampling to conserve CPU/Network resources
+* Optional publisher side per subscriber downsampling to conserve CPU/Network resources
 * TCP based ROS-like networking for larger or more reliable data streams
 * Message introspection tools to publish and subscribe to messages without having their definitions locally
   * A la "rostopic"
@@ -42,14 +42,15 @@ If you just want something small with the same functionality as ROS and easily w
 * Simple C API
   * Easy to import into other languages
   * Lightweight enough for true embedded systems
-* Higher Level C++ API
+* Higher level C++ API
   * Provides zero-copy intraprocess message passing
   * Adds Thread-safety
+* Pipeline framework which enables deterministic testing, simulation and replay
 
 ## Features to Come
 
 * Large UDP message support
-* Master based discovery (better scalable than multicast)
+* Master based discovery (better scalable than peer-to-peer)
 * Topic remapping in C++
 * Documentation
 * A real name
@@ -142,3 +143,7 @@ See `simple_pub.cpp` and `simple_pub.c` examples.
 ### Receiving Messages
 
 See `simple_sub.cpp` and `simple_sub.c` examples.
+
+### Pipeline Framework
+
+For now see `tests/test_pipeline.cpp`. for examples of how to use the API. More fully featured usages will be featured in a separate package.

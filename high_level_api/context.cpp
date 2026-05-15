@@ -228,13 +228,11 @@ void Context::abort()
   }
 }
 
-
 void Context::thread_live(BlockBase* node)
 {
   std::string name_ = node->name;
   int idx = 0;
   auto context = node->data->context;
-  
   if (node->rate > 0)
   {
     // timer!
@@ -243,13 +241,16 @@ void Context::thread_live(BlockBase* node)
     while (ps_okay())
     {
       // grab latest data
-      std::unique_lock<std::mutex> lk(context->stream_mutex);// todo use other mutex
+      std::unique_lock<std::mutex> lk(node->data->queue_mutex);
       auto front = std::unique_ptr<HolderBase>(node->holder->clone());
 
       //printf("[%s] waking for %s\n", name_.c_str(), driving.c_str());
       lk.unlock();
-      node->data->do_thing(pubsub::Time::now(), front->get());
-      ps_sleep_us(dt);
+      auto start = pubsub::Time::now();
+      node->data->do_thing(start, front->get());
+      auto end = pubsub::Time::now();
+
+      ps_sleep_us(dt - std::min<int64_t>(dt, std::max<int64_t>((end-start).usec, 0)));
     }
   }
   else
@@ -257,7 +258,7 @@ void Context::thread_live(BlockBase* node)
     while (ps_okay())
     {
       //printf("[%s] sleeping for live\n", name_.c_str());
-      std::unique_lock<std::mutex> lk(context->stream_mutex);// todo use other mutex
+      std::unique_lock<std::mutex> lk(node->data->queue_mutex);
       if (node->data->queue.size() == 0)
       {
         if (node->data->timeout > 0)
@@ -275,6 +276,12 @@ void Context::thread_live(BlockBase* node)
         {
           node->data->cv.wait(lk);
         }
+      }
+
+      // guard against spurrious wakeups
+      if (node->data->queue.size() == 0)
+      {
+        continue;
       }
       //printf("[%s] waking for %s\n", name_.c_str(), driving.c_str());
       
